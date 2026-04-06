@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TravelBuddy" />
+    
+    <!-- SEO Meta Tags -->
+    <title>TravelBuddy - AI-Powered Travel Planning & Discovery</title>
+    <meta name="description" content="Your intelligent travel companion powered by AI. Plan perfect itineraries, discover local activities, translate languages, and access essential travel tools for any destination worldwide." />
+    <meta name="keywords" content="travel planner, AI travel guide, itinerary planner, travel app, destination guide, language translator, travel tools, trip planning, vacation planner, travel companion" />
+    <meta name="author" content="TravelBuddy" />
+    <meta name="robots" content="index, follow" />
+    <meta name="googlebot" content="index, follow" />
+    <link rel="canonical" href="https://trvlbuddy.com/" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://trvlbuddy.com/" />
+    <meta property="og:title" content="TravelBuddy - AI-Powered Travel Planning & Discovery" />
+    <meta property="og:description" content="Your intelligent travel companion powered by AI. Plan perfect itineraries, discover local activities, translate languages, and access essential travel tools for any destination worldwide." />
+    <meta property="og:image" content="https://trvlbuddy.com/appicon-512.png" />
+    <meta property="og:image:alt" content="TravelBuddy - AI Travel Planning App" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:site_name" content="TravelBuddy" />
+    <meta property="og:locale" content="en_US" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@travelbuddypwa" />
+    <meta name="twitter:creator" content="@travelbuddypwa" />
+    <meta name="twitter:url" content="https://trvlbuddy.com/" />
+    <meta name="twitter:title" content="TravelBuddy - AI-Powered Travel Planning & Discovery" />
+    <meta name="twitter:description" content="Your intelligent travel companion powered by AI. Plan perfect itineraries, discover local activities, translate languages, and access essential travel tools for any destination worldwide." />
+    <meta name="twitter:image" content="https://trvlbuddy.com/appicon-512.png" />
+    <meta name="twitter:image:alt" content="TravelBuddy - AI Travel Planning App" />
+    
+    <!-- Additional Social Media Meta Tags -->
+    <meta property="fb:app_id" content="your-facebook-app-id" />
+    <meta name="twitter:domain" content="trvlbuddy.com" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/appicon-192.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/appicon-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/appicon-512.png" />
+    
+    <!-- Preconnect for performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "TravelBuddy",
+      "description": "AI-powered travel planning and discovery app for intelligent trip planning worldwide",
+      "url": "https://trvlbuddy.com/",
+      "applicationCategory": "TravelApplication",
+      "operatingSystem": "Any",
+      "browserRequirements": "Requires JavaScript. Requires HTML5.",
+      "softwareVersion": "2.0",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "AI-powered itinerary planning",
+        "Multi-destination trip planning",
+        "Real-time language translation",
+        "Local activity discovery",
+        "Travel utilities and tools",
+        "Offline-capable PWA"
+      ],
+      "screenshot": "https://trvlbuddy.com/appicon-512.png",
+      "image": "https://trvlbuddy.com/appicon-512.png",
+      "author": {
+        "@type": "Organization",
+        "name": "TravelBuddy",
+        "url": "https://trvlbuddy.com/"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "TravelBuddy",
+        "url": "https://trvlbuddy.com/"
+      },
+      "datePublished": "2024-12-19",
+      "dateModified": "2024-12-19",
+      "inLanguage": "en-US",
+      "isAccessibleForFree": true,
+      "usageInfo": "https://trvlbuddy.com/",
+      "copyrightHolder": {
+        "@type": "Organization",
+        "name": "TravelBuddy"
+      }
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration);
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>

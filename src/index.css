@@ -1,0 +1,399 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary: #FFFFFF; /* Pure White */
+  --bg-secondary: #F8F9FA; /* Light Grey */
+  --surface-container: #FFFFFF;
+  --surface-container-high: #F1F3F4;
+  --primary: #000000; /* Pure Black */
+  --on-primary: #FFFFFF;
+  --primary-container: #F1F3F4;
+  --on-primary-container: #000000;
+  --secondary: #6C757D; /* Medium Grey */
+  --on-secondary: #FFFFFF;
+  --secondary-container: #E9ECEF;
+  --on-secondary-container: #495057;
+  --outline: #DEE2E6;
+  --text-primary: #000000; /* Pure Black */
+  --text-secondary: #6C757D; /* Medium Grey */
+  --error: #DC3545;
+  --tooltip-bg: #000000;
+  --tooltip-text: #FFFFFF;
+  --progress-blue: #2563EB; /* Blue for progress bar */
+}
+
+html[data-theme='dark'] {
+  --bg-primary: #000000; /* Pure Black */
+  --bg-secondary: #1A1A1A; /* Dark Grey */
+  --surface-container: #1A1A1A;
+  --surface-container-high: #2D2D2D;
+  --primary: #FFFFFF; /* Pure White */
+  --on-primary: #000000;
+  --primary-container: #2D2D2D;
+  --on-primary-container: #FFFFFF;
+  --secondary: #9CA3AF; /* Light Grey */
+  --on-secondary: #000000;
+  --secondary-container: #374151;
+  --on-secondary-container: #D1D5DB;
+  --outline: #374151;
+  --text-primary: #FFFFFF; /* Pure White */
+  --text-secondary: #9CA3AF; /* Light Grey */
+  --error: #EF4444;
+  --tooltip-bg: #FFFFFF;
+  --tooltip-text: #000000;
+  --progress-blue: #3B82F6; /* Brighter blue for dark mode */
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.card, .modal-content { 
+  background-color: var(--surface-container); 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+  border: 1px solid var(--outline);
+}
+
+.text-main-secondary { color: var(--text-secondary); }
+.text-primary-color { color: var(--primary); }
+.text-secondary-color { color: var(--secondary); }
+
+h1, h2, h3, h4, h5, h6 { 
+  font-weight: 700; 
+  color: var(--text-primary); 
+}
+
+h1 { 
+  font-size: 2.75rem; 
+  font-weight: 800; 
+  line-height: 1.1; 
+}
+
+h2 { 
+  font-size: 2.25rem; 
+  color: var(--primary); 
+}
+
+h3 { 
+  font-size: 1.75rem; 
+}
+
+h4 { 
+  font-size: 1.25rem; 
+  font-weight: 600; 
+}
+
+.nav-container {
+  background-color: var(--bg-secondary);
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.1);
+  border-top: 1px solid var(--outline);
+}
+
+.nav-link {
+  color: var(--text-secondary);
+  transition: all 0.2s ease-in-out;
+  border-radius: 12px;
+  font-weight: 500;
+  min-height: 48px; /* Better touch target */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-link.active, .nav-link:hover {
+  color: var(--on-primary);
+  background-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.filter-btn {
+  background-color: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--outline);
+  transition: all 0.2s ease-in-out;
+  border-radius: 9999px;
+  padding: 12px 20px; /* Larger touch targets */
+  font-weight: 500;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.filter-btn.active {
+  background-color: var(--primary);
+  color: var(--on-primary);
+  border-color: var(--primary);
+}
+
+.activity-card {
+  background-color: var(--surface-container);
+  border: 1px solid var(--outline);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  min-height: 200px; /* Consistent card heights */
+}
+
+.activity-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+  border-color: var(--primary);
+}
+
+.action-button {
+  background-color: var(--primary);
+  color: var(--on-primary);
+  font-weight: 600;
+  border-radius: 9999px;
+  padding: 16px 32px; /* Larger touch targets */
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid var(--primary);
+  cursor: pointer;
+  min-height: 48px;
+}
+
+.action-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.modal-content { 
+  max-height: 90vh; 
+}
+
+/* Modal header styling */
+.modal-content .border-b {
+  border-bottom: 1px solid var(--outline);
+}
+
+.loader {
+  width: 48px; 
+  height: 48px; 
+  border-radius: 50%;
+  border: 4px solid var(--primary-container); 
+  border-right-color: var(--primary);
+  animation: l24 1s infinite linear;
+}
+
+@keyframes l24 { 
+  100% {transform: rotate(1turn)} 
+}
+
+.prose h3 { 
+  color: var(--primary); 
+  font-size: 1.5rem; 
+}
+
+.prose h4 { 
+  color: var(--secondary); 
+  font-size: 1.25rem; 
+}
+
+.prose p, .prose strong, .prose li { 
+  color: var(--text-secondary); 
+}
+
+.prose { 
+  --tw-prose-bullets: var(--text-secondary); 
+}
+
+.bg-bg-secondary {
+  background-color: var(--bg-secondary);
+}
+
+.bg-primary-container {
+  background-color: var(--primary-container);
+}
+
+.text-on-primary-container {
+  color: var(--on-primary-container);
+}
+
+.bg-secondary-container {
+  background-color: var(--secondary-container);
+}
+
+.text-on-secondary-container {
+  color: var(--on-secondary-container);
+}
+
+.border-primary {
+  border-color: var(--primary);
+}
+
+.border-secondary {
+  border-color: var(--secondary);
+}
+
+.border-outline {
+  border-color: var(--outline);
+}
+
+.bg-surface-container {
+  background-color: var(--surface-container);
+}
+
+.bg-surface-container-high {
+  background-color: var(--surface-container-high);
+}
+
+.text-text-primary {
+  color: var(--text-primary);
+}
+
+.text-text-secondary {
+  color: var(--text-secondary);
+}
+
+.text-error {
+  color: var(--error);
+}
+
+/* Progress bar specific styles */
+.progress-bar {
+  background-color: var(--progress-blue) !important;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3);
+}
+
+/* Page spacing - increased top padding */
+.page {
+  padding-top: 3rem; /* Increased from default */
+}
+
+/* Override Tailwind's .p-4 class to use 8px instead of 1rem */
+.p-4 {
+  padding: 8px;
+}
+
+/* Remove left padding from .pl-2 class */
+.pl-2 {
+  padding-left: 0;
+}
+
+/* Mobile-specific improvements */
+@media (max-width: 640px) {
+  /* Smaller headings for mobile */
+  h1 {
+    font-size: 1.875rem; /* Reduced from 2.25rem */
+  }
+  
+  h2 {
+    font-size: 1.5rem; /* Reduced from 1.875rem */
+  }
+  
+  h3 {
+    font-size: 1.25rem; /* Reduced from 1.5rem */
+  }
+  
+  h4 {
+    font-size: 1.125rem; /* Reduced from 1.25rem */
+  }
+  
+  h5 {
+    font-size: 1rem; /* Reduced from 1.125rem */
+  }
+  
+  h6 {
+    font-size: 0.875rem; /* Reduced from 1rem */
+  }
+  
+  .nav-container {
+    padding: 0.75rem;
+  }
+  
+  .nav-link {
+    font-size: 0.75rem;
+    padding: 0.5rem;
+  }
+  
+  .activity-card {
+    min-height: 180px;
+  }
+  
+  .filter-btn {
+    padding: 10px 16px;
+    font-size: 0.875rem;
+  }
+  
+  .action-button {
+    padding: 14px 24px;
+    font-size: 0.875rem;
+  }
+  
+  /* Improve touch targets */
+  button, .nav-link, .filter-btn {
+    min-height: 44px;
+  }
+  
+  /* Better spacing for mobile */
+  .page {
+    padding: 2rem 0.5rem 0; /* Increased top padding for mobile too */
+  }
+  
+  .grid {
+    gap: 1rem;
+  }
+  
+  /* Modal adjustments for mobile */
+  .modal-content {
+    margin: 1rem;
+    max-height: calc(100vh - 2rem);
+  }
+}
+
+/* Tablet-specific improvements */
+@media (min-width: 641px) and (max-width: 1024px) {
+  /* Slightly smaller headings for tablets */
+  h1 {
+    font-size: 2.25rem; /* Reduced from 2.75rem */
+  }
+  
+  h2 {
+    font-size: 1.875rem; /* Reduced from 2.25rem */
+  }
+  
+  h3 {
+    font-size: 1.5rem; /* Reduced from 1.75rem */
+  }
+}
+
+/* PWA specific styles */
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Improve accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .card, .modal-content {
+    border: 2px solid var(--outline);
+  }
+  
+  .filter-btn, .action-button {
+    border: 2px solid currentColor;
+  }
+}
