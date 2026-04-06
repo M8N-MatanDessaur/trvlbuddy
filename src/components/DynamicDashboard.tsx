@@ -2,11 +2,7 @@ import React from 'react';
 import { useTravel } from '../contexts/TravelContext';
 import { MapPin, Calendar, Users, Plane, Train, Car, Ship, Bus, Map, Navigation, Phone, Globe } from 'lucide-react';
 
-interface DynamicDashboardProps {
-  onPlannerClick: () => void;
-}
-
-const DynamicDashboard: React.FC<DynamicDashboardProps> = ({ onPlannerClick }) => {
+const DynamicDashboard: React.FC = () => {
   const { currentPlan } = useTravel();
 
   if (!currentPlan) {
@@ -32,20 +28,18 @@ const DynamicDashboard: React.FC<DynamicDashboardProps> = ({ onPlannerClick }) =
       // Validate the parsed values
       if (isNaN(year) || isNaN(month) || isNaN(day) || 
           month < 1 || month > 12 || day < 1 || day > 31) {
-        console.error('Invalid date components:', { year, month, day, original: dateString });
         return 'Invalid date';
       }
-      
+
       // Create date object with local timezone (month is 0-indexed)
       // This ensures the date displays exactly as selected
       const date = new Date(year, month - 1, day);
-      
+
       // Double-check the date is valid
       if (isNaN(date.getTime())) {
-        console.error('Invalid date object created from:', dateString);
         return 'Invalid date';
       }
-      
+
       return date.toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
@@ -53,7 +47,6 @@ const DynamicDashboard: React.FC<DynamicDashboardProps> = ({ onPlannerClick }) =
         year: 'numeric'
       });
     } catch (error) {
-      console.error('Date formatting error:', error, 'for date:', dateString);
       return 'Invalid date';
     }
   };
@@ -64,21 +57,19 @@ const DynamicDashboard: React.FC<DynamicDashboardProps> = ({ onPlannerClick }) =
     try {
       // Parse the YYYY-MM-DD string directly without timezone conversion
       const [year, month, day] = dateString.split('-').map(Number);
-      
+
       // Validate the parsed values
-      if (isNaN(year) || isNaN(month) || isNaN(day) || 
+      if (isNaN(year) || isNaN(month) || isNaN(day) ||
           month < 1 || month > 12 || day < 1 || day > 31) {
-        console.error('Invalid date components:', { year, month, day, original: dateString });
         return 'Invalid date';
       }
-      
+
       // Create date object with local timezone (month is 0-indexed)
       // This ensures the date displays exactly as selected
       const date = new Date(year, month - 1, day);
-      
+
       // Double-check the date is valid
       if (isNaN(date.getTime())) {
-        console.error('Invalid date object created from:', dateString);
         return 'Invalid date';
       }
       
@@ -89,7 +80,6 @@ const DynamicDashboard: React.FC<DynamicDashboardProps> = ({ onPlannerClick }) =
       
       return `${formattedDay}/${formattedMonth}/${formattedYear}`;
     } catch (error) {
-      console.error('Date formatting error:', error, 'for date:', dateString);
       return 'Invalid date';
     }
   };
@@ -129,7 +119,6 @@ const DynamicDashboard: React.FC<DynamicDashboardProps> = ({ onPlannerClick }) =
       
       // Check if dates are valid
       if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        console.error('Invalid dates found:', firstSegment.startDate, lastSegment.endDate);
         return 0;
       }
       
@@ -137,19 +126,9 @@ const DynamicDashboard: React.FC<DynamicDashboardProps> = ({ onPlannerClick }) =
       const diffTime = endDate.getTime() - startDate.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end days
       
-      console.log('Trip duration calculation:', {
-        firstStart: firstSegment.startDate,
-        lastEnd: lastSegment.endDate,
-        startDate: startDate.toDateString(),
-        endDate: endDate.toDateString(),
-        diffTime,
-        diffDays
-      });
-      
       // Ensure we return a positive number
       return Math.max(diffDays, 1);
     } catch (error) {
-      console.error('Error calculating trip duration:', error);
       return 0;
     }
   };
@@ -251,16 +230,6 @@ const DynamicDashboard: React.FC<DynamicDashboardProps> = ({ onPlannerClick }) =
       // Full trip - show properly sorted segments
       const displaySegments = getDisplaySegments();
       const totalDuration = getTripDuration();
-      
-      console.log('Dashboard segments order:', displaySegments.map(s => ({
-        name: getSegmentDisplayName(s),
-        startDate: s.startDate,
-        endDate: s.endDate,
-        formattedStart: formatDate(s.startDate),
-        formattedEnd: formatDate(s.endDate),
-        formattedShortStart: formatDateShort(s.startDate),
-        formattedShortEnd: formatDateShort(s.endDate)
-      })));
       
       return (
         <div className="space-y-6">

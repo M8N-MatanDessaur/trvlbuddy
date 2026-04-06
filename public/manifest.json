@@ -46,7 +46,7 @@
       "name": "AI Day Planner",
       "short_name": "Planner",
       "description": "Create custom itineraries with AI assistance",
-      "url": "/?page=planner",
+      "url": "/planner",
       "icons": [
         {
           "src": "/appicon-192.png",
@@ -58,7 +58,7 @@
       "name": "Discover Activities",
       "short_name": "Activities",
       "description": "Find amazing local experiences and attractions",
-      "url": "/?page=activities",
+      "url": "/activities",
       "icons": [
         {
           "src": "/appicon-192.png",
@@ -70,7 +70,7 @@
       "name": "Language Translator",
       "short_name": "Translator",
       "description": "Essential phrases and AI translation for any language",
-      "url": "/?page=translator",
+      "url": "/translator",
       "icons": [
         {
           "src": "/appicon-192.png",
@@ -82,7 +82,7 @@
       "name": "Travel Utilities",
       "short_name": "Utilities",
       "description": "Weather, currency, and emergency tools",
-      "url": "/?page=utilities",
+      "url": "/utilities",
       "icons": [
         {
           "src": "/appicon-192.png",

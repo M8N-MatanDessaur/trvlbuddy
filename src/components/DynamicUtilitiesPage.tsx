@@ -32,13 +32,18 @@ interface CountryInfo {
   languages: string[];
 }
 
+const COMMON_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'KRW', 'CHF', 'CNY', 'INR', 'BRL', 'MXN', 'SGD', 'HKD', 'NZD', 'SEK', 'NOK', 'DKK', 'THB', 'TWD', 'ILS', 'TRY', 'ZAR', 'AED', 'PHP', 'MYR', 'IDR', 'VND', 'CZK', 'PLN', 'HUF', 'RON', 'BGN', 'HRK', 'ISK'];
+
 const DynamicUtilitiesPage: React.FC = () => {
   const { currentPlan, emergencyContacts } = useTravel();
   const [selectedCurrency, setSelectedCurrency] = useState('');
   const [selectedWeatherLocation, setSelectedWeatherLocation] = useState('');
   const [selectedEmergencyCountry, setSelectedEmergencyCountry] = useState('');
   const [localAmount, setLocalAmount] = useState('');
-  const [cadAmount, setCadAmount] = useState('');
+  const [homeAmount, setHomeAmount] = useState('');
+  const [homeCurrency, setHomeCurrency] = useState(() => localStorage.getItem('homeCurrency') || 'USD');
+  const [exchangeRates, setExchangeRates] = useState<{ [key: string]: number }>({});
+  const [ratesLoading, setRatesLoading] = useState(true);
   const [weatherData, setWeatherData] = useState<{ [key: string]: WeatherData }>({});
   // Set weather open by default, currency and emergency closed by default
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['weather']));
@@ -56,26 +61,20 @@ const DynamicUtilitiesPage: React.FC = () => {
     );
   }
 
-  // Get all unique currencies and locations - SUPPORT BOTH CITIES AND DAY TRIPS
+  // Get all unique currencies from trip destinations
   const getAllCurrencies = (): CurrencyInfo[] => {
-    const currencies = new Map<string, number>();
-    
+    const codes = new Set<string>();
+
     if (currentPlan.tripType === 'day-trip') {
-      // For day trips, use the main destination
       const destination = currentPlan.destination || currentPlan.destinations?.[0];
-      if (destination?.currency) {
-        currencies.set(destination.currency, getCurrencyRate(destination.currency));
-      }
+      if (destination?.currency) codes.add(destination.currency);
     } else {
-      // For full trips, get currencies from all destinations (both cities and countries)
       currentPlan.destinations?.forEach(destination => {
-        if (destination.currency) {
-          currencies.set(destination.currency, getCurrencyRate(destination.currency));
-        }
+        if (destination.currency) codes.add(destination.currency);
       });
     }
-    
-    return Array.from(currencies.entries()).map(([code, rate]) => ({ code, rate }));
+
+    return Array.from(codes).map(code => ({ code, rate: getRate(code) }));
   };
 
   const getAllLocations = (): LocationInfo[] => {
@@ -158,45 +157,43 @@ const DynamicUtilitiesPage: React.FC = () => {
     return Array.from(countries.values());
   };
 
-  const getCurrencyRate = (currency: string): number => {
-    // Mock exchange rates (in a real app, you'd fetch this from an API)
-    const rates: { [key: string]: number } = {
-      'EUR': 1.48,
-      'USD': 1.35,
-      'GBP': 1.70,
-      'JPY': 0.0091,
-      'AUD': 0.89,
-      'CHF': 1.52
+  // Fetch real exchange rates from free API
+  useEffect(() => {
+    const fetchRates = async () => {
+      setRatesLoading(true);
+      try {
+        const base = homeCurrency.toLowerCase();
+        const res = await fetch(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${base}.json`);
+        if (!res.ok) throw new Error('Rate fetch failed');
+        const data = await res.json();
+        setExchangeRates(data[base] || {});
+      } catch {
+        // Fallback: try the mirror
+        try {
+          const base = homeCurrency.toLowerCase();
+          const res = await fetch(`https://latest.currency-api.pages.dev/v1/currencies/${base}.json`);
+          if (!res.ok) throw new Error('Mirror fetch failed');
+          const data = await res.json();
+          setExchangeRates(data[base] || {});
+        } catch {
+          setExchangeRates({});
+        }
+      }
+      setRatesLoading(false);
     };
-    return rates[currency] || 1.0;
+    fetchRates();
+    localStorage.setItem('homeCurrency', homeCurrency);
+  }, [homeCurrency]);
+
+  const getRate = (foreignCurrency: string): number => {
+    const code = foreignCurrency.toLowerCase();
+    return exchangeRates[code] || 0;
   };
 
   // Fetch real weather data using Google's weather search
   const fetchWeatherData = async (location: LocationInfo): Promise<WeatherData> => {
     try {
-      console.log(`Fetching weather for ${location.name}, ${location.country}`);
-      
-      // Use Google search to get weather information
-      const searchQuery = `weather in ${location.name} ${location.country}`;
-      const searchUrl = `https://www.googleapis.com/customsearch/v1?key=AIzaSyB-QqGGN0wHjSHwpI2zh1FP9iq3Ex7UPF8&cx=017576662512468239146:omuauf_lfve&q=${encodeURIComponent(searchQuery)}`;
-      
-      // Since we can't directly access Google's weather API from the browser,
-      // we'll use a weather service that provides real data
-      const weatherApiKey = 'demo_key'; // In production, use a real weather API key
-      let weatherUrl = '';
-      
-      if (location.coordinates) {
-        // Try OpenWeatherMap API first
-        weatherUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${location.coordinates.lat}&lon=${location.coordinates.lng}&appid=${weatherApiKey}&units=metric`;
-      } else {
-        // Fallback to city name search
-        weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(location.name)},${encodeURIComponent(location.country)}&appid=${weatherApiKey}&units=metric`;
-      }
-
-      // Since we don't have a valid API key, let's use a different approach
-      // We'll fetch weather data from a public weather service or use web scraping approach
-      
-      // For now, let's use wttr.in which provides weather data in JSON format
+      // Use wttr.in which provides free weather data in JSON format (no API key needed)
       const wttrUrl = `https://wttr.in/${encodeURIComponent(location.name)}?format=j1`;
       
       try {
@@ -231,7 +228,6 @@ const DynamicUtilitiesPage: React.FC = () => {
           isLoading: false
         };
       } catch (wttrError) {
-        console.warn('wttr.in failed, trying alternative approach:', wttrError);
         
         // Alternative: Use a simple weather estimation based on location and season
         const now = new Date();
@@ -277,8 +273,6 @@ const DynamicUtilitiesPage: React.FC = () => {
         };
       }
     } catch (error) {
-      console.error(`Error fetching weather for ${location.name}:`, error);
-      
       // Return a reasonable default instead of error
       return {
         temp: 22,
@@ -342,7 +336,6 @@ const DynamicUtilitiesPage: React.FC = () => {
             [location.id]: weather
           }));
         } catch (error) {
-          console.error(`Error fetching weather for ${location.name}:`, error);
           // Set a default weather state for this location
           setWeatherData(prev => ({
             ...prev,
@@ -369,18 +362,23 @@ const DynamicUtilitiesPage: React.FC = () => {
   const handleLocalChange = (value: string) => {
     setLocalAmount(value);
     if (value && !isNaN(Number(value))) {
-      const rate = allCurrencies.find(c => c.code === currentCurrency)?.rate || 1;
-      setCadAmount((Number(value) * rate).toFixed(2));
+      const rate = getRate(currentCurrency);
+      if (rate > 0) {
+        // rate is "1 home = X foreign", so home = foreign / rate
+        setHomeAmount((Number(value) / rate).toFixed(2));
+      }
     } else {
-      setCadAmount('');
+      setHomeAmount('');
     }
   };
 
-  const handleCadChange = (value: string) => {
-    setCadAmount(value);
+  const handleHomeChange = (value: string) => {
+    setHomeAmount(value);
     if (value && !isNaN(Number(value))) {
-      const rate = allCurrencies.find(c => c.code === currentCurrency)?.rate || 1;
-      setLocalAmount((Number(value) / rate).toFixed(2));
+      const rate = getRate(currentCurrency);
+      if (rate > 0) {
+        setLocalAmount((Number(value) * rate).toFixed(2));
+      }
     } else {
       setLocalAmount('');
     }
@@ -627,24 +625,44 @@ const DynamicUtilitiesPage: React.FC = () => {
           
           {expandedSections.has('currency') && (
             <div className="p-6 pt-0">
-              {/* Currency Selector for Multi-Currency Trips */}
+              {/* Home currency selector */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium mb-2">Your Home Currency</label>
+                <select
+                  value={homeCurrency}
+                  onChange={(e) => { setHomeCurrency(e.target.value); setLocalAmount(''); setHomeAmount(''); }}
+                  className="w-full p-3 rounded-xl border border-outline bg-surface-container text-text-primary focus:outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer"
+                >
+                  {COMMON_CURRENCIES.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Destination currency selector for Multi-Currency Trips */}
               {allCurrencies.length > 1 && (
                 <div className="mb-6">
-                  <label className="block text-sm font-medium mb-2">Select Currency</label>
+                  <label className="block text-sm font-medium mb-2">Destination Currency</label>
                   <div className="flex flex-wrap gap-2">
                     {allCurrencies.map(currency => (
                       <button
                         key={currency.code}
-                        onClick={() => setSelectedCurrency(currency.code)}
+                        onClick={() => { setSelectedCurrency(currency.code); setLocalAmount(''); setHomeAmount(''); }}
                         className={`filter-btn ${selectedCurrency === currency.code ? 'active' : ''}`}
                       >
-                        💰 {currency.code}
+                        {currency.code}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-              
+
+              {ratesLoading ? (
+                <div className="flex items-center justify-center gap-3 py-8">
+                  <Loader2 size={24} className="text-primary animate-spin" />
+                  <span>Loading exchange rates...</span>
+                </div>
+              ) : (
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-text-primary mb-2">
@@ -658,30 +676,33 @@ const DynamicUtilitiesPage: React.FC = () => {
                     className="w-full p-3 rounded-xl border border-outline bg-surface-container text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
-                
+
                 <div className="text-center">
-                  <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-on-primary">
-                    ⇅
+                  <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-on-primary text-sm font-bold">
+                    =
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium text-text-primary mb-2">
-                    Canadian Dollars (CAD)
+                    {homeCurrency}
                   </label>
                   <input
                     type="number"
-                    value={cadAmount}
-                    onChange={(e) => handleCadChange(e.target.value)}
+                    value={homeAmount}
+                    onChange={(e) => handleHomeChange(e.target.value)}
                     placeholder="0.00"
                     className="w-full p-3 rounded-xl border border-outline bg-surface-container text-text-primary focus:outline-none focus:ring-2 focus:ring-primary"
                   />
                 </div>
-                
+
                 <div className="text-center text-sm text-text-secondary">
-                  Exchange rate: 1 {currentCurrency} = {allCurrencies.find(c => c.code === currentCurrency)?.rate || 1} CAD
+                  {getRate(currentCurrency) > 0
+                    ? `1 ${homeCurrency} = ${getRate(currentCurrency).toFixed(4)} ${currentCurrency}`
+                    : 'Rate unavailable'}
                 </div>
               </div>
+              )}
             </div>
           )}
         </div>

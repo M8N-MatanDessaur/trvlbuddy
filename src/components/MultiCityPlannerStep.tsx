@@ -92,7 +92,6 @@ const MultiCityPlannerStep: React.FC<MultiCityPlannerStepProps> = ({
       if (lastEndDate) {
         // Start the new city on the SAME date as the previous city ends
         newStartDateString = lastEndDate;
-        console.log(`Previous city ended: ${lastEndDate}, new city starts: ${newStartDateString}`);
       }
     }
 

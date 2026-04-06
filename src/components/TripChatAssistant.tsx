@@ -128,7 +128,6 @@ What would you like to know about your trip?`;
 
       setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
-      console.error('Chat error:', error);
       const errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,
         type: 'assistant',

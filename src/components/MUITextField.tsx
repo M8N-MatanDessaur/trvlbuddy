@@ -1,58 +1,41 @@
 import React from 'react';
-import { TextField, TextFieldProps } from '@mui/material';
-import { styled } from '@mui/material/styles';
 
-const StyledTextField = styled(TextField)({
-  '& .MuiOutlinedInput-root': {
-    borderRadius: '12px',
-    backgroundColor: 'var(--surface-container)',
-    '& fieldset': {
-      borderColor: 'var(--outline)',
-    },
-    '&:hover fieldset': {
-      borderColor: 'var(--primary)',
-    },
-    '&.Mui-focused fieldset': {
-      borderColor: 'var(--primary)',
-      borderWidth: '2px',
-    },
-  },
-  '& .MuiInputLabel-root': {
-    color: 'var(--text-secondary) !important',
-    '&.Mui-focused': {
-      color: 'var(--primary) !important',
-    },
-  },
-  '& .MuiInputBase-input': {
-    color: 'var(--text-primary) !important',
-    padding: '16px 14px',
-    '&::placeholder': {
-      color: 'var(--text-secondary) !important',
-      opacity: 1,
-    },
-  },
-  '& .MuiFormHelperText-root': {
-    color: 'var(--text-secondary) !important',
-    marginLeft: 0,
-    marginTop: '8px',
-  },
-});
-
-interface MUITextFieldProps extends Omit<TextFieldProps, 'variant'> {
-  variant?: 'outlined' | 'filled' | 'standard';
+interface TextFieldProps {
+  label?: string;
+  value?: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  helperText?: string;
+  fullWidth?: boolean;
+  type?: string;
+  multiline?: boolean;
+  rows?: number;
+  disabled?: boolean;
 }
 
-const MUITextField: React.FC<MUITextFieldProps> = ({ 
-  variant = 'outlined',
+const MUITextField: React.FC<TextFieldProps> = ({
+  label,
+  value,
+  onChange,
+  placeholder,
+  helperText,
   fullWidth = true,
-  ...props 
+  type = 'text',
+  disabled = false,
 }) => {
   return (
-    <StyledTextField
-      variant={variant}
-      fullWidth={fullWidth}
-      {...props}
-    />
+    <div className={fullWidth ? 'w-full' : ''}>
+      {label && <label className="block text-sm font-medium text-text-secondary mb-2">{label}</label>}
+      <input
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="w-full px-4 py-4 rounded-xl border border-outline bg-surface-container text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-[var(--primary)] transition-all disabled:opacity-50"
+      />
+      {helperText && <p className="text-sm text-text-secondary mt-2">{helperText}</p>}
+    </div>
   );
 };
 

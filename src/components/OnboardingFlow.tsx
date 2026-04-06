@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { MapPin, Calendar, Users, Heart, DollarSign, Plane, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useToast } from '../contexts/ToastContext';
 import { TravelPlan, Destination, Accommodation, TripSegment } from '../types/TravelData';
 import { generateTravelContent } from '../services/aiService';
 import PlacesAutocomplete from './PlacesAutocomplete';
@@ -13,6 +14,7 @@ import Header from './Header';
 
 const OnboardingFlow: React.FC = () => {
   const { theme } = useTheme();
+  const { toast } = useToast();
   const { setCurrentPlan, setHasCompletedOnboarding, setIsLoading, setActivities, setTranslations, setEmergencyContacts } = useTravel();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -210,9 +212,8 @@ const OnboardingFlow: React.FC = () => {
       
       setCurrentPlan(travelPlan);
       setHasCompletedOnboarding(true);
-    } catch (error) {
-      console.error('Error completing onboarding:', error);
-      alert('There was an error setting up your travel plan. Please try again.');
+    } catch {
+      toast('Failed to generate travel content. Please check your connection and try again.', 'error');
     } finally {
       setIsLoading(false);
     }

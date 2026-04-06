@@ -1,8 +1,8 @@
 import { TravelPlan, GeneratedActivity, Translation, EmergencyContact, Destination, TripSegment, City } from '../types/TravelData';
 
-const GEMINI_API_KEY = "AIzaSyBKIHOWbULL2hgG26Vs793Ui1CsIcvruz4";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-const GOOGLE_PLACES_API_KEY = "AIzaSyB-QqGGN0wHjSHwpI2zh1FP9iq3Ex7UPF8";
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
 
 async function callGeminiAPI(prompt: string, useGrounding: boolean = false): Promise<string> {
   try {
@@ -10,15 +10,9 @@ async function callGeminiAPI(prompt: string, useGrounding: boolean = false): Pro
       contents: [{ role: "user", parts: [{ text: prompt }] }]
     };
 
-    // Add grounding when requested for better awareness and accuracy
+    // Add grounding when requested for better accuracy with current data
     if (useGrounding) {
-      // FIX: Correctly enable grounding by adding the googleSearchRetrieval tool.
-      // The previous complex 'retrievalTool' and 'toolConfig' structure was incorrect and caused API errors.
-      requestBody.tools = [
-        {
-          googleSearchRetrieval: {},
-        },
-      ];
+      requestBody.tools = [{ google_search: {} }];
     }
 
     const response = await fetch(GEMINI_API_URL, {
@@ -50,8 +44,6 @@ async function searchRealPlacesWithGemini(
   searchType: 'restaurant' | 'attraction' | 'shopping' | 'general' = 'general'
 ): Promise<any[]> {
   try {
-    console.log(`🤖 Using Gemini AI to enhance search for: "${userQuery}"`);
-    
     // Use Gemini AI to intelligently format the Google Places API request
     const geminiPrompt = `
 You are an expert at creating Google Places API search queries. Given a user's search request, create the PERFECT search parameters.
@@ -121,7 +113,6 @@ Create 2-3 search strategies with different approaches. Return ONLY valid JSON.
       return await searchRealPlacesFallback(userQuery, location, radius, searchType);
     }
 
-    console.log('🎯 Gemini generated search strategies:', searchConfig.searchStrategies?.length || 0);
 
     let allValidPlaces: any[] = [];
 
@@ -144,12 +135,8 @@ Create 2-3 search strategies with different approaches. Return ONLY valid JSON.
           url = `https://maps.googleapis.com/maps/api/place/textsearch/json?${params}`;
         }
 
-        console.log(`🔍 Executing ${strategy.type} search with priority ${strategy.priority}`);
-        
         const response = await fetch(url);
         const data = await response.json();
-        
-        console.log(`📊 ${strategy.type} result:`, data.status, data.results?.length || 0);
         
         if (data.status === 'OK' && data.results && data.results.length > 0) {
           const validPlaces = [];
@@ -202,7 +189,6 @@ Create 2-3 search strategies with different approaches. Return ONLY valid JSON.
                 };
                 
                 validPlaces.push(enhancedPlace);
-                console.log(`✅ Added: ${place.name} (${details.isOpen ? 'Open' : 'Closed'})`);
               }
             } catch (detailError) {
               console.error('Error fetching details for place:', place.name, detailError);
@@ -243,7 +229,6 @@ Create 2-3 search strategies with different approaches. Return ONLY valid JSON.
       })
       .slice(0, 6);
 
-    console.log(`🎉 Final results: ${sortedPlaces.length} places found`);
     return sortedPlaces;
     
   } catch (error) {
@@ -260,8 +245,6 @@ async function searchRealPlacesFallback(
   searchType: 'restaurant' | 'attraction' | 'shopping' | 'general' = 'general'
 ): Promise<any[]> {
   try {
-    console.log(`🔄 Using fallback search for: "${query}"`);
-    
     let typeFilter = '';
     let excludedTypes: string[] = [];
     let requiredTypes: string[] = [];
@@ -1062,8 +1045,6 @@ export async function chatWithTripAssistant(
 
   // If this is a search query, use Gemini + Google Places API to get REAL places
   if (searchIntent.isSearchQuery && selectedCity?.city?.coordinates) {
-    console.log(`🔍 User is searching for: "${searchIntent.specificQuery}" in ${currentLocation}`);
-    
     realPlaces = await searchRealPlacesWithGemini(
       searchIntent.specificQuery,
       selectedCity.city.coordinates,
@@ -1071,7 +1052,6 @@ export async function chatWithTripAssistant(
       searchIntent.searchType
     );
     
-    console.log(`✅ Found ${realPlaces.length} real places:`, realPlaces.map(p => p.name));
   }
 
   const tripContext = `

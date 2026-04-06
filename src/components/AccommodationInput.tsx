@@ -1,7 +1,5 @@
 import React from 'react';
 import { Plus, Trash2, MapPin, AlertCircle } from 'lucide-react';
-import { Box, Typography, IconButton, Button, Paper } from '@mui/material';
-import { styled } from '@mui/material/styles';
 import { Accommodation } from '../types/TravelData';
 import PlacesAutocomplete from './PlacesAutocomplete';
 import MUIDateRangePicker from './MUIDateRangePicker';
@@ -12,34 +10,6 @@ interface AccommodationInputProps {
   onAccommodationsChange: (accommodations: Accommodation[]) => void;
   hideStayDuration?: boolean;
 }
-
-const StyledPaper = styled(Paper)(({ theme }) => ({
-  padding: 0,
-  borderRadius: 0,
-  backgroundColor: 'transparent',
-  border: 'none',
-  boxShadow: 'none',
-  marginBottom: theme.spacing(3),
-}));
-
-const AddButton = styled(Button)({
-  borderRadius: '16px',
-  padding: '24px',
-  border: '2px dashed var(--outline)',
-  backgroundColor: 'transparent',
-  color: 'var(--text-secondary)',
-  textTransform: 'none',
-  fontSize: '16px',
-  fontWeight: 500,
-  '&:hover': {
-    borderColor: 'var(--primary)',
-    backgroundColor: 'var(--primary)',
-    color: 'var(--on-primary)',
-    '& .MuiSvgIcon-root': {
-      backgroundColor: 'var(--primary)',
-    },
-  },
-});
 
 const AccommodationInput: React.FC<AccommodationInputProps> = ({
   accommodations,
@@ -71,8 +41,8 @@ const AccommodationInput: React.FC<AccommodationInputProps> = ({
 
   const handleAddressSelect = (index: number, place: any) => {
     const updated = [...accommodations];
-    updated[index] = { 
-      ...updated[index], 
+    updated[index] = {
+      ...updated[index],
       address: place.formatted_address || place.name,
       coordinates: place.coordinates
     };
@@ -81,8 +51,8 @@ const AccommodationInput: React.FC<AccommodationInputProps> = ({
 
   const handleDateRangeChange = (index: number, startDate: string, endDate: string) => {
     const updated = [...accommodations];
-    updated[index] = { 
-      ...updated[index], 
+    updated[index] = {
+      ...updated[index],
       checkIn: startDate,
       checkOut: endDate
     };
@@ -90,90 +60,61 @@ const AccommodationInput: React.FC<AccommodationInputProps> = ({
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <div className="flex flex-col gap-6">
       {accommodations.map((acc, index) => (
-        <StyledPaper key={acc.id} elevation={0}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Box
-                sx={{
-                  width: 32,
-                  height: 32,
-                  backgroundColor: 'var(--primary)',
-                  color: 'var(--on-primary)',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '14px',
-                  fontWeight: 'bold',
-                }}
-              >
+        <div key={acc.id} className="mb-6">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-[var(--primary)] text-[var(--on-primary)] rounded-full flex items-center justify-center text-sm font-bold">
                 {index + 1}
-              </Box>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                Accommodation {index + 1}
-              </Typography>
-            </Box>
+              </div>
+              <h4 className="font-semibold text-text-primary">Accommodation {index + 1}</h4>
+            </div>
             {accommodations.length > 1 && (
-              <IconButton
+              <button
                 onClick={() => removeAccommodation(index)}
-                sx={{
-                  color: 'var(--error)',
-                  '&:hover': {
-                    backgroundColor: 'var(--error)',
-                    color: 'white',
-                  },
-                }}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-[var(--error)] hover:bg-[var(--error)] hover:text-white transition-colors"
               >
                 <Trash2 size={20} />
-              </IconButton>
+              </button>
             )}
-          </Box>
-          
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          </div>
+
+          <div className="flex flex-col gap-6">
             <MUITextField
               label="Hotel/Accommodation Name"
               value={acc.name}
               onChange={(e) => updateAccommodation(index, 'name', e.target.value)}
               placeholder="e.g., Hotel Splendido, Airbnb Downtown"
             />
-            
-            <Box>
-              <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, color: 'var(--text-primary)' }}>
-                Address
-              </Typography>
+
+            <div>
+              <p className="text-sm font-medium text-text-primary mb-2">Address</p>
               <PlacesAutocomplete
                 onPlaceSelect={(place) => handleAddressSelect(index, place)}
                 placeholder="Search for hotel address..."
                 value={acc.address}
                 className="w-full"
                 types={['establishment', 'geocode']}
-                apiKey="AIzaSyB-QqGGN0wHjSHwpI2zh1FP9iq3Ex7UPF8"
+                apiKey={import.meta.env.VITE_GOOGLE_PLACES_API_KEY || ''}
               />
               {acc.coordinates && (
-                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <MapPin size={12} color="green" />
-                  <Typography variant="caption" sx={{ color: 'green' }}>
-                    Location confirmed with coordinates
-                  </Typography>
-                </Box>
+                <div className="mt-2 flex items-center gap-1">
+                  <MapPin size={12} className="text-green-500" />
+                  <span className="text-xs text-green-500">Location confirmed with coordinates</span>
+                </div>
               )}
               {acc.address && !acc.coordinates && (
-                <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <AlertCircle size={12} color="orange" />
-                  <Typography variant="caption" sx={{ color: 'orange' }}>
-                    Manual address entry - location services unavailable
-                  </Typography>
-                </Box>
+                <div className="mt-2 flex items-center gap-1">
+                  <AlertCircle size={12} className="text-orange-400" />
+                  <span className="text-xs text-orange-400">Manual address entry - location services unavailable</span>
+                </div>
               )}
-            </Box>
-            
+            </div>
+
             {!hideStayDuration && (
-              <Box>
-                <Typography variant="body2" sx={{ mb: 2, fontWeight: 500, color: 'var(--text-primary)' }}>
-                  Stay Duration
-                </Typography>
+              <div>
+                <p className="text-sm font-medium text-text-primary mb-4">Stay Duration</p>
                 <MUIDateRangePicker
                   startDate={acc.checkIn}
                   endDate={acc.checkOut}
@@ -181,35 +122,22 @@ const AccommodationInput: React.FC<AccommodationInputProps> = ({
                   onEndDateChange={(date) => handleDateRangeChange(index, acc.checkIn, date)}
                   minDate={new Date().toISOString().split('T')[0]}
                 />
-              </Box>
+              </div>
             )}
-          </Box>
-        </StyledPaper>
+          </div>
+        </div>
       ))}
-      
-      <AddButton
+
+      <button
         onClick={addAccommodation}
-        fullWidth
-        variant="outlined"
-        startIcon={
-          <Box
-            sx={{
-              width: 40,
-              height: 40,
-              borderRadius: '50%',
-              border: '2px solid currentColor',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Plus size={20} />
-          </Box>
-        }
+        className="w-full py-6 rounded-2xl border-2 border-dashed border-outline text-text-secondary text-base font-medium flex items-center justify-center gap-3 hover:border-[var(--primary)] hover:bg-[var(--primary)] hover:text-[var(--on-primary)] transition-all"
       >
-        Add A Accommodation
-      </AddButton>
-    </Box>
+        <div className="w-10 h-10 rounded-full border-2 border-current flex items-center justify-center">
+          <Plus size={20} />
+        </div>
+        Add Accommodation
+      </button>
+    </div>
   );
 };
 
