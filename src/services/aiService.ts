@@ -1,7 +1,7 @@
 import { TravelPlan, GeneratedActivity, Translation, EmergencyContact, Destination, TripSegment, City } from '../types/TravelData';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`;
 const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
 
 async function callGeminiAPI(prompt: string, useGrounding: boolean = false): Promise<string> {
