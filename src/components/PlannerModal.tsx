@@ -1,5 +1,5 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, Sparkles, Clipboard, Printer, AlertTriangle } from 'lucide-react';
 
 interface PlannerModalProps {
   isOpen: boolean;
@@ -63,11 +63,11 @@ const PlannerModal: React.FC<PlannerModalProps> = ({ isOpen, onClose, isLoading,
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
-      <div className="modal-content rounded-3xl shadow-2xl w-full max-w-4xl transform transition-all overflow-hidden">
+      <div className="modal-content rounded-2xl shadow-2xl w-full max-w-4xl transform transition-all overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between p-6 border-b border-outline bg-surface-container-high">
           <h3 className="text-xl font-semibold text-text-primary flex items-center gap-2">
-            <span className="text-2xl">✨</span>
+            <Sparkles size={22} className="text-primary" />
             Your AI-Generated Itinerary
           </h3>
           <button
@@ -106,7 +106,7 @@ const PlannerModal: React.FC<PlannerModalProps> = ({ isOpen, onClose, isLoading,
                   }}
                   className="filter-btn flex items-center gap-2"
                 >
-                  📋 Copy Itinerary
+                  <Clipboard size={16} /> Copy Itinerary
                 </button>
                 <button
                   onClick={() => {
@@ -136,14 +136,14 @@ const PlannerModal: React.FC<PlannerModalProps> = ({ isOpen, onClose, isLoading,
                   }}
                   className="filter-btn flex items-center gap-2"
                 >
-                  🖨️ Print Itinerary
+                  <Printer size={16} /> Print Itinerary
                 </button>
               </div>
             </div>
           ) : (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-error/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">⚠️</span>
+                <AlertTriangle size={24} className="text-error" />
               </div>
               <h4 className="text-lg font-semibold text-error mb-2">Something went wrong</h4>
               <p className="text-main-secondary">

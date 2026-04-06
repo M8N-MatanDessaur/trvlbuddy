@@ -4,6 +4,8 @@ import { GeneratedActivity } from '../types/TravelData';
 import FilterDropdown from './FilterDropdown';
 import DynamicActivityCard from './DynamicActivityCard';
 import DynamicActivityModal from './DynamicActivityModal';
+import { getCategoryIcon } from '../utils/categoryIcons';
+import { Globe, Building2, Bus, Search } from 'lucide-react';
 
 const DynamicActivitiesPage: React.FC = () => {
   const { currentPlan, activities } = useTravel();
@@ -45,23 +47,15 @@ const DynamicActivitiesPage: React.FC = () => {
     return ['All', ...uniqueCities];
   }, [currentPlan]);
 
-  const categoryIcons: { [key: string]: string } = {
-    'All': '🌍',
-    'History': '🏛️',
-    'Nature': '🌿',
-    'Food': '🍽️',
-    'Museums': '🖼️',
-    'Beach': '🏖️',
-    'Shopping': '🛍️',
-    'Nightlife': '🌃',
-    'Culture': '🎭',
-    'Wellness': '♨️',
-    'City': '🏙️',
-    'Daytrips': '🚌' // New icon for day trips
+  const categoryIconElements: { [key: string]: React.ReactNode } = {
+    'All': <Globe size={18} />,
+    ...Object.fromEntries(
+      categories.filter(c => c !== 'All').map(c => [c, React.createElement(getCategoryIcon(c), { size: 18 })])
+    )
   };
 
-  const destinationIcons: { [key: string]: string } = {
-    'All': '🌍'
+  const destinationIconElements: { [key: string]: React.ReactNode } = {
+    'All': <Globe size={18} />
   };
 
   const filteredActivities = useMemo(() => {
@@ -117,8 +111,8 @@ const DynamicActivitiesPage: React.FC = () => {
           Personalized activities based on your interests: {currentPlan.interests.join(', ')}. 
           {currentPlan.tripType !== 'day-trip' && destinations.length > 2 && ' Use the filters below to explore by category and city.'}
           {dayTripsCount > 0 && (
-            <span className="block mt-2 text-primary font-medium">
-              🚌 Plus {dayTripsCount} amazing day trips to nearby destinations!
+            <span className="inline-flex items-center gap-1 mt-2 text-primary font-medium">
+              <Bus size={16} /> Plus {dayTripsCount} amazing day trips to nearby destinations!
             </span>
           )}
         </p>
@@ -133,7 +127,7 @@ const DynamicActivitiesPage: React.FC = () => {
               categories={categories}
               activeCategory={activeCategory}
               onCategoryChange={setActiveCategory}
-              categoryIcons={categoryIcons}
+              categoryIcons={categoryIconElements}
               label="Filter by Category"
             />
           </div>
@@ -145,7 +139,7 @@ const DynamicActivitiesPage: React.FC = () => {
                 categories={destinations}
                 activeCategory={activeDestination}
                 onCategoryChange={setActiveDestination}
-                categoryIcons={destinationIcons}
+                categoryIcons={destinationIconElements}
                 label="Filter by City"
               />
             </div>
@@ -164,13 +158,13 @@ const DynamicActivitiesPage: React.FC = () => {
             <div className="flex items-center gap-2 min-w-0 flex-1">
               {activeCategory !== 'All' && (
                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary text-on-primary rounded-full text-xs font-medium flex-shrink-0">
-                  <span>{categoryIcons[activeCategory]}</span>
+                  <span>{React.createElement(getCategoryIcon(activeCategory), { size: 12 })}</span>
                   <span className="truncate max-w-[80px]">{activeCategory}</span>
                 </span>
               )}
               {activeDestination !== 'All' && currentPlan.tripType !== 'day-trip' && (
                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-secondary text-on-secondary rounded-full text-xs font-medium flex-shrink-0">
-                  <span>🏙️</span>
+                  <Building2 size={12} />
                   <span className="truncate max-w-[80px]">{activeDestination}</span>
                 </span>
               )}
@@ -181,10 +175,10 @@ const DynamicActivitiesPage: React.FC = () => {
 
       {/* Day Trips Info Banner */}
       {activeCategory === 'Daytrips' && filteredActivities.length > 0 && (
-        <div className="mb-8 p-6 bg-secondary-container rounded-3xl">
+        <div className="mb-8 p-6 bg-secondary-container rounded-2xl">
           <div className="text-center">
             <h3 className="text-xl font-bold text-on-secondary-container mb-2 flex items-center justify-center gap-2">
-              🚌 Day Trip Adventures
+              <Bus size={20} /> Day Trip Adventures
             </h3>
             <p className="text-on-secondary-container/80 leading-relaxed">
               Discover amazing nearby destinations perfect for day trips! These are carefully selected cities and attractions 
@@ -197,7 +191,7 @@ const DynamicActivitiesPage: React.FC = () => {
       {filteredActivities.length === 0 ? (
         <div className="text-center py-12">
           <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">🔍</span>
+            <Search size={24} className="text-primary" />
           </div>
           <h3 className="text-xl font-semibold mb-2">No activities found</h3>
           <p className="text-main-secondary text-lg mb-4">
@@ -223,8 +217,8 @@ const DynamicActivitiesPage: React.FC = () => {
               {/* City badge for full trips */}
               {currentPlan.tripType !== 'day-trip' && activity.cityId && activity.category !== 'Daytrips' && (
                 <div className="absolute top-4 right-4 z-10">
-                  <span className="inline-block px-3 py-1 bg-secondary text-on-secondary rounded-full text-xs font-medium shadow-sm">
-                    🏙️ {getCityName(activity.cityId)}
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-secondary text-on-secondary rounded-full text-xs font-medium shadow-sm">
+                    <Building2 size={12} /> {getCityName(activity.cityId)}
                   </span>
                 </div>
               )}
@@ -232,8 +226,8 @@ const DynamicActivitiesPage: React.FC = () => {
               {/* Day trip badge */}
               {activity.category === 'Daytrips' && (
                 <div className="absolute top-4 right-4 z-10">
-                  <span className="inline-block px-3 py-1 bg-primary text-on-primary rounded-full text-xs font-medium shadow-sm">
-                    🚌 Day Trip
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-primary text-on-primary rounded-full text-xs font-medium shadow-sm">
+                    <Bus size={12} /> Day Trip
                   </span>
                 </div>
               )}

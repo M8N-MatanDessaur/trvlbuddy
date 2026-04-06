@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, MessageCircle, MapPin, ExternalLink, Navigation, Loader2 } from 'lucide-react';
+import { X, Send, MessageCircle, MapPin, ExternalLink, Navigation, Loader2, UtensilsCrossed, Compass, Target, Clock, Hotel, Lightbulb } from 'lucide-react';
 import { TravelPlan, GeneratedActivity } from '../types/TravelData';
 import { chatWithTripAssistant } from '../services/aiService';
 
@@ -75,14 +75,14 @@ const TripChatAssistant: React.FC<TripChatAssistantProps> = ({
         ? `${travelPlan.destination?.name || travelPlan.destinations[0]?.name}`
         : 'your destinations';
 
-    return `👋 Hi! I'm your AI travel assistant with full knowledge of your ${travelPlan.tripType === 'day-trip' ? 'day trip' : 'trip'} to ${currentLocation}.
+    return `Hi! I'm your AI travel assistant with full knowledge of your ${travelPlan.tripType === 'day-trip' ? 'day trip' : 'trip'} to ${currentLocation}.
 
 I can help you with:
-🍽️ Restaurant recommendations near your hotels
-🗺️ Directions and transportation
-🎯 Specific activity suggestions
-⏰ Timing and logistics
-🏨 Local tips and insider knowledge
+- Restaurant recommendations near your hotels
+- Directions and transportation
+- Specific activity suggestions
+- Timing and logistics
+- Local tips and insider knowledge
 
 What would you like to know about your trip?`;
   };
@@ -149,10 +149,10 @@ What would you like to know about your trip?`;
 
   const getLocationIcon = (type: string) => {
     switch (type) {
-      case 'restaurant': return '🍽️';
-      case 'attraction': return '🎯';
-      case 'hotel': return '🏨';
-      default: return '📍';
+      case 'restaurant': return <UtensilsCrossed size={16} className="text-primary" />;
+      case 'attraction': return <Target size={16} className="text-primary" />;
+      case 'hotel': return <Hotel size={16} className="text-primary" />;
+      default: return <MapPin size={16} className="text-primary" />;
     }
   };
 
@@ -170,7 +170,7 @@ What would you like to know about your trip?`;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-end p-4 z-[70]">
-      <div className="bg-surface-container rounded-3xl shadow-2xl w-full max-w-md h-[600px] flex flex-col overflow-hidden border border-outline">
+      <div className="bg-surface-container rounded-2xl shadow-2xl w-full max-w-md h-[600px] flex flex-col overflow-hidden border border-outline">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-outline bg-primary-container">
           <div className="flex items-center gap-3">
@@ -212,7 +212,7 @@ What would you like to know about your trip?`;
                       <div key={index} className="p-2 bg-surface-container rounded-xl border border-outline">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-start gap-2 flex-1 min-w-0">
-                            <span className="text-lg flex-shrink-0">{getLocationIcon(location.type)}</span>
+                            <span className="flex-shrink-0">{getLocationIcon(location.type)}</span>
                             <div className="min-w-0 flex-1">
                               <div className="font-medium text-sm text-text-primary truncate">{location.name}</div>
                               <div className="text-xs text-text-secondary">{location.address}</div>
@@ -243,7 +243,7 @@ What would you like to know about your trip?`;
                 {/* Suggestions */}
                 {message.suggestions && message.suggestions.length > 0 && (
                   <div className="mt-3 space-y-1">
-                    <div className="text-xs text-text-secondary mb-2">💡 Try asking:</div>
+                    <div className="text-xs text-text-secondary mb-2 flex items-center gap-1"><Lightbulb size={12} /> Try asking:</div>
                     {message.suggestions.map((suggestion, index) => (
                       <button
                         key={index}

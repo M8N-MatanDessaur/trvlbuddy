@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, MapPin, Euro, Thermometer, Cloud, Sun, CloudRain, Globe, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { Phone, MapPin, Euro, Thermometer, Cloud, Sun, CloudRain, Globe, ChevronDown, ChevronRight, Loader2, Wrench, AlertTriangle, Lightbulb, Building2 } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 
 interface WeatherData {
@@ -489,9 +489,9 @@ const DynamicUtilitiesPage: React.FC = () => {
     return (
       <section className="page">
         <div className="text-center max-w-3xl mx-auto">
-          <h2 className="mb-4">🛠️ Travel Utilities</h2>
+          <h2 className="mb-4 flex items-center justify-center gap-2"><Wrench size={24} /> Travel Utilities</h2>
           <div className="p-6 bg-error/10 border border-error/20 rounded-xl">
-            <h3 className="text-lg font-semibold text-error mb-2">⚠️ No Destinations Available</h3>
+            <h3 className="text-lg font-semibold text-error mb-2 flex items-center gap-2"><AlertTriangle size={18} /> No Destinations Available</h3>
             <p className="text-error/80 mb-4">
               No destinations found in your travel plan. Please complete the onboarding to access utilities.
             </p>
@@ -504,7 +504,7 @@ const DynamicUtilitiesPage: React.FC = () => {
   return (
     <section className="page">
       <div className="text-center max-w-3xl mx-auto mb-8">
-        <h2 className="mb-4">🛠️ Travel Utilities</h2>
+        <h2 className="mb-4 flex items-center justify-center gap-2"><Wrench size={24} /> Travel Utilities</h2>
         <p className="leading-relaxed text-main-secondary text-lg">
           Essential tools for your {currentPlan.tripType === 'day-trip' ? 'day trip' : 'trip'}: weather, currency converter, and emergency contacts.
         </p>
@@ -512,7 +512,7 @@ const DynamicUtilitiesPage: React.FC = () => {
 
       <div className="space-y-6">
         {/* Weather Widget */}
-        <div className="card rounded-3xl overflow-hidden">
+        <div className="card rounded-2xl overflow-hidden">
           <button
             onClick={() => toggleSection('weather')}
             className="w-full p-6 text-left hover:bg-surface-container-high transition-colors"
@@ -542,7 +542,7 @@ const DynamicUtilitiesPage: React.FC = () => {
                         onClick={() => setSelectedWeatherLocation(location.id)}
                         className={`filter-btn ${selectedWeatherLocation === location.id ? 'active' : ''}`}
                       >
-                        {location.type === 'city' ? '🏙️' : '🌍'} {location.name}
+                        {location.type === 'city' ? <Building2 size={14} className="inline" /> : <Globe size={14} className="inline" />} {location.name}
                       </button>
                     ))}
                   </div>
@@ -586,7 +586,7 @@ const DynamicUtilitiesPage: React.FC = () => {
                       <div className="mt-4 p-3 bg-primary-container rounded-xl">
                         <p className="text-sm text-on-primary-container">
                           {getCurrentWeather().error ? (
-                            <>⚠️ {getCurrentWeather().error}</>
+                            <><AlertTriangle size={14} className="inline" /> {getCurrentWeather().error}</>
                           ) : (
                             <>
                               Current weather for {getCurrentWeatherLocation()?.name}. 
@@ -606,7 +606,7 @@ const DynamicUtilitiesPage: React.FC = () => {
         </div>
 
         {/* Currency Converter */}
-        <div className="card rounded-3xl overflow-hidden">
+        <div className="card rounded-2xl overflow-hidden">
           <button
             onClick={() => toggleSection('currency')}
             className="w-full p-6 text-left hover:bg-surface-container-high transition-colors"
@@ -708,7 +708,7 @@ const DynamicUtilitiesPage: React.FC = () => {
         </div>
 
         {/* Emergency Contacts */}
-        <div className="card rounded-3xl overflow-hidden">
+        <div className="card rounded-2xl overflow-hidden">
           <button
             onClick={() => toggleSection('emergency')}
             className="w-full p-6 text-left hover:bg-surface-container-high transition-colors"
@@ -738,7 +738,7 @@ const DynamicUtilitiesPage: React.FC = () => {
                         onClick={() => setSelectedEmergencyCountry(country.id)}
                         className={`filter-btn ${selectedEmergencyCountry === country.id ? 'active' : ''}`}
                       >
-                        🌍 {country.name}
+                        <Globe size={14} className="inline" /> {country.name}
                       </button>
                     ))}
                   </div>
@@ -822,7 +822,7 @@ const DynamicUtilitiesPage: React.FC = () => {
               
               <div className="mt-6 p-3 bg-secondary-container rounded-xl">
                 <p className="text-sm text-on-secondary-container">
-                  💡 <strong>Tips:</strong> Use the translator page for more phrases, or screenshot these for offline access. 
+                  <Lightbulb size={14} className="inline" /> <strong>Tips:</strong> Use the translator page for more phrases, or screenshot these for offline access.
                   In most countries, 112 is the universal emergency number.
                 </p>
               </div>

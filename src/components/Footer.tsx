@@ -1,4 +1,5 @@
 import React from 'react';
+import { Heart } from 'lucide-react';
 
 const Footer: React.FC = () => {
   return (
@@ -8,7 +9,7 @@ const Footer: React.FC = () => {
           {/* App Info */}
           <div className="text-sm text-text-secondary">
             <p className="mb-2">TravelBuddy - Your AI-Powered Travel Companion</p>
-            <p>&copy; 2024 TravelBuddy. Made with ❤️ for travelers worldwide.</p>
+            <p className="inline-flex items-center gap-1">&copy; 2024 TravelBuddy. Made with <Heart size={14} className="text-error" /> for travelers worldwide.</p>
           </div>
         </div>
       </div>

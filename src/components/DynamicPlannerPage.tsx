@@ -7,7 +7,8 @@ import DynamicActivityModal from './DynamicActivityModal';
 import PlannerModal from './PlannerModal';
 import TripChatAssistant from './TripChatAssistant';
 import { generateCustomItinerary } from '../services/aiService';
-import { MapPin, ArrowRight, Calendar, Users, MessageCircle, Sparkles, Bot, Wand2 } from 'lucide-react';
+import { MapPin, ArrowRight, Calendar, Users, MessageCircle, Sparkles, Bot, Wand2, Globe, Building2, Bus, UtensilsCrossed, Map, Compass, Target, Lightbulb, Languages, Coins } from 'lucide-react';
+import { getCategoryIcon } from '../utils/categoryIcons';
 
 interface PlanningLocation {
   id: string;
@@ -49,19 +50,11 @@ const DynamicPlannerPage: React.FC = () => {
 
     const categories = ['All', ...Array.from(new Set(locationActivities.map(a => a.category)))];
 
-    const categoryIcons: { [key: string]: string } = {
-      'All': '🌍',
-      'History': '🏛️',
-      'Nature': '🌿',
-      'Food': '🍽️',
-      'Museums': '🖼️',
-      'Beach': '🏖️',
-      'Shopping': '🛍️',
-      'Nightlife': '🌃',
-      'Culture': '🎭',
-      'Wellness': '♨️',
-      'City': '🏙️',
-      'Daytrips': '🚌'
+    const categoryIconElements: { [key: string]: React.ReactNode } = {
+      'All': <Globe size={18} />,
+      ...Object.fromEntries(
+        categories.filter(c => c !== 'All').map(c => [c, React.createElement(getCategoryIcon(c), { size: 18 })])
+      )
     };
 
     const getFilteredActivities = (filter: string) => {
@@ -73,7 +66,7 @@ const DynamicPlannerPage: React.FC = () => {
 
     const handleActivityToggle = (activityName: string, isSelected: boolean) => {
       setSelectedActivities(prev =>
-        isSelected 
+        isSelected
           ? prev.filter(name => name !== activityName)
           : [...prev, activityName]
       );
@@ -102,7 +95,7 @@ const DynamicPlannerPage: React.FC = () => {
 
     const renderActivityList = (filter: string, selectedActivities: string[]) => {
       const filteredActivities = getFilteredActivities(filter);
-      
+
       if (filteredActivities.length === 0) {
         return (
           <div className="text-center py-8">
@@ -110,13 +103,13 @@ const DynamicPlannerPage: React.FC = () => {
           </div>
         );
       }
-      
+
       return (
         <div className="space-y-1 max-h-96 overflow-y-auto pr-2 mb-4 border-t border-outline pt-4">
           {filteredActivities.map((activity, index) => {
             const isSelected = selectedActivities.includes(activity.name);
             const isDayTrip = activity.category === 'Daytrips';
-            
+
             return (
               <label
                 key={`${activity.name}-${index}`}
@@ -134,8 +127,8 @@ const DynamicPlannerPage: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">{activity.name}</span>
                     {isDayTrip && (
-                      <span className="px-2 py-1 bg-secondary text-on-secondary rounded-full text-xs font-medium">
-                        🚌 Day Trip
+                      <span className="inline-flex items-center gap-1 px-2 py-1 bg-secondary text-on-secondary rounded-full text-xs font-medium">
+                        <Bus size={12} /> Day Trip
                       </span>
                     )}
                   </div>
@@ -168,7 +161,7 @@ const DynamicPlannerPage: React.FC = () => {
           {/* Two Main Sections */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
             {/* AI Day Planner Section */}
-            <div className="card rounded-3xl p-8">
+            <div className="card rounded-2xl p-8">
               <div className="text-center mb-6">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Wand2 className="h-8 w-8 text-primary" />
@@ -181,14 +174,14 @@ const DynamicPlannerPage: React.FC = () => {
 
               <div className="space-y-4">
                 <div className="p-4 rounded-xl bg-primary-container">
-                  <h4 className="text-on-primary-container font-semibold mb-2">✨ Smart Planning</h4>
+                  <h4 className="text-on-primary-container font-semibold mb-2 flex items-center gap-2"><Sparkles size={16} /> Smart Planning</h4>
                   <p className="text-sm text-on-primary-container/80">
                     Select activities and let AI create the perfect timeline with optimal routing
                   </p>
                 </div>
-                
+
                 <div className="p-4 rounded-xl bg-secondary-container">
-                  <h4 className="text-on-secondary-container font-semibold mb-2">🎯 Personalized</h4>
+                  <h4 className="text-on-secondary-container font-semibold mb-2 flex items-center gap-2"><Target size={16} /> Personalized</h4>
                   <p className="text-sm text-on-secondary-container/80">
                     Based on your interests: {currentPlan.interests.slice(0, 3).join(', ')}
                   </p>
@@ -205,7 +198,7 @@ const DynamicPlannerPage: React.FC = () => {
             </div>
 
             {/* AI Travel Assistant Section */}
-            <div className="card rounded-3xl p-8">
+            <div className="card rounded-2xl p-8">
               <div className="text-center mb-6">
                 <div className="w-16 h-16 bg-secondary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Bot className="h-8 w-8 text-secondary" />
@@ -218,14 +211,14 @@ const DynamicPlannerPage: React.FC = () => {
 
               <div className="space-y-4">
                 <div className="p-4 rounded-xl bg-secondary-container">
-                  <h4 className="text-on-secondary-container font-semibold mb-2">🍽️ Real Places</h4>
+                  <h4 className="text-on-secondary-container font-semibold mb-2 flex items-center gap-2"><UtensilsCrossed size={16} /> Real Places</h4>
                   <p className="text-sm text-on-secondary-container/80">
                     Find verified restaurants and attractions with live Google data
                   </p>
                 </div>
-                
+
                 <div className="p-4 rounded-xl bg-primary-container">
-                  <h4 className="text-on-primary-container font-semibold mb-2">🗺️ Smart Directions</h4>
+                  <h4 className="text-on-primary-container font-semibold mb-2 flex items-center gap-2"><Compass size={16} /> Smart Directions</h4>
                   <p className="text-sm text-on-primary-container/80">
                     Get walking directions and transportation tips from your location
                   </p>
@@ -263,7 +256,7 @@ const DynamicPlannerPage: React.FC = () => {
             ← Back to AI Hub
           </button>
           
-          <h2 className="mb-4">✨ AI Day Planner</h2>
+          <h2 className="mb-4 flex items-center justify-center gap-2"><Sparkles size={24} className="text-primary" /> AI Day Planner</h2>
           <p className="leading-relaxed text-main-secondary text-lg">
             Select activities you're interested in, and our AI will create a personalized itinerary with perfect timing and flow!
           </p>
@@ -273,38 +266,38 @@ const DynamicPlannerPage: React.FC = () => {
         <div className="card rounded-2xl p-4 mb-6 max-w-2xl mx-auto">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-primary text-on-primary rounded-full flex items-center justify-center">
-              🌍
+              <Globe size={24} />
             </div>
             <div>
               <h3 className="font-bold">{destination.name}</h3>
               <div className="text-sm text-main-secondary flex gap-4">
-                <span>💬 {destination.languages?.join(', ') || 'Local language'}</span>
-                <span>💰 {destination.currency || 'Local currency'}</span>
+                <span className="inline-flex items-center gap-1"><Languages size={14} /> {destination.languages?.join(', ') || 'Local language'}</span>
+                <span className="inline-flex items-center gap-1"><Coins size={14} /> {destination.currency || 'Local currency'}</span>
               </div>
             </div>
           </div>
         </div>
         
         <div className="max-w-4xl mx-auto">
-          <div className="card rounded-3xl p-6">
+          <div className="card rounded-2xl p-6">
             <h3 className="text-center mb-6 flex items-center justify-center gap-3">
-              <span className="text-4xl">🗺️</span>
+              <Map size={32} className="text-primary" />
               Choose Your Activities
             </h3>
-            
+
             {/* Category Filter Dropdown */}
             <div className="mb-6 flex justify-center">
               <FilterDropdown
                 categories={categories}
                 activeCategory={activeFilter}
                 onCategoryChange={setActiveFilter}
-                categoryIcons={categoryIcons}
+                categoryIcons={categoryIconElements}
                 label="Filter Activities"
               />
             </div>
-            
+
             {renderActivityList(activeFilter, selectedActivities)}
-            
+
             <div className="flex flex-col sm:flex-row gap-4 items-center justify-between pt-4 border-t border-outline">
               <div className="text-sm text-main-secondary">
                 {selectedActivities.length} {selectedActivities.length === 1 ? 'activity' : 'activities'} selected
@@ -375,8 +368,8 @@ const DynamicPlannerPage: React.FC = () => {
             <p className="text-on-secondary-container/80 mb-4">
               The AI planner works with specific cities. Please add cities to your trip plan to use this feature.
             </p>
-            <p className="text-sm text-on-secondary-container/70">
-              💡 Tip: Go back to your trip planning and add specific cities within your countries.
+            <p className="text-sm text-on-secondary-container/70 inline-flex items-center gap-1">
+              <Lightbulb size={14} /> Tip: Go back to your trip planning and add specific cities within your countries.
             </p>
           </div>
         </div>
@@ -391,19 +384,11 @@ const DynamicPlannerPage: React.FC = () => {
 
   const categories = ['All', ...Array.from(new Set(locationActivities.map(a => a.category)))];
 
-  const categoryIcons: { [key: string]: string } = {
-    'All': '🌍',
-    'History': '🏛️',
-    'Nature': '🌿',
-    'Food': '🍽️',
-    'Museums': '🖼️',
-    'Beach': '🏖️',
-    'Shopping': '🛍️',
-    'Nightlife': '🌃',
-    'Culture': '🎭',
-    'Wellness': '♨️',
-    'City': '🏙️',
-    'Daytrips': '🚌'
+  const categoryIconElements: { [key: string]: React.ReactNode } = {
+    'All': <Globe size={18} />,
+    ...Object.fromEntries(
+      categories.filter(c => c !== 'All').map(c => [c, React.createElement(getCategoryIcon(c), { size: 18 })])
+    )
   };
 
   const getFilteredActivities = (filter: string) => {
@@ -488,8 +473,8 @@ const DynamicPlannerPage: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{activity.name}</span>
                   {isDayTrip && (
-                    <span className="px-2 py-1 bg-secondary text-on-secondary rounded-full text-xs font-medium">
-                      🚌 Day Trip
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-secondary text-on-secondary rounded-full text-xs font-medium">
+                      <Bus size={12} /> Day Trip
                     </span>
                   )}
                 </div>
@@ -522,7 +507,7 @@ const DynamicPlannerPage: React.FC = () => {
         {/* Two Main Sections */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
           {/* AI Day Planner Section */}
-          <div className="card rounded-3xl p-8">
+          <div className="card rounded-2xl p-8">
             <div className="text-center mb-6">
               <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Wand2 className="h-8 w-8 text-primary" />
@@ -535,14 +520,14 @@ const DynamicPlannerPage: React.FC = () => {
 
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-primary-container">
-                <h4 className="text-on-primary-container font-semibold mb-2">✨ Smart Planning</h4>
+                <h4 className="text-on-primary-container font-semibold mb-2 flex items-center gap-2"><Sparkles size={16} /> Smart Planning</h4>
                 <p className="text-sm text-on-primary-container/80">
                   Select activities and let AI create the perfect timeline with optimal routing
                 </p>
               </div>
-              
+
               <div className="p-4 rounded-xl bg-secondary-container">
-                <h4 className="text-on-secondary-container font-semibold mb-2">🎯 Personalized</h4>
+                <h4 className="text-on-secondary-container font-semibold mb-2 flex items-center gap-2"><Target size={16} /> Personalized</h4>
                 <p className="text-sm text-on-secondary-container/80">
                   Based on your interests: {currentPlan.interests.slice(0, 3).join(', ')}
                 </p>
@@ -559,7 +544,7 @@ const DynamicPlannerPage: React.FC = () => {
           </div>
 
           {/* AI Travel Assistant Section */}
-          <div className="card rounded-3xl p-8">
+          <div className="card rounded-2xl p-8">
             <div className="text-center mb-6">
               <div className="w-16 h-16 bg-secondary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Bot className="h-8 w-8 text-secondary" />
@@ -572,14 +557,14 @@ const DynamicPlannerPage: React.FC = () => {
 
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-secondary-container">
-                <h4 className="text-on-secondary-container font-semibold mb-2">🍽️ Real Places</h4>
+                <h4 className="text-on-secondary-container font-semibold mb-2 flex items-center gap-2"><UtensilsCrossed size={16} /> Real Places</h4>
                 <p className="text-sm text-on-secondary-container/80">
                   Find verified restaurants and attractions with live Google data
                 </p>
               </div>
-              
+
               <div className="p-4 rounded-xl bg-primary-container">
-                <h4 className="text-on-primary-container font-semibold mb-2">🗺️ Smart Directions</h4>
+                <h4 className="text-on-primary-container font-semibold mb-2 flex items-center gap-2"><Compass size={16} /> Smart Directions</h4>
                 <p className="text-sm text-on-primary-container/80">
                   Get walking directions and transportation tips from your location
                 </p>
@@ -618,7 +603,7 @@ const DynamicPlannerPage: React.FC = () => {
             ← Back to AI Hub
           </button>
           
-          <h2 className="mb-4">✨ AI Day Planner</h2>
+          <h2 className="mb-4 flex items-center justify-center gap-2"><Sparkles size={24} className="text-primary" /> AI Day Planner</h2>
           <p className="leading-relaxed text-main-secondary text-lg">
             Choose a city to start planning your perfect day!
           </p>
@@ -627,7 +612,7 @@ const DynamicPlannerPage: React.FC = () => {
         {/* City Selection */}
         <div className="max-w-4xl mx-auto">
           <h3 className="text-center mb-6">Select a City to Plan</h3>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {planningLocations.map((location) => (
               <button
@@ -638,7 +623,7 @@ const DynamicPlannerPage: React.FC = () => {
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-primary text-on-primary rounded-full flex items-center justify-center text-xl">
-                      🏙️
+                      <Building2 size={24} />
                     </div>
                     <div>
                       <h4 className="font-bold text-lg">{location.name}</h4>
@@ -647,18 +632,18 @@ const DynamicPlannerPage: React.FC = () => {
                   </div>
                   <ArrowRight className="text-primary group-hover:translate-x-1 transition-transform" size={20} />
                 </div>
-                
+
                 <div className="space-y-2 text-sm text-main-secondary">
                   <div className="flex items-center gap-2">
-                    <span>💬</span>
+                    <Languages size={14} />
                     <span>{location.destination.languages?.join(', ') || 'Local language'}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span>💰</span>
+                    <Coins size={14} />
                     <span>{location.destination.currency || 'Local currency'}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span>🎯</span>
+                    <Target size={14} />
                     <span>
                       {activities.filter(a => a.cityId === location.city.id).length} activities available
                     </span>
@@ -700,32 +685,32 @@ const DynamicPlannerPage: React.FC = () => {
       <div className="card rounded-2xl p-4 mb-6 max-w-2xl mx-auto">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-primary text-on-primary rounded-full flex items-center justify-center">
-            🏙️
+            <Building2 size={24} />
           </div>
           <div>
             <h3 className="font-bold">{selectedLocation.name}</h3>
             <div className="text-sm text-main-secondary flex gap-4">
-              <span>💬 {selectedLocation.destination.languages?.join(', ') || 'Local language'}</span>
-              <span>💰 {selectedLocation.destination.currency || 'Local currency'}</span>
+              <span className="inline-flex items-center gap-1"><Languages size={14} /> {selectedLocation.destination.languages?.join(', ') || 'Local language'}</span>
+              <span className="inline-flex items-center gap-1"><Coins size={14} /> {selectedLocation.destination.currency || 'Local currency'}</span>
             </div>
           </div>
         </div>
       </div>
       
       <div className="max-w-4xl mx-auto">
-        <div className="card rounded-3xl p-6">
+        <div className="card rounded-2xl p-6">
           <h3 className="text-center mb-6 flex items-center justify-center gap-3">
-            <span className="text-4xl">🗺️</span>
+            <Map size={32} className="text-primary" />
             Choose Your Activities
           </h3>
-          
+
           {/* Category Filter Dropdown */}
           <div className="mb-6 flex justify-center">
             <FilterDropdown
               categories={categories}
               activeCategory={activeFilter}
               onCategoryChange={setActiveFilter}
-              categoryIcons={categoryIcons}
+              categoryIcons={categoryIconElements}
               label="Filter Activities"
             />
           </div>

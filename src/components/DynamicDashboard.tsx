@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTravel } from '../contexts/TravelContext';
-import { MapPin, Calendar, Users, Plane, Train, Car, Ship, Bus, Map, Navigation, Phone, Globe } from 'lucide-react';
+import { MapPin, Calendar, Users, Plane, Train, Car, Ship, Bus, Map, Navigation, Phone, Globe, Coins, Hotel, Sparkles } from 'lucide-react';
 
 const DynamicDashboard: React.FC = () => {
   const { currentPlan } = useTravel();
@@ -195,8 +195,8 @@ const DynamicDashboard: React.FC = () => {
         <div className="space-y-6">
           {/* Day Trip Header */}
           <div className="text-center p-6 bg-primary-container rounded-2xl">
-            <h3 className="text-xl font-bold text-on-primary-container mb-2">
-              📍 {destination?.name}
+            <h3 className="text-xl font-bold text-on-primary-container mb-2 flex items-center justify-center gap-2">
+              <MapPin size={20} /> {destination?.name}
             </h3>
             <p className="text-on-primary-container/80">
               {destination?.country} • {currentPlan.travelers} travelers • 1 day
@@ -216,7 +216,7 @@ const DynamicDashboard: React.FC = () => {
             </div>
             <div className="p-4 bg-surface-container-high rounded-xl">
               <div className="text-center">
-                <span className="text-xl mb-2 block">💰</span>
+                <Coins size={20} className="mx-auto mb-2" />
                 <div className="text-sm font-medium text-text-primary">Currency</div>
                 <div className="text-xs text-text-secondary">
                   {destination?.currency || 'Local'}
@@ -235,8 +235,8 @@ const DynamicDashboard: React.FC = () => {
         <div className="space-y-6">
           {/* Trip Summary */}
           <div className="text-center p-6 bg-primary-container rounded-2xl">
-            <h3 className="text-xl font-bold text-on-primary-container mb-2">
-              🗺️ Your Journey
+            <h3 className="text-xl font-bold text-on-primary-container mb-2 flex items-center justify-center gap-2">
+              <Map size={20} /> Your Journey
             </h3>
             <div className="grid grid-cols-3 gap-4 mt-4">
               <div className="text-center">
@@ -286,7 +286,7 @@ const DynamicDashboard: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-center p-3 bg-secondary-container rounded-xl">
-                      <span className="text-sm mb-1 block">💰</span>
+                      <Coins size={14} className="mx-auto mb-1 text-secondary" />
                       <div className="text-xs font-medium text-on-secondary-container">Currency</div>
                       <div className="text-xs text-on-secondary-container/80">
                         {segment.destination.currency || 'Local'}
@@ -305,7 +305,7 @@ const DynamicDashboard: React.FC = () => {
                   {segment.accommodations && segment.accommodations.length > 0 && (
                     <div>
                       <h5 className="font-semibold mb-3 flex items-center gap-2 text-sm">
-                        🏨 Accommodations ({segment.accommodations.length})
+                        <Hotel size={16} /> Accommodations ({segment.accommodations.length})
                       </h5>
                       <div className="space-y-3">
                         {segment.accommodations.map((accommodation, accIndex) => (
@@ -405,7 +405,7 @@ const DynamicDashboard: React.FC = () => {
         <p className="leading-relaxed text-main-secondary text-base sm:text-lg">
           {currentPlan.tripType === 'day-trip' 
             ? 'Your personalized day trip guide is ready. Explore activities, use the translator, and discover amazing local experiences!'
-            : 'Your personalized travel guide is ready. Explore activities, use the translator, and try the ✨ AI Hub to create custom itineraries!'
+            : 'Your personalized travel guide is ready. Explore activities, use the translator, and try the AI Hub to create custom itineraries!'
           }
         </p>
       </div>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { MapPin, Calendar, Users, Heart, DollarSign, Plane, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react';
+import { MapPin, Calendar, Users, Heart, DollarSign, Plane, ArrowRight, ArrowLeft, Sparkles, Target, Lightbulb } from 'lucide-react';
+import { interestIcons, budgetIcons, featureIcons } from '../utils/categoryIcons';
 import { useTravel } from '../contexts/TravelContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useToast } from '../contexts/ToastContext';
@@ -41,24 +42,11 @@ const OnboardingFlow: React.FC = () => {
 
   const totalSteps = getTotalSteps();
 
-  const interestOptions = [
-    { id: 'historical', label: 'Historical Sites', icon: '🏛️' },
-    { id: 'outdoor', label: 'Outdoor Adventures', icon: '🥾' },
-    { id: 'food', label: 'Food & Dining', icon: '🍽️' },
-    { id: 'museums', label: 'Museums & Art', icon: '🖼️' },
-    { id: 'beach', label: 'Beach & Water Sports', icon: '🏖️' },
-    { id: 'shopping', label: 'Shopping', icon: '🛍️' },
-    { id: 'nightlife', label: 'Nightlife', icon: '🌃' },
-    { id: 'nature', label: 'Nature & Wildlife', icon: '🌿' },
-    { id: 'photography', label: 'Photography', icon: '📸' },
-    { id: 'culture', label: 'Local Culture', icon: '🎭' },
-    { id: 'wellness', label: 'Wellness & Spa', icon: '♨️' },
-    { id: 'architecture', label: 'Architecture', icon: '🏗️' },
-    { id: 'markets', label: 'Markets & Street Food', icon: '🛒' },
-    { id: 'hiking', label: 'Hiking', icon: '🥾' },
-    { id: 'boat', label: 'Boat Tours', icon: '🛥️' },
-    { id: 'religious', label: 'Religious Sites', icon: '⛪' }
-  ];
+  const interestOptions = Object.entries(interestIcons).map(([id, data]) => ({
+    id,
+    label: data.label,
+    Icon: data.icon,
+  }));
 
   // =================================================================
   // FIX START: Add a reliable date formatting helper function
@@ -324,7 +312,7 @@ const OnboardingFlow: React.FC = () => {
     <div className="space-y-8 md:space-y-12 text-center">
       <div className="flex justify-center mb-8">
         <div className="w-24 h-24 md:w-32 md:h-32 bg-primary/10 rounded-full flex items-center justify-center">
-          <div className="text-4xl md:text-5xl">✈️</div>
+          <Plane className="h-12 w-12 md:h-16 md:w-16 text-primary" />
         </div>
       </div>
       <div className="space-y-4 md:space-y-6">
@@ -337,28 +325,28 @@ const OnboardingFlow: React.FC = () => {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-4xl mx-auto">
         <div className="p-6 rounded-2xl bg-primary-container">
-          <div className="text-3xl mb-3">🤖</div>
-          <h3 className="font-bold text-lg mb-2 text-on-primary-container">AI-Powered Planning</h3>
+          <div className="mb-3">{React.createElement(featureIcons.ai.icon, { size: 28, className: 'text-on-primary-container' })}</div>
+          <h3 className="font-bold text-lg mb-2 text-on-primary-container">{featureIcons.ai.label}</h3>
           <p className="text-sm text-on-primary-container/80">
             Get personalized itineraries and activity recommendations tailored to your interests
           </p>
         </div>
         <div className="p-6 rounded-2xl bg-secondary-container">
-          <div className="text-3xl mb-3">🗺️</div>
-          <h3 className="font-bold text-lg mb-2 text-on-secondary-container">Smart Discovery</h3>
+          <div className="mb-3">{React.createElement(featureIcons.explore.icon, { size: 28, className: 'text-on-secondary-container' })}</div>
+          <h3 className="font-bold text-lg mb-2 text-on-secondary-container">{featureIcons.explore.label}</h3>
           <p className="text-sm text-on-secondary-container/80">
             Discover hidden gems and local experiences in any destination worldwide
           </p>
         </div>
         <div className="p-6 rounded-2xl bg-surface-container-high">
-          <div className="text-3xl mb-3">🗣️</div>
+          <div className="mb-3">{React.createElement(featureIcons.language.icon, { size: 28 })}</div>
           <h3 className="font-bold text-lg mb-2">Language Support</h3>
           <p className="text-sm text-main-secondary">
             Essential phrases and real-time translation for seamless communication
           </p>
         </div>
         <div className="p-6 rounded-2xl bg-surface-container-high">
-          <div className="text-3xl mb-3">🛠️</div>
+          <div className="mb-3">{React.createElement(featureIcons.tools.icon, { size: 28 })}</div>
           <h3 className="font-bold text-lg mb-2">Travel Tools</h3>
           <p className="text-sm text-main-secondary">
             Weather updates, currency conversion, and emergency contacts all in one place
@@ -407,7 +395,7 @@ const OnboardingFlow: React.FC = () => {
           )}
         </div>
         <div className="p-4 bg-secondary-container rounded-xl">
-          <h4 className="font-semibold text-on-secondary-container mb-2">🎯 Perfect for Day Trips</h4>
+          <h4 className="font-semibold text-on-secondary-container mb-2 flex items-center gap-2"><Target size={16} /> Perfect for Day Trips</h4>
           <ul className="text-sm text-on-secondary-container/80 space-y-1">
             <li>• Discover local attractions and hidden gems</li>
             <li>• Get personalized activity recommendations</li>
@@ -480,7 +468,7 @@ const OnboardingFlow: React.FC = () => {
         </div>
         <div className="mt-6 p-4 bg-primary-container rounded-xl">
           <p className="text-sm text-on-primary-container text-center">
-            💡 <strong>Perfect for {formData.travelers} {formData.travelers === 1 ? 'traveler' : 'travelers'}!</strong> 
+            <Lightbulb size={14} className="inline" /> <strong>Perfect for {formData.travelers} {formData.travelers === 1 ? 'traveler' : 'travelers'}!</strong> 
             We'll suggest activities and accommodations that work great for your group size.
           </p>
         </div>
@@ -511,7 +499,7 @@ const OnboardingFlow: React.FC = () => {
         {citySegments.length === 0 ? (
           <div className="text-center py-8">
             <div className="p-6 bg-error/10 border border-error/20 rounded-xl">
-              <h3 className="font-semibold text-error mb-2">⚠️ No Cities Added</h3>
+              <h3 className="font-semibold text-error mb-2">No Cities Added</h3>
               <p className="text-error text-sm">
                 You need to add at least one city before setting up accommodations.
               </p>
@@ -591,7 +579,7 @@ const OnboardingFlow: React.FC = () => {
                 : 'bg-surface-container border-outline hover:border-primary hover:bg-primary/5'
             }`}
           >
-            <div className="text-2xl md:text-3xl mb-1 md:mb-2">{interest.icon}</div>
+            <div className="mb-1 md:mb-2"><interest.Icon size={28} /></div>
             <div className="text-xs md:text-sm font-medium">{interest.label}</div>
           </button>
         ))}
@@ -614,25 +602,21 @@ const OnboardingFlow: React.FC = () => {
         <p className="text-main-secondary text-base md:text-lg">This helps us suggest appropriate activities and dining</p>
       </div>
       <div className="space-y-3 md:space-y-4">
-        {[
-          { value: 'budget', label: 'Budget-Friendly', desc: 'Free activities, local eateries, public transport', icon: '💰' },
-          { value: 'mid-range', label: 'Mid-Range', desc: 'Mix of paid attractions, nice restaurants, some tours', icon: '💳' },
-          { value: 'luxury', label: 'Luxury', desc: 'Premium experiences, fine dining, private tours', icon: '💎' }
-        ].map((option) => (
+        {Object.entries(budgetIcons).map(([value, data]) => (
           <button
-            key={option.value}
-            onClick={() => setFormData({ ...formData, budget: option.value as any })}
+            key={value}
+            onClick={() => setFormData({ ...formData, budget: value as any })}
             className={`w-full p-4 md:p-6 rounded-2xl border-2 text-left transition-all hover:scale-[1.02] ${
-              formData.budget === option.value
+              formData.budget === value
                 ? 'bg-primary border-primary shadow-lg'
                 : 'bg-surface-container border-outline hover:border-primary hover:bg-primary/5'
             }`}
           >
             <div className="flex items-center gap-3 md:gap-4">
-              <div className="text-2xl md:text-3xl">{option.icon}</div>
+              <div>{React.createElement(data.icon, { size: 28 })}</div>
               <div>
-                <div className="font-bold text-base md:text-lg">{option.label}</div>
-                <div className="text-sm text-main-secondary">{option.desc}</div>
+                <div className="font-bold text-base md:text-lg">{data.label}</div>
+                <div className="text-sm text-main-secondary">{data.description}</div>
               </div>
             </div>
           </button>

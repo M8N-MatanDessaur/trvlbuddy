@@ -1,6 +1,7 @@
 import React from 'react';
 import { GeneratedActivity } from '../types/TravelData';
 import { Clock, MapPin } from 'lucide-react';
+import { getCategoryIcon, getCategoryColor } from '../utils/categoryIcons';
 
 interface DynamicActivityCardProps {
   activity: GeneratedActivity;
@@ -8,118 +9,92 @@ interface DynamicActivityCardProps {
 }
 
 const DynamicActivityCard: React.FC<DynamicActivityCardProps> = ({ activity, onClick }) => {
-  const getDifficultyColor = (difficulty?: string) => {
+  const getDifficultyStyle = (difficulty?: string) => {
     switch (difficulty) {
-      case 'easy': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'moderate': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      case 'challenging': return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200';
+      case 'easy': return { bg: 'var(--success-container)', color: 'var(--success)' };
+      case 'moderate': return { bg: 'var(--warning-container)', color: 'var(--warning)' };
+      case 'challenging': return { bg: 'var(--error-container)', color: 'var(--error)' };
+      default: return { bg: 'var(--surface-container-high)', color: 'var(--text-secondary)' };
     }
   };
 
-  // Convert price range to dollar signs
   const getPriceSymbols = (estimatedCost: string) => {
     const cost = estimatedCost.toLowerCase();
-    
-    if (cost.includes('free') || cost === '0' || cost.includes('€0') || cost.includes('$0')) {
-      return 'Free';
-    }
-    
-    // Extract numbers from the cost string
+    if (cost.includes('free') || cost === '0' || cost.includes('$0')) return 'Free';
     const numbers = estimatedCost.match(/\d+/g);
-    if (!numbers || numbers.length === 0) {
-      return '$';
-    }
-    
-    // Get the highest number in the range
+    if (!numbers || numbers.length === 0) return '$';
     const maxPrice = Math.max(...numbers.map(n => parseInt(n)));
-    
-    // Convert to dollar symbols based on price ranges
-    if (maxPrice <= 15) {
-      return '$';
-    } else if (maxPrice <= 35) {
-      return '$$';
-    } else if (maxPrice <= 60) {
-      return '$$$';
-    } else {
-      return '$$$$';
-    }
+    if (maxPrice <= 15) return '$';
+    if (maxPrice <= 35) return '$$';
+    if (maxPrice <= 60) return '$$$';
+    return '$$$$';
   };
 
-  const categoryIcons: { [key: string]: string } = {
-    'History': '🏛️',
-    'Nature': '🌿',
-    'Food': '🍽️',
-    'Museums': '🖼️',
-    'Beach': '🏖️',
-    'Shopping': '🛍️',
-    'Nightlife': '🌃',
-    'Culture': '🎭',
-    'Wellness': '♨️',
-    'City': '🏙️',
-    'Daytrips': '🚌'
-  };
-
-  // Special styling for day trips
+  const CategoryIcon = getCategoryIcon(activity.category);
+  const categoryColor = getCategoryColor(activity.category);
   const isDayTrip = activity.category === 'Daytrips';
+  const diffStyle = getDifficultyStyle(activity.difficulty);
 
   return (
     <div
-      className={`activity-card card rounded-3xl overflow-hidden cursor-pointer p-6 flex flex-col justify-between hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-primary/20 ${
-        isDayTrip ? 'bg-gradient-to-br from-secondary-container to-secondary-container/70' : ''
-      }`}
+      className="activity-card cursor-pointer flex flex-col overflow-hidden group"
       onClick={() => onClick(activity)}
     >
-      {/* Category badge at top left */}
-      <div className="mb-4">
-        <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold shadow-sm ${
-          isDayTrip 
-            ? 'bg-secondary text-on-secondary' 
-            : 'bg-primary text-on-primary'
-        }`}>
-          <span className="text-lg">{categoryIcons[activity.category] || '✨'}</span>
-          <span>{activity.category}</span>
-        </span>
-      </div>
+      {/* Category accent stripe */}
+      <div className="h-1 w-full" style={{ backgroundColor: categoryColor }} />
 
-      <div className="flex-1">
-        <div className="mb-3">
-          <h4 className="font-bold text-xl leading-tight">{activity.name}</h4>
+      <div className="p-5 flex flex-col flex-1">
+        {/* Top row: category chip + price */}
+        <div className="flex items-center justify-between mb-3">
+          <span
+            className="chip"
+            style={{ backgroundColor: categoryColor + '18', color: categoryColor }}
+          >
+            <CategoryIcon size={12} />
+            {activity.category}
+          </span>
+          <span className="text-sm font-semibold" style={{ color: categoryColor }}>
+            {getPriceSymbols(activity.estimatedCost)}
+          </span>
         </div>
-        
-        <p className="text-sm mb-6 text-main-secondary leading-relaxed">
-          {activity.description.substring(0, 120)}...
+
+        {/* Title */}
+        <h4 className="font-bold text-base leading-snug mb-2 group-hover:text-[var(--accent)] transition-colors">
+          {activity.name}
+        </h4>
+
+        {/* Description */}
+        <p className="text-xs text-text-secondary leading-relaxed mb-4 flex-1">
+          {activity.description.substring(0, 100)}...
         </p>
-        
-        <div className="space-y-3 mb-6">
-          <div className="flex items-center gap-3 text-sm text-main-secondary">
-            <Clock size={16} className={isDayTrip ? 'text-secondary' : 'text-primary'} />
-            <span>{activity.duration}</span>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-main-secondary">
-            <MapPin size={16} className={isDayTrip ? 'text-secondary' : 'text-primary'} />
-            <span>{activity.location}</span>
-          </div>
+
+        {/* Metadata row */}
+        <div className="flex items-center gap-4 text-xs text-text-tertiary mb-3">
+          <span className="flex items-center gap-1">
+            <Clock size={12} />
+            {activity.duration}
+          </span>
+          <span className="flex items-center gap-1 truncate">
+            <MapPin size={12} />
+            {activity.location}
+          </span>
         </div>
-      </div>
-      
-      {/* Bottom section with difficulty and price pills */}
-      <div className="flex justify-between items-center gap-3">
-        <div className="flex-shrink-0 min-w-0 flex-1">
+
+        {/* Bottom: difficulty badge */}
+        <div className="flex items-center gap-2">
           {activity.difficulty && (
-            <span className={`inline-block py-2 px-3 rounded-full text-xs font-medium whitespace-nowrap truncate max-w-full ${getDifficultyColor(activity.difficulty)}`}>
+            <span
+              className="chip text-[10px] font-semibold uppercase tracking-wider"
+              style={{ backgroundColor: diffStyle.bg, color: diffStyle.color }}
+            >
               {activity.difficulty}
             </span>
           )}
-        </div>
-        <div className={`px-4 py-2 rounded-full text-lg font-bold border whitespace-nowrap flex-shrink-0 min-w-0 ${
-          isDayTrip 
-            ? 'bg-secondary/10 text-secondary border-secondary/20' 
-            : 'bg-primary/10 text-primary border-primary/20'
-        }`}>
-          <span className="truncate block max-w-[120px]">
-            {getPriceSymbols(activity.estimatedCost)}
-          </span>
+          {isDayTrip && (
+            <span className="chip chip-accent text-[10px] font-semibold uppercase tracking-wider">
+              Day Trip
+            </span>
+          )}
         </div>
       </div>
     </div>
