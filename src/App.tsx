@@ -1,60 +1,28 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { Suspense, lazy } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { TravelProvider, useTravel } from './contexts/TravelContext';
+import { ToastProvider } from './contexts/ToastContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
-import Navigation, { PageType } from './components/Navigation';
-import DynamicDashboard from './components/DynamicDashboard';
-import DynamicActivitiesPage from './components/DynamicActivitiesPage';
-import PlannerPage from './components/DynamicPlannerPage';
-import TranslatorPage from './components/DynamicTranslatorPage';
-import UtilitiesPage from './components/DynamicUtilitiesPage';
+import Navigation from './components/Navigation';
 import OnboardingFlow from './components/OnboardingFlow';
 import LoadingScreen from './components/LoadingScreen';
 
+const DynamicDashboard = lazy(() => import('./components/DynamicDashboard'));
+const DynamicActivitiesPage = lazy(() => import('./components/DynamicActivitiesPage'));
+const PlannerPage = lazy(() => import('./components/DynamicPlannerPage'));
+const TranslatorPage = lazy(() => import('./components/DynamicTranslatorPage'));
+const UtilitiesPage = lazy(() => import('./components/DynamicUtilitiesPage'));
+
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-[50vh]">
+    <div className="loader" />
+  </div>
+);
+
 const AppContent: React.FC = () => {
   const { hasCompletedOnboarding, isLoading } = useTravel();
-  const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
-
-  // Handle URL parameters for deep linking
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const page = urlParams.get('page') as PageType;
-    if (page && ['dashboard', 'activities', 'planner', 'translator', 'utilities'].includes(page)) {
-      setCurrentPage(page);
-    }
-  }, []);
-
-  // Update URL when page changes
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    if (currentPage === 'dashboard') {
-      url.searchParams.delete('page');
-    } else {
-      url.searchParams.set('page', currentPage);
-    }
-    window.history.replaceState({}, '', url.toString());
-  }, [currentPage]);
-
-  // Scroll to top when page changes
-  useLayoutEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-  }, [currentPage]);
-
-  const renderCurrentPage = () => {
-    switch (currentPage) {
-      case 'activities':
-        return <DynamicActivitiesPage />;
-      case 'planner':
-        return <PlannerPage />;
-      case 'translator':
-        return <TranslatorPage />;
-      case 'utilities':
-        return <UtilitiesPage />;
-      case 'dashboard':
-      default:
-        return <DynamicDashboard onPlannerClick={() => setCurrentPage('planner')} />;
-    }
-  };
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -67,12 +35,23 @@ const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col" style={{ paddingTop: '5rem', paddingBottom: '7rem', paddingLeft: '1rem', paddingRight: '1rem' }}>
       <Header />
-      
-      <main className="max-w-7xl mx-auto flex-1">
-        {renderCurrentPage()}
+
+      <main className="max-w-7xl mx-auto flex-1 w-full">
+        <ErrorBoundary>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<DynamicDashboard />} />
+              <Route path="/activities" element={<DynamicActivitiesPage />} />
+              <Route path="/planner" element={<PlannerPage />} />
+              <Route path="/translator" element={<TranslatorPage />} />
+              <Route path="/utilities" element={<UtilitiesPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
-      <Navigation currentPage={currentPage} onPageChange={setCurrentPage} />
+      <Navigation />
     </div>
   );
 };
@@ -80,9 +59,11 @@ const AppContent: React.FC = () => {
 function App() {
   return (
     <ThemeProvider>
-      <TravelProvider>
-        <AppContent />
-      </TravelProvider>
+      <ToastProvider>
+        <TravelProvider>
+          <AppContent />
+        </TravelProvider>
+      </ToastProvider>
     </ThemeProvider>
   );
 }

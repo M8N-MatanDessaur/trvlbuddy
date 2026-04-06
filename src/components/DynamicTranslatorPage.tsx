@@ -80,8 +80,16 @@ const DynamicTranslatorPage: React.FC = () => {
       await navigator.clipboard.writeText(text);
       setCopiedText(text);
       setTimeout(() => setCopiedText(''), 2000);
-    } catch (err) {
-      console.error('Failed to copy text: ', err);
+    } catch {
+      // Fallback for older browsers
+      const el = document.createElement('textarea');
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+      setCopiedText(text);
+      setTimeout(() => setCopiedText(''), 2000);
     }
   };
 
@@ -115,7 +123,6 @@ const DynamicTranslatorPage: React.FC = () => {
       const translation = await translateCustomText(customText, currentLanguage);
       setTranslatedText(translation);
     } catch (error) {
-      console.error("Error translating text:", error);
       setTranslationError('Translation failed. Please check your connection and try again.');
     } finally {
       setIsTranslating(false);

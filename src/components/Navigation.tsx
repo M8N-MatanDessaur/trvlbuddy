@@ -1,84 +1,82 @@
 import React from 'react';
-
-export type PageType = 'dashboard' | 'activities' | 'planner' | 'translator' | 'utilities';
-
-interface NavigationProps {
-  currentPage: PageType;
-  onPageChange: (page: PageType) => void;
-}
+import { useLocation, useNavigate } from 'react-router-dom';
 
 // Custom Sparkle Icon Component
 const SparkleIcon: React.FC<{ size?: number; className?: string }> = ({ size = 20, className = "" }) => (
-  <svg 
-    xmlns="http://www.w3.org/2000/svg" 
-    width={size} 
-    height={size} 
-    viewBox="0 0 24 24" 
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
     fill="none"
     className={className}
   >
-    <path 
-      opacity="0.1" 
-      d="M21 12.1818L16.9354 13.6599C16.3462 13.8741 15.8916 14.3521 15.7073 14.9513L14.1538 20C14.1072 20.1515 13.8928 20.1515 13.8461 20L12.2927 14.9513C12.1083 14.3521 11.6537 13.8741 11.0646 13.6599L6.99999 12.1818C6.83019 12.1201 6.83019 11.8799 6.99999 11.8182L11.0646 10.3401C11.6537 10.1259 12.1083 9.64786 12.2927 9.04872L13.8461 4C13.8928 3.8485 14.1072 3.8485 14.1538 4L15.7073 9.04872C15.8916 9.64786 16.3462 10.1259 16.9354 10.3401L21 11.8182C21.1698 11.8799 21.1698 12.1201 21 12.1818Z" 
+    <path
+      opacity="0.1"
+      d="M21 12.1818L16.9354 13.6599C16.3462 13.8741 15.8916 14.3521 15.7073 14.9513L14.1538 20C14.1072 20.1515 13.8928 20.1515 13.8461 20L12.2927 14.9513C12.1083 14.3521 11.6537 13.8741 11.0646 13.6599L6.99999 12.1818C6.83019 12.1201 6.83019 11.8799 6.99999 11.8182L11.0646 10.3401C11.6537 10.1259 12.1083 9.64786 12.2927 9.04872L13.8461 4C13.8928 3.8485 14.1072 3.8485 14.1538 4L15.7073 9.04872C15.8916 9.64786 16.3462 10.1259 16.9354 10.3401L21 11.8182C21.1698 11.8799 21.1698 12.1201 21 12.1818Z"
       fill="currentColor"
     />
-    <path 
-      d="M21 12.1818L16.9354 13.6599C16.3462 13.8741 15.8916 14.3521 15.7073 14.9513L14.1538 20C14.1072 20.1515 13.8928 20.1515 13.8461 20L12.2927 14.9513C12.1083 14.3521 11.6537 13.8741 11.0646 13.6599L6.99999 12.1818C6.83019 12.1201 6.83019 11.8799 6.99999 11.8182L11.0646 10.3401C11.6537 10.1259 12.1083 9.64786 12.2927 9.04872L13.8461 4C13.8928 3.8485 14.1072 3.8485 14.1538 4L15.7073 9.04872C15.8916 9.64786 16.3462 10.1259 16.9354 10.3401L21 11.8182C21.1698 11.8799 21.1698 12.1201 21 12.1818Z" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
+    <path
+      d="M21 12.1818L16.9354 13.6599C16.3462 13.8741 15.8916 14.3521 15.7073 14.9513L14.1538 20C14.1072 20.1515 13.8928 20.1515 13.8461 20L12.2927 14.9513C12.1083 14.3521 11.6537 13.8741 11.0646 13.6599L6.99999 12.1818C6.83019 12.1201 6.83019 11.8799 6.99999 11.8182L11.0646 10.3401C11.6537 10.1259 12.1083 9.64786 12.2927 9.04872L13.8461 4C13.8928 3.8485 14.1072 3.8485 14.1538 4L15.7073 9.04872C15.8916 9.64786 16.3462 10.1259 16.9354 10.3401L21 11.8182C21.1698 11.8799 21.1698 12.1201 21 12.1818Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
       strokeLinejoin="round"
     />
-    <path 
-      d="M3.75 5.25C4.22214 5.40738 4.59262 5.77786 4.75 6.25C4.83008 6.49025 5.16992 6.49025 5.25 6.25C5.40738 5.77786 5.77786 5.40738 6.25 5.25C6.49025 5.16992 6.49025 4.83008 6.25 4.75C5.77786 4.59262 5.40738 4.22214 5.25 3.75C5.16992 3.50975 4.83008 3.50975 4.75 3.75C4.59262 4.22214 4.22214 4.59262 3.75 4.75C3.50975 4.83008 3.50975 5.16992 3.75 5.25Z" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
+    <path
+      d="M3.75 5.25C4.22214 5.40738 4.59262 5.77786 4.75 6.25C4.83008 6.49025 5.16992 6.49025 5.25 6.25C5.40738 5.77786 5.77786 5.40738 6.25 5.25C6.49025 5.16992 6.49025 4.83008 6.25 4.75C5.77786 4.59262 5.40738 4.22214 5.25 3.75C5.16992 3.50975 4.83008 3.50975 4.75 3.75C4.59262 4.22214 4.22214 4.59262 3.75 4.75C3.50975 4.83008 3.50975 5.16992 3.75 5.25Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
       strokeLinejoin="round"
     />
-    <path 
-      d="M7.25 19.25C6.77786 19.4074 6.40738 19.7779 6.25 20.25C6.16992 20.4903 5.83008 20.4903 5.75 20.25C5.59262 19.7779 5.22214 19.4074 4.75 19.25C4.50975 19.1699 4.50975 18.8301 4.75 18.75C5.22214 18.5926 5.59262 18.2221 5.75 17.75C5.83008 17.5097 6.16992 17.5097 6.25 17.75C6.40738 18.2221 6.77786 18.5926 7.25 18.75C7.49025 18.8301 7.49025 19.1699 7.25 19.25Z" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
+    <path
+      d="M7.25 19.25C6.77786 19.4074 6.40738 19.7779 6.25 20.25C6.16992 20.4903 5.83008 20.4903 5.75 20.25C5.59262 19.7779 5.22214 19.4074 4.75 19.25C4.50975 19.1699 4.50975 18.8301 4.75 18.75C5.22214 18.5926 5.59262 18.2221 5.75 17.75C5.83008 17.5097 6.16992 17.5097 6.25 17.75C6.40738 18.2221 6.77786 18.5926 7.25 18.75C7.49025 18.8301 7.49025 19.1699 7.25 19.25Z"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
       strokeLinejoin="round"
     />
   </svg>
 );
 
-const Navigation: React.FC<NavigationProps> = ({ currentPage, onPageChange }) => {
+const Navigation: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const navItems = [
-    { id: 'dashboard' as PageType, label: '🏠', title: 'Home' },
-    { id: 'activities' as PageType, label: '🗺️', title: 'Activities' },
-    { 
-      id: 'planner' as PageType, 
-      label: <SparkleIcon size={32} />, 
-   
-      isIcon: true 
-    },
-    { id: 'translator' as PageType, label: '🗣️', title: 'Translator' },
-    { id: 'utilities' as PageType, label: '🛠️', title: 'Utilities' },
+    { path: '/', label: '\u{1F3E0}', title: 'Home' },
+    { path: '/activities', label: '\u{1F5FA}\uFE0F', title: 'Activities' },
+    { path: '/planner', label: <SparkleIcon size={32} />, title: undefined, isIcon: true },
+    { path: '/translator', label: '\u{1F5E3}\uFE0F', title: 'Translator' },
+    { path: '/utilities', label: '\u{1F6E0}\uFE0F', title: 'Utilities' },
   ];
 
   return (
     <nav className="nav-container fixed bottom-0 left-0 right-0 w-full z-50 p-3 rounded-t-3xl shadow-2xl bg-opacity-95 backdrop-blur-md">
       <ul className="flex items-center justify-center gap-1 max-w-md mx-auto">
-        {navItems.map(item => (
-          <li key={item.id} className="flex-1">
-            <button
-              onClick={() => onPageChange(item.id)}
-              className={`nav-link text-xs w-full py-3 px-2 ${currentPage === item.id ? 'active' : ''}`}
-              title={item.title}
-            >
-              <div className="flex flex-col items-center gap-1">
-                <span className={`${item.isIcon ? 'flex items-center justify-center' : 'text-lg'}`}>
-                  {item.label}
-                </span>
-                <span className="text-[10px] leading-none">{item.title}</span>
-              </div>
-            </button>
-          </li>
-        ))}
+        {navItems.map(item => {
+          const isActive = location.pathname === item.path;
+          return (
+            <li key={item.path} className="flex-1">
+              <button
+                onClick={() => {
+                  navigate(item.path);
+                  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+                }}
+                className={`nav-link text-xs w-full py-3 px-2 ${isActive ? 'active' : ''}`}
+                title={item.title}
+              >
+                <div className="flex flex-col items-center gap-1">
+                  <span className={`${item.isIcon ? 'flex items-center justify-center' : 'text-lg'}`}>
+                    {item.label}
+                  </span>
+                  <span className="text-[10px] leading-none">{item.title}</span>
+                </div>
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );

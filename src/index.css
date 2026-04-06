@@ -188,8 +188,13 @@ h4 {
   animation: l24 1s infinite linear;
 }
 
-@keyframes l24 { 
-  100% {transform: rotate(1turn)} 
+@keyframes l24 {
+  100% {transform: rotate(1turn)}
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(100%); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .prose h3 { 

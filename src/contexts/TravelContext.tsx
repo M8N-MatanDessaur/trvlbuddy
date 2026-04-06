@@ -48,7 +48,6 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Filter out any invalid activities
         return Array.isArray(parsedActivities) ? parsedActivities.filter(isValidActivity) : [];
       } catch (error) {
-        console.error('Error parsing saved activities:', error);
         return [];
       }
     }

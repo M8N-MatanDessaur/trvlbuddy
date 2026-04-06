@@ -29,7 +29,7 @@ const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
   value = "",
   className = "",
   types = ['(cities)'],
-  apiKey = "REDACTED_GOOGLE_KEY"
+  apiKey = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || ''
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
@@ -175,7 +175,6 @@ const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
           setIsGoogleApiActive(true);
         }
       } catch (error) {
-        console.warn('Google Places API not available, using fallback suggestions:', error);
         setApiError(true);
         setIsGoogleApiActive(false);
       }

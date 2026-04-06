@@ -94,7 +94,6 @@ const DynamicPlannerPage: React.FC = () => {
         const result = await generateCustomItinerary(selectedActivities, locationName);
         setItineraryResult(result);
       } catch (error) {
-        console.error("Error generating itinerary:", error);
         setItineraryResult(`<p class="text-error">Sorry, there was an error generating your itinerary. Please check your connection and try again.</p>`);
       } finally {
         setIsLoading(false);
@@ -442,7 +441,6 @@ const DynamicPlannerPage: React.FC = () => {
       const result = await generateCustomItinerary(selectedActivities, locationName);
       setItineraryResult(result);
     } catch (error) {
-      console.error("Error generating itinerary:", error);
       setItineraryResult(`<p class="text-error">Sorry, there was an error generating your itinerary. Please check your connection and try again.</p>`);
     } finally {
       setIsLoading(false);
