@@ -1,5 +1,5 @@
 import React from 'react';
-import { Map, Calendar } from 'lucide-react';
+import { Map, Calendar, Sparkles, Target } from 'lucide-react';
 
 interface TripTypeSelectorProps {
   tripType: 'full-trip' | 'day-trip';
@@ -16,14 +16,12 @@ const TripTypeSelector: React.FC<TripTypeSelectorProps> = ({
       label: 'Plan a Trip',
       description: 'Full trip planning with multiple countries/cities',
       icon: Map,
-      emoji: '🗺️'
     },
     {
       value: 'day-trip',
       label: 'Day Trip',
       description: 'Quick exploration of things to do in a specific location',
       icon: Calendar,
-      emoji: '📅'
     }
   ];
 
@@ -47,7 +45,7 @@ const TripTypeSelector: React.FC<TripTypeSelectorProps> = ({
                   : 'bg-surface-container border-outline text-text-primary hover:border-primary hover:bg-primary/5'
               }`}
             >
-              <div className="text-5xl mb-4">{type.emoji}</div>
+              <div className="mb-4"><IconComponent size={48} /></div>
               <div className="font-bold text-xl mb-3">{type.label}</div>
               <div className={`text-sm leading-relaxed ${
                 tripType === type.value ? 'text-on-primary/80' : 'text-main-secondary'
@@ -62,7 +60,7 @@ const TripTypeSelector: React.FC<TripTypeSelectorProps> = ({
       {tripType === 'full-trip' && (
         <div className="mt-6 p-6 bg-primary-container rounded-xl">
           <div className="flex items-start gap-3">
-            <div className="text-2xl">✨</div>
+            <Sparkles size={24} className="text-on-primary-container flex-shrink-0" />
             <div>
               <h4 className="font-semibold text-on-primary-container mb-2">
                 Full Trip Planning Features
@@ -83,7 +81,7 @@ const TripTypeSelector: React.FC<TripTypeSelectorProps> = ({
       {tripType === 'day-trip' && (
         <div className="mt-6 p-6 bg-secondary-container rounded-xl">
           <div className="flex items-start gap-3">
-            <div className="text-2xl">🎯</div>
+            <Target size={24} className="text-on-secondary-container flex-shrink-0" />
             <div>
               <h4 className="font-semibold text-on-secondary-container mb-2">
                 Day Trip Features

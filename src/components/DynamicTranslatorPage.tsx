@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Volume2, Copy, Check, ArrowRightLeft, Loader2, Globe } from 'lucide-react';
+import { Volume2, Copy, Check, ArrowRightLeft, Loader2, Globe, Languages } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { translateCustomText } from '../services/aiService';
 
@@ -138,7 +138,7 @@ const DynamicTranslatorPage: React.FC = () => {
   return (
     <section className="page">
       <div className="text-center max-w-3xl mx-auto mb-8">
-        <h2 className="mb-4">🗣️ Multi-Language Translator</h2>
+        <h2 className="mb-4 flex items-center justify-center gap-2"><Languages size={24} /> Multi-Language Translator</h2>
         <p className="leading-relaxed text-main-secondary text-lg">
           Essential phrases for your adventure, plus AI-powered translation for custom text!
         </p>
@@ -146,7 +146,7 @@ const DynamicTranslatorPage: React.FC = () => {
 
       {/* Language Selector for Multi-Destination Trips */}
       {allLanguages.length > 1 && (
-        <div className="card rounded-3xl p-6 mb-8">
+        <div className="card rounded-2xl p-6 mb-8">
           <h3 className="text-center mb-4 flex items-center justify-center gap-2">
             <Globe className="text-primary" size={24} />
             Select Language
@@ -171,7 +171,7 @@ const DynamicTranslatorPage: React.FC = () => {
       )}
 
       {/* AI Translator Section */}
-      <div className="card rounded-3xl p-6 mb-8">
+      <div className="card rounded-2xl p-6 mb-8">
         <h3 className="text-center mb-4 flex items-center justify-center gap-2">
           <ArrowRightLeft className="text-primary" size={24} />
           AI Translator

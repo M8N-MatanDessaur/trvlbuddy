@@ -5,7 +5,7 @@ interface FilterDropdownProps {
   categories: string[];
   activeCategory: string;
   onCategoryChange: (category: string) => void;
-  categoryIcons?: { [key: string]: string };
+  categoryIcons?: { [key: string]: React.ReactNode };
   label?: string;
   placeholder?: string;
 }
@@ -37,10 +37,16 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({
     setIsOpen(false);
   };
 
-  const getDisplayText = () => {
+  const getDisplayContent = () => {
     if (activeCategory === 'All') return 'All Categories';
     const icon = categoryIcons[activeCategory];
-    return icon ? `${icon} ${activeCategory}` : activeCategory;
+    if (!icon) return activeCategory;
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="flex-shrink-0">{icon}</span>
+        <span>{activeCategory}</span>
+      </span>
+    );
   };
 
   return (
@@ -55,7 +61,7 @@ const FilterDropdown: React.FC<FilterDropdownProps> = ({
       >
         <span className="flex items-center gap-2 flex-1 min-w-0">
           <span className="truncate font-medium">
-            {getDisplayText()}
+            {getDisplayContent()}
           </span>
         </span>
         <ChevronDown 

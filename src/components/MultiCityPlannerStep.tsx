@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, MapPin, ArrowRight, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, MapPin, ArrowRight, ChevronRight, Map, Building2 } from 'lucide-react';
 import { TripSegment, Destination, City } from '../types/TravelData';
 import PlacesAutocomplete from './PlacesAutocomplete';
 import MUIDateRangePicker from './MUIDateRangePicker';
@@ -165,7 +165,7 @@ const MultiCityPlannerStep: React.FC<MultiCityPlannerStepProps> = ({
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h3 className="text-xl font-bold">🗺️ Plan Your Trip</h3>
+        <h3 className="text-xl font-bold flex items-center justify-center gap-2"><Map size={22} /> Plan Your Trip</h3>
         <p className="text-main-secondary">Add countries and cities to build your itinerary.</p>
       </div>
 
@@ -199,7 +199,7 @@ const MultiCityPlannerStep: React.FC<MultiCityPlannerStepProps> = ({
                   <div key={citySegment.id} className="bg-surface-container-high rounded-xl border border-outline-variant">
                     <div className="p-3 flex items-center justify-between cursor-pointer" onClick={() => setExpandedSegment(isExpanded ? null : citySegment.id)}>
                       <div className="flex items-center gap-3">
-                        <span className="text-lg">🏙️</span>
+                        <Building2 size={18} />
                         <div>
                           <p className="font-medium">{citySegment.city?.name || 'New City'}</p>
                           <p className="text-xs text-main-secondary">
