@@ -28,12 +28,6 @@ const Header: React.FC = () => {
     window.location.reload();
   };
 
-  // Choose the correct Bolt badge image based on theme
-  const getBoltBadgeImage = () => {
-    return theme === 'light' 
-      ? 'https://cdn.sanity.io/images/e4zkjk7p/production/95682d92f81e981e0e9a03c6da4b0f0888e38af1-360x360.png'
-      : 'https://cdn.sanity.io/images/e4zkjk7p/production/fbd4b7ef8cbb981ddce873727615dc5bb7cc2b12-360x360.png';
-  };
 
   // Coffee SVG component
   const CoffeeIcon = () => (
@@ -76,31 +70,6 @@ const Header: React.FC = () => {
           aria-label="Buy me a coffee"
         >
           <CoffeeIcon />
-        </a>
-
-        {/* Built with Bolt badge: fixed top right, just before reset button */}
-        <a
-          href="https://bolt.new"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="fixed top-4 right-20 md:right-20 lg:right-24 z-50 hover:scale-110 transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-          title="Built with Bolt"
-          aria-label="Built with Bolt"
-        >
-          <img
-            src={getBoltBadgeImage()}
-            alt="Built with Bolt"
-            className="w-12 h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 object-contain hover:scale-110 transition-transform rounded-full"
-            onError={(e) => {
-              console.error('Failed to load badge image:', getBoltBadgeImage());
-              // Fallback to a simple text badge if image fails
-              e.currentTarget.style.display = 'none';
-              const fallback = document.createElement('div');
-              fallback.className = 'w-12 h-12 md:w-14 md:h-14 lg:w-16 lg:h-16 bg-primary text-on-primary rounded-full flex items-center justify-center text-xs md:text-sm lg:text-base font-bold';
-              fallback.textContent = 'B';
-              e.currentTarget.parentNode?.appendChild(fallback);
-            }}
-          />
         </a>
 
         {/* Reset button: fixed top right - SAME STYLE AS THEME TOGGLE */}
