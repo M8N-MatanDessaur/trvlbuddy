@@ -3,11 +3,12 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { TravelProvider, useTravel } from './contexts/TravelContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { ChatProvider } from './contexts/ChatContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
 import SwipeNavigator from './components/SwipeNavigator';
 import type { PageDef } from './components/SwipeNavigator';
-import OnboardingFlow from './components/OnboardingFlow';
+import ConversationalOnboarding from './components/ConversationalOnboarding';
 import LoadingScreen from './components/LoadingScreen';
 import { MessageCircle, Home, Compass, Languages, Wrench } from 'lucide-react';
 
@@ -29,7 +30,7 @@ const AppContent: React.FC = () => {
   const { hasCompletedOnboarding, isLoading } = useTravel();
 
   if (isLoading) return <LoadingScreen />;
-  if (!hasCompletedOnboarding) return <OnboardingFlow />;
+  if (!hasCompletedOnboarding) return <ConversationalOnboarding />;
 
   return (
     <div className="min-h-screen flex flex-col" style={{ paddingTop: '3.75rem' }}>
@@ -55,7 +56,9 @@ function App() {
     <ThemeProvider>
       <ToastProvider>
         <TravelProvider>
-          <AppContent />
+          <ChatProvider>
+            <AppContent />
+          </ChatProvider>
         </TravelProvider>
       </ToastProvider>
     </ThemeProvider>
