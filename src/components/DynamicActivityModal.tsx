@@ -38,12 +38,12 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
             onClick={e => e.stopPropagation()}
           >
             {/* Handle */}
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full" style={{ background: 'var(--outline)' }} />
+            <div className="flex justify-center pt-2.5 pb-2">
+              <div className="w-8 h-1 rounded-full" style={{ background: 'var(--outline)' }} />
             </div>
 
             {/* Header */}
-            <div className="flex items-start gap-3 px-5 pb-4">
+            <div className="flex items-start gap-3 px-5 pb-3">
               <div className="flex-1 min-w-0">
                 <h2 className="text-[20px] font-extrabold leading-tight tracking-tight mb-2">{activity.name}</h2>
                 <div className="flex items-center gap-3 flex-wrap">
@@ -57,8 +57,8 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
               </div>
               <button
                 onClick={onClose}
-                className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-                style={{ background: 'var(--surface-container-high)', color: 'var(--text-secondary)', aspectRatio: '1' }}
+                className="flex items-center justify-center flex-shrink-0"
+                style={{ background: 'var(--surface-container-high)', color: 'var(--text-secondary)', width: '36px', height: '36px', minWidth: '36px', borderRadius: '50%' }}
               >
                 <X size={18} />
               </button>
