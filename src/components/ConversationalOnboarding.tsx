@@ -1,5 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, Plane, Check, Sparkles, Globe, Languages, Wrench, ArrowRight } from 'lucide-react';
+
+function useViewportHeight() {
+  const [height, setHeight] = useState(window.visualViewport?.height || window.innerHeight);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setHeight(vv.height);
+    vv.addEventListener('resize', update);
+    return () => vv.removeEventListener('resize', update);
+  }, []);
+  return height;
+}
 import { useTravel } from '../contexts/TravelContext';
 import { useToast } from '../contexts/ToastContext';
 import { TravelPlan, Destination } from '../types/TravelData';
@@ -14,6 +26,7 @@ interface Message {
 const ConversationalOnboarding: React.FC = () => {
   const { setCurrentPlan, setHasCompletedOnboarding, setIsLoading, setActivities, setTranslations, setEmergencyContacts } = useTravel();
   const [showLanding, setShowLanding] = useState(true);
+  const viewportHeight = useViewportHeight();
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -28,6 +41,10 @@ const ConversationalOnboarding: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, viewportHeight]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -180,7 +197,7 @@ const ConversationalOnboarding: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col" style={{ background: 'var(--bg-primary)', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden' }}>
+    <div className="flex flex-col" style={{ background: 'var(--bg-primary)', height: `${viewportHeight}px`, maxHeight: `${viewportHeight}px`, overflow: 'hidden', transition: 'height 0.1s ease' }}>
       {/* Header */}
       <div className="px-5 pt-12 pb-3 flex-shrink-0">
         <div className="flex items-center gap-2.5 mb-1">
