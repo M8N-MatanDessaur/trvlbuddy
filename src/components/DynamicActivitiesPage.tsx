@@ -1,20 +1,23 @@
 import React, { useState, useMemo } from 'react';
 import { useTravel } from '../contexts/TravelContext';
 import { GeneratedActivity } from '../types/TravelData';
-import DynamicActivityCard from './DynamicActivityCard';
 import DynamicActivityModal from './DynamicActivityModal';
 import PlannerModal from './PlannerModal';
+import RightNowHero from './explore/RightNowHero';
+import HorizontalActivityScroll from './explore/HorizontalActivityScroll';
+import LiveEventsSection from './explore/LiveEventsSection';
 import { getCategoryIcon } from '../utils/categoryIcons';
-import { groupActivities } from '../utils/groupActivities';
+import { groupActivities, groupActivitiesByContext } from '../utils/groupActivities';
+import { useContextualContent } from '../hooks/useContextualContent';
 import { generateCustomItinerary, discoverMoreActivities } from '../services/aiService';
 import { Globe, Sparkles, Search, Loader2, Plus, Wand2, MapPin } from 'lucide-react';
 
 const DynamicActivitiesPage: React.FC = () => {
   const { currentPlan, activities, setActivities } = useTravel();
+  const { moment } = useContextualContent();
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedActivity, setSelectedActivity] = useState<GeneratedActivity | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [loadingSection, setLoadingSection] = useState<string | null>(null);
 
   // AI Day Planner
@@ -23,6 +26,11 @@ const DynamicActivitiesPage: React.FC = () => {
   const [isPlannerModalOpen, setIsPlannerModalOpen] = useState(false);
   const [plannerLoading, setPlannerLoading] = useState(false);
   const [itineraryResult, setItineraryResult] = useState('');
+
+  const openActivityModal = (activity: GeneratedActivity) => {
+    setSelectedActivity(activity);
+    setIsModalOpen(true);
+  };
 
   if (!currentPlan) {
     return (
@@ -35,7 +43,14 @@ const DynamicActivitiesPage: React.FC = () => {
     );
   }
 
-  const sections = useMemo(() => groupActivities(activities), [activities]);
+  // Context-aware section ordering when trip is active
+  const sections = useMemo(() => {
+    if (moment.tripPhase === 'active') {
+      return groupActivitiesByContext(activities, moment.timeOfDay);
+    }
+    return groupActivities(activities);
+  }, [activities, moment.tripPhase, moment.timeOfDay]);
+
   const categories = useMemo(() => ['all', ...new Set(activities.map(a => a.category))], [activities]);
 
   const filteredSections = useMemo(() => {
@@ -59,7 +74,6 @@ const DynamicActivitiesPage: React.FC = () => {
 
       if (newActivities.length > 0) {
         setActivities([...activities, ...newActivities]);
-        setExpandedSection(sectionId);
       }
     } catch {
       // silently fail
@@ -79,7 +93,6 @@ const DynamicActivitiesPage: React.FC = () => {
     setShowPlanInput(false);
 
     try {
-      // Pick a diverse set of activities for the AI to work with
       const activityNames = activities.slice(0, 15).map(a => a.name);
       const result = await generateCustomItinerary(activityNames, locationName);
       setItineraryResult(result);
@@ -121,6 +134,14 @@ const DynamicActivitiesPage: React.FC = () => {
         })}
       </div>
 
+      {/* Right Now hero (only during active trip, no filter) */}
+      {activeFilter === 'all' && (
+        <RightNowHero onActivityClick={openActivityModal} />
+      )}
+
+      {/* Live Events (only during active trip, no filter) */}
+      {activeFilter === 'all' && <LiveEventsSection />}
+
       {/* AI Plan My Day */}
       {!showPlanInput ? (
         <button
@@ -133,7 +154,7 @@ const DynamicActivitiesPage: React.FC = () => {
           </div>
           <div className="flex-1 text-left">
             <div className="text-[14px] font-bold" style={{ color: 'var(--accent)' }}>AI Plan My Day</div>
-            <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>Tell me where you'll be and I'll plan your day</div>
+            <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>Tell me where you will be and I will plan your day</div>
           </div>
         </button>
       ) : (
@@ -170,7 +191,7 @@ const DynamicActivitiesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Activity sections */}
+      {/* Activity sections with horizontal scroll */}
       {filteredSections.length === 0 ? (
         <div className="text-center py-12">
           <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--surface-container-high)' }}>
@@ -182,60 +203,38 @@ const DynamicActivitiesPage: React.FC = () => {
         </div>
       ) : (
         filteredSections.map(section => {
-          const isExpanded = expandedSection === section.id;
-          const displayActivities = isExpanded ? section.activities : section.activities.slice(0, 4);
           const isLoadingThis = loadingSection === section.id;
 
           return (
             <div key={section.id} className="space-y-3">
+              {/* Section header */}
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-[15px] font-bold">{section.title}</h2>
                   <p className="text-[11px] text-[var(--text-tertiary)]">{section.subtitle}</p>
                 </div>
-                {section.activities.length > 4 && (
-                  <button
-                    onClick={() => setExpandedSection(isExpanded ? null : section.id)}
-                    className="text-[12px] font-semibold"
-                    style={{ color: 'var(--accent)' }}
-                  >
-                    {isExpanded ? 'Less' : `All ${section.activities.length}`}
-                  </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                {displayActivities.map((activity, i) => (
-                  <DynamicActivityCard key={`${activity.name}-${i}`} activity={activity} onClick={a => { setSelectedActivity(a); setIsModalOpen(true); }} />
-                ))}
-
-                {/* Find More card - sits in the grid like an activity card */}
                 {section.dataCategory && (
                   <button
                     onClick={() => handleDiscoverMore(section.dataCategory, section.id)}
                     disabled={isLoadingThis}
-                    className="activity-card flex flex-col items-center justify-center gap-3 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
-                    style={{ border: '2px dashed var(--outline)' }}
+                    className="flex items-center gap-1 text-[12px] font-semibold disabled:opacity-50"
+                    style={{ color: 'var(--accent)' }}
                   >
                     {isLoadingThis ? (
-                      <>
-                        <Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent)' }} />
-                        <span className="text-[12px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Finding more...</span>
-                      </>
+                      <Loader2 size={12} className="animate-spin" />
                     ) : (
-                      <>
-                        <div className="flex items-center justify-center" style={{ height: '48px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent-container)', color: 'var(--accent)' }}>
-                          <Plus size={24} />
-                        </div>
-                        <div className="text-center">
-                          <div className="text-[13px] font-bold" style={{ color: 'var(--accent)' }}>Find More</div>
-                          <div className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{section.title}</div>
-                        </div>
-                      </>
+                      <Plus size={12} />
                     )}
+                    {isLoadingThis ? 'Finding...' : 'More'}
                   </button>
                 )}
               </div>
+
+              {/* Horizontal scroll cards */}
+              <HorizontalActivityScroll
+                activities={section.activities}
+                onActivityClick={openActivityModal}
+              />
             </div>
           );
         })

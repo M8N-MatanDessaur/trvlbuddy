@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { TravelPlan, GeneratedActivity, Translation, EmergencyContact } from '../types/TravelData';
+import { TravelPlan, GeneratedActivity, Translation, EmergencyContact, JournalEntry } from '../types/TravelData';
 
 interface TravelContextType {
   currentPlan: TravelPlan | null;
@@ -12,6 +12,8 @@ interface TravelContextType {
   setEmergencyContacts: (contacts: EmergencyContact[]) => void;
   savedActivities: string[];
   toggleSavedActivity: (name: string) => void;
+  journalEntries: JournalEntry[];
+  addJournalEntry: (entry: JournalEntry) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   hasCompletedOnboarding: boolean;
@@ -75,6 +77,19 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setSavedActivities(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
   };
 
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => {
+    const saved = localStorage.getItem('journalEntries');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const addJournalEntry = (entry: JournalEntry) => {
+    setJournalEntries(prev => {
+      // Replace if entry for same date already exists
+      const filtered = prev.filter(e => e.date !== entry.date);
+      return [...filtered, entry];
+    });
+  };
+
   const [isLoading, setIsLoading] = useState(false);
   
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(() => {
@@ -116,6 +131,10 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     localStorage.setItem('savedActivities', JSON.stringify(savedActivities));
   }, [savedActivities]);
 
+  useEffect(() => {
+    localStorage.setItem('journalEntries', JSON.stringify(journalEntries));
+  }, [journalEntries]);
+
   return (
     <TravelContext.Provider value={{
       currentPlan,
@@ -124,6 +143,8 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setActivities: setValidatedActivities,
       savedActivities,
       toggleSavedActivity,
+      journalEntries,
+      addJournalEntry,
       translations,
       setTranslations,
       emergencyContacts,

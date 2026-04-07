@@ -1,4 +1,5 @@
 import { GeneratedActivity } from '../types/TravelData';
+import type { TimeOfDay } from './timezoneHelpers';
 
 export interface ActivitySection {
   id: string;
@@ -78,4 +79,45 @@ function pickRecommended(activities: GeneratedActivity[], count: number): Genera
   }
 
   return picked;
+}
+
+// Priority order for each time of day: categories listed first get promoted
+const timeCategoryPriority: Record<TimeOfDay, string[]> = {
+  'early-morning': ['Nature', 'Food'],
+  morning: ['Museums', 'History', 'Nature', 'Culture'],
+  lunch: ['Food'],
+  afternoon: ['Shopping', 'Culture', 'Photography'],
+  evening: ['Food', 'Nightlife', 'Entertainment'],
+  'late-night': ['Nightlife', 'Food'],
+};
+
+/**
+ * Same smart grouping as `groupActivities`, but reorders sections so
+ * categories relevant to the current time of day appear first.
+ */
+export function groupActivitiesByContext(
+  activities: GeneratedActivity[],
+  timeOfDay: TimeOfDay,
+): ActivitySection[] {
+  const base = groupActivities(activities);
+  const priority = timeCategoryPriority[timeOfDay] ?? [];
+
+  // Partition sections into priority-matching and the rest
+  const prioritized: ActivitySection[] = [];
+  const rest: ActivitySection[] = [];
+
+  for (const section of base) {
+    // "Recommended" always stays on top
+    if (section.id === 'recommended') {
+      prioritized.unshift(section);
+      continue;
+    }
+    if (priority.includes(section.dataCategory)) {
+      prioritized.push(section);
+    } else {
+      rest.push(section);
+    }
+  }
+
+  return [...prioritized, ...rest];
 }
