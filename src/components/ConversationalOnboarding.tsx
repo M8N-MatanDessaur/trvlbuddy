@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Plane, Check, Sparkles } from 'lucide-react';
+import { Send, Loader2, Plane, Check, Sparkles, Globe, Languages, Wrench, ArrowRight } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { useToast } from '../contexts/ToastContext';
 import { TravelPlan, Destination } from '../types/TravelData';
@@ -13,6 +13,7 @@ interface Message {
 
 const ConversationalOnboarding: React.FC = () => {
   const { setCurrentPlan, setHasCompletedOnboarding, setIsLoading, setActivities, setTranslations, setEmergencyContacts } = useTravel();
+  const [showLanding, setShowLanding] = useState(true);
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -138,6 +139,44 @@ const ConversationalOnboarding: React.FC = () => {
     extraction.interests.length > 0 && extraction.interests.slice(0, 3).join(', '),
     extraction.budget && extraction.budget,
   ].filter(Boolean) : [];
+
+  if (showLanding) {
+    return (
+      <div className="flex flex-col items-center justify-center px-8 text-center" style={{ background: 'var(--bg-primary)', height: '100dvh' }}>
+        <div className="flex items-center justify-center mb-6" style={{ height: '72px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent)', color: 'white' }}>
+          <Plane size={32} />
+        </div>
+        <h1 className="text-3xl font-extrabold tracking-tight mb-3">TrvlBuddy</h1>
+        <p className="text-[15px] leading-relaxed mb-8 max-w-xs" style={{ color: 'var(--text-secondary)' }}>
+          Your AI travel companion. Activities, phrases, tools, all personalized for your trip.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 w-full max-w-xs mb-10">
+          {[
+            { icon: Sparkles, label: 'AI Planning', desc: 'Smart itineraries' },
+            { icon: Globe, label: 'Activities', desc: 'Local discoveries' },
+            { icon: Languages, label: 'Translator', desc: 'Key phrases' },
+            { icon: Wrench, label: 'Tools', desc: 'Currency & more' },
+          ].map((f, i) => (
+            <div key={i} className="p-3.5 rounded-2xl text-left" style={{ background: 'var(--surface-container)' }}>
+              <f.icon size={18} style={{ color: 'var(--accent)' }} className="mb-2" />
+              <div className="text-[12px] font-bold">{f.label}</div>
+              <div className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{f.desc}</div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          onClick={() => setShowLanding(false)}
+          className="w-full max-w-xs flex items-center justify-center gap-2 py-4 rounded-2xl text-[15px] font-bold transition-all active:scale-[0.98]"
+          style={{ background: 'var(--accent)', color: 'white' }}
+        >
+          Plan My Trip
+          <ArrowRight size={18} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col" style={{ background: 'var(--bg-primary)', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden' }}>
