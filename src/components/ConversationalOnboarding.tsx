@@ -140,9 +140,9 @@ const ConversationalOnboarding: React.FC = () => {
   ].filter(Boolean) : [];
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
+    <div className="flex flex-col" style={{ background: 'var(--bg-primary)', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden' }}>
       {/* Header */}
-      <div className="px-5 pt-12 pb-4">
+      <div className="px-5 pt-12 pb-3 flex-shrink-0">
         <div className="flex items-center gap-2.5 mb-1">
           <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)', color: 'white' }}>
             <Plane size={15} />
@@ -156,7 +156,7 @@ const ConversationalOnboarding: React.FC = () => {
 
       {/* Extracted info bar */}
       {extractedItems.length > 0 && (
-        <div className="px-5 pb-3">
+        <div className="px-5 pb-2 flex-shrink-0">
           <div className="flex gap-2 flex-wrap">
             {extractedItems.map((item, i) => (
               <span key={i} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold" style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}>
@@ -168,7 +168,7 @@ const ConversationalOnboarding: React.FC = () => {
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
+      <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3" style={{ minHeight: 0 }}>
         {messages.map(msg => (
           <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
@@ -198,7 +198,7 @@ const ConversationalOnboarding: React.FC = () => {
 
       {/* Create Trip button (when extraction is complete) */}
       {extraction?.complete && !isGenerating && (
-        <div className="px-5 py-3">
+        <div className="px-5 py-3 flex-shrink-0">
           <button
             onClick={handleCreateTrip}
             className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-[15px] font-bold transition-all active:scale-[0.98]"
@@ -211,7 +211,7 @@ const ConversationalOnboarding: React.FC = () => {
       )}
 
       {isGenerating && (
-        <div className="px-5 py-3">
+        <div className="px-5 py-3 flex-shrink-0">
           <div className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-[15px] font-semibold" style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)' }}>
             <Loader2 size={18} className="animate-spin" style={{ color: 'var(--accent)' }} />
             Building your travel guide...
@@ -220,7 +220,7 @@ const ConversationalOnboarding: React.FC = () => {
       )}
 
       {/* Input */}
-      <div className="px-5 py-4 pb-8" style={{ borderTop: '0.33px solid var(--outline)' }}>
+      <div className="px-5 py-3 flex-shrink-0" style={{ borderTop: '0.33px solid var(--outline)', paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
         <div className="flex gap-2">
           <input
             ref={inputRef}
