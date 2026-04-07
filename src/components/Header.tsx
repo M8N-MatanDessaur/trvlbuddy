@@ -32,7 +32,9 @@ const Header: React.FC<Props> = ({ pages }) => {
     localStorage.removeItem('generatedTranslations');
     localStorage.removeItem('emergencyContacts');
     localStorage.removeItem('hasCompletedOnboarding');
-    window.location.reload();
+    localStorage.removeItem('savedActivities');
+    localStorage.removeItem('theme-manual');
+    window.location.href = '/';
   };
 
   useEffect(() => {
