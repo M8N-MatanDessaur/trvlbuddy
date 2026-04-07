@@ -28,8 +28,8 @@ const ShowToLocal: React.FC<Props> = ({ isOpen, onClose, localText, englishText,
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[100] flex flex-col items-center justify-center p-8"
-          style={{ background: 'var(--bg-primary)' }}
+          className="flex flex-col items-center justify-center"
+          style={{ background: 'var(--bg-primary)', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, padding: '2rem', margin: 0 }}
           onClick={onClose}
         >
           <button
