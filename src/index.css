@@ -308,6 +308,14 @@ html[data-theme='dark'] .activity-card { background-color: var(--surface-contain
   aspect-ratio: 1;
 }
 
+/* Minimum touch targets for mobile */
+@media (pointer: coarse) {
+  button, a[href^="tel:"], .filter-btn, .nav-link {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 ::selection { background-color: rgba(88, 86, 214, 0.2); }
 html[data-theme='dark'] ::selection { background-color: rgba(123, 121, 232, 0.3); }
 
