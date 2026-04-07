@@ -1,8 +1,24 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, MapPin, Navigation, Loader2 } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { useChat, ChatMessage } from '../contexts/ChatContext';
 import { chatWithTripAssistant } from '../services/aiService';
+
+// Hook to track visual viewport height (accounts for mobile keyboard)
+function useViewportHeight() {
+  const [height, setHeight] = useState(window.visualViewport?.height || window.innerHeight);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const update = () => setHeight(vv.height);
+    vv.addEventListener('resize', update);
+    return () => vv.removeEventListener('resize', update);
+  }, []);
+
+  return height;
+}
 
 const ChatPage: React.FC = () => {
   const { currentPlan, activities } = useTravel();
@@ -11,6 +27,7 @@ const ChatPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const viewportHeight = useViewportHeight();
 
   // Welcome message on first mount (only if no messages yet)
   useEffect(() => {
@@ -32,7 +49,7 @@ const ChatPage: React.FC = () => {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, viewportHeight]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -79,7 +96,7 @@ const ChatPage: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col -mx-5 -mt-2" style={{ height: 'calc(100dvh - 7rem)', minHeight: 0 }}>
+    <div className="flex flex-col -mx-5 -mt-2" style={{ height: `${viewportHeight - 112}px`, minHeight: 0, transition: 'height 0.1s ease' }}>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3" style={{ minHeight: 0 }}>
         {messages.map(msg => (
