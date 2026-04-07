@@ -79,9 +79,9 @@ const ChatPage: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-full -mx-5 -mt-2">
+    <div className="flex flex-col -mx-5 -mt-2" style={{ height: 'calc(100dvh - 7rem)', minHeight: 0 }}>
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3" style={{ minHeight: 0 }}>
         {messages.map(msg => (
           <div key={msg.id} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
