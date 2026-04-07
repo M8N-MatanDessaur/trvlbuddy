@@ -583,7 +583,7 @@ export async function generateActivitiesForLocation(
   const locationContext = `the city of ${city.name}`;
   
   const prompt = `
-Generate 15-20 diverse activities for ${locationName} based on:
+Generate 25-35 diverse activities for ${locationName} based on:
 - Interests: ${interests.join(', ')}
 - Budget: ${budget}
 - Travelers: ${travelers}
@@ -1282,5 +1282,86 @@ Respond in this EXACT JSON format (no markdown, no code blocks):
       interests: [],
       aiResponse: raw.length > 200 ? 'Sounds great! Where are you heading?' : raw,
     };
+  }
+}
+
+// Discover more activities for a specific category or general
+export async function discoverMoreActivities(
+  locationName: string,
+  category: string,
+  existingNames: string[],
+  destinationId: string,
+  cityId: string
+): Promise<GeneratedActivity[]> {
+  const exclusionList = existingNames.slice(0, 20).join(', ');
+
+  const prompt = `
+Generate 8-12 NEW activities for ${locationName} in the "${category}" category.
+
+IMPORTANT: Do NOT include any of these already-listed activities: ${exclusionList}
+
+Use ONLY this category: ${category}
+
+Return a JSON array:
+[
+  {
+    "name": "Activity name",
+    "category": "${category}",
+    "description": "Detailed description (80-120 words)",
+    "estimatedCost": "Simple price range (e.g., Free, $10-25)",
+    "duration": "Time needed",
+    "bestTime": "Best time to visit",
+    "location": "Specific address in ${locationName}",
+    "tips": "Practical tips",
+    "difficulty": "easy|moderate|challenging",
+    "destinationId": "${destinationId}",
+    "cityId": "${cityId}"
+  }
+]
+
+Focus on lesser-known, authentic local experiences. Include hidden gems and local favorites. Return only valid JSON.
+`;
+
+  try {
+    const response = await callGeminiAPI(prompt, true);
+    const cleaned = response.replace(/```json\n?|\n?```/g, '').trim();
+    const activities = JSON.parse(cleaned);
+    return Array.isArray(activities) ? activities.filter(isValidActivity).map((a: any) => ({ ...a, destinationId, cityId })) : [];
+  } catch (error) {
+    console.error('Error discovering more activities:', error);
+    return [];
+  }
+}
+
+// Smart suggestion based on time of day and trip context
+export async function getSmartSuggestion(
+  locationName: string,
+  interests: string[],
+  existingActivities: string[]
+): Promise<{ title: string; description: string; activityName: string } | null> {
+  const hour = new Date().getHours();
+  const timeContext = hour < 11 ? 'morning' : hour < 14 ? 'lunchtime' : hour < 17 ? 'afternoon' : hour < 20 ? 'evening' : 'night';
+
+  const prompt = `
+It is ${timeContext} in ${locationName}. A traveler interested in ${interests.slice(0, 4).join(', ')} needs a quick suggestion.
+
+Their existing activities include: ${existingActivities.slice(0, 10).join(', ')}
+
+Give ONE smart suggestion for right now. Respond in JSON:
+{
+  "title": "Short catchy title (3-5 words)",
+  "description": "One sentence why this is perfect right now",
+  "activityName": "The specific activity or place name"
+}
+
+Be specific to ${locationName} and the current time of day. Return only valid JSON.
+`;
+
+  try {
+    const response = await callGeminiAPI(prompt, true);
+    const cleaned = response.replace(/```json\n?|\n?```/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch {
+    return null;
   }
 }

@@ -303,6 +303,9 @@ html[data-theme='dark'] .activity-card { background-color: var(--surface-contain
 }
 
 ::-webkit-scrollbar { width: 0; height: 0; }
+/* Ensure circular buttons are actually circles */
+.rounded-full { aspect-ratio: 1; }
+
 ::selection { background-color: rgba(88, 86, 214, 0.2); }
 html[data-theme='dark'] ::selection { background-color: rgba(123, 121, 232, 0.3); }
 

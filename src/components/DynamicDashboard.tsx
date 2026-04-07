@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTravel } from '../contexts/TravelContext';
-import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles } from 'lucide-react';
+import { getSmartSuggestion } from '../services/aiService';
+import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb } from 'lucide-react';
 
 const DynamicDashboard: React.FC = () => {
-  const { currentPlan } = useTravel();
+  const { currentPlan, activities } = useTravel();
   const navigate = useNavigate();
+  const [suggestion, setSuggestion] = useState<{ title: string; description: string; activityName: string } | null>(null);
 
   if (!currentPlan) {
     return (
@@ -52,6 +54,19 @@ const DynamicDashboard: React.FC = () => {
   const dest = currentPlan.destination || currentPlan.destinations?.[0];
   const isDayTrip = currentPlan.tripType === 'day-trip';
 
+  // Fetch smart suggestion on mount
+  useEffect(() => {
+    if (!currentPlan || activities.length === 0) return;
+    const dest = currentPlan.destination || currentPlan.destinations?.[0];
+    const seg = segments[0];
+    const locationName = seg?.city ? `${seg.city.name}, ${dest?.country}` : dest?.name || '';
+    if (!locationName) return;
+
+    getSmartSuggestion(locationName, currentPlan.interests || [], activities.map(a => a.name))
+      .then(s => { if (s) setSuggestion(s); })
+      .catch(() => {});
+  }, [currentPlan?.id]);
+
   return (
     <section className="page space-y-5">
 
@@ -72,6 +87,23 @@ const DynamicDashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Smart Suggestion */}
+      {suggestion && (
+        <button
+          onClick={() => navigate('/explore')}
+          className="w-full flex items-center gap-3 p-4 rounded-2xl text-left transition-transform active:scale-[0.98]"
+          style={{ background: 'var(--accent-container)' }}
+        >
+          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 aspect-square" style={{ background: 'var(--accent)', color: 'white' }}>
+            <Lightbulb size={18} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-bold" style={{ color: 'var(--accent)' }}>{suggestion.title}</div>
+            <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{suggestion.description}</div>
+          </div>
+        </button>
+      )}
 
       {/* ---- ACTIONS ---- */}
       <div className="grid grid-cols-2 gap-3">
