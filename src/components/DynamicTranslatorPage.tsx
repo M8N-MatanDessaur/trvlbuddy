@@ -14,7 +14,7 @@ const DynamicTranslatorPage: React.FC = () => {
   const [translationError, setTranslationError] = useState('');
   const [copiedText, setCopiedText] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>('emergency');
-  const [showToLocal, setShowToLocal] = useState<{ local: string; english: string; pronunciation?: string } | null>(null);
+  const [showToLocalData, setShowToLocalData] = useState<{ phrases: { local: string; english: string; pronunciation?: string }[]; index: number } | null>(null);
 
   if (!currentPlan) {
     return (
@@ -127,7 +127,7 @@ const DynamicTranslatorPage: React.FC = () => {
             <div className="flex gap-2 mt-2">
               <button onClick={() => speak(translatedText)} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-container)', color: 'var(--accent)' }}><Volume2 size={18} /></button>
               <button onClick={() => copyText(translatedText)} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-container)', color: copiedText === translatedText ? 'var(--success)' : 'var(--text-secondary)' }}>{copiedText === translatedText ? <Check size={18} /> : <Copy size={18} />}</button>
-              <button onClick={() => setShowToLocal({ local: translatedText, english: customText })} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)' }}><Maximize2 size={18} /></button>
+              <button onClick={() => setShowToLocalData({ phrases: [{ local: translatedText, english: customText }], index: 0 })} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)' }}><Maximize2 size={18} /></button>
             </div>
           </div>
         )}
@@ -161,7 +161,7 @@ const DynamicTranslatorPage: React.FC = () => {
                       <div className="flex gap-1 flex-shrink-0">
                         <button onClick={() => speak(phrase.local)} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: 'var(--accent)' }}><Volume2 size={18} /></button>
                         <button onClick={() => copyText(phrase.local)} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: copiedText === phrase.local ? 'var(--success)' : 'var(--text-tertiary)' }}>{copiedText === phrase.local ? <Check size={18} /> : <Copy size={18} />}</button>
-                        <button onClick={() => setShowToLocal({ local: phrase.local, english: phrase.english, pronunciation: phrase.pronunciation })} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: 'var(--text-tertiary)' }}><Maximize2 size={18} /></button>
+                        <button onClick={() => setShowToLocalData({ phrases: phrases.map(p => ({ local: p.local, english: p.english, pronunciation: p.pronunciation })), index: i })} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: 'var(--text-tertiary)' }}><Maximize2 size={18} /></button>
                       </div>
                     </div>
                   ))}
@@ -172,7 +172,13 @@ const DynamicTranslatorPage: React.FC = () => {
         })}
       </div>
 
-      <ShowToLocal isOpen={!!showToLocal} onClose={() => setShowToLocal(null)} localText={showToLocal?.local || ''} englishText={showToLocal?.english || ''} pronunciation={showToLocal?.pronunciation} langCode={langCodeMap[currentLanguage]} />
+      <ShowToLocal
+        isOpen={!!showToLocalData}
+        onClose={() => setShowToLocalData(null)}
+        phrases={showToLocalData?.phrases || []}
+        startIndex={showToLocalData?.index || 0}
+        langCode={langCodeMap[currentLanguage]}
+      />
     </section>
   );
 };
