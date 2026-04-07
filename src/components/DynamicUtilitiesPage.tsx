@@ -313,22 +313,6 @@ const DynamicUtilitiesPage: React.FC = () => {
         {ratesLoading && <div className="text-[10px] text-center text-[var(--text-tertiary)]">Loading rates...</div>}
       </div>
 
-      {/* Quick links */}
-      <div className="space-y-2">
-        <h3 className="text-[11px] font-bold text-[var(--text-tertiary)] uppercase tracking-[0.1em] px-1">Quick Links</h3>
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            { label: 'Google Maps', url: 'https://maps.google.com', icon: MapIcon },
-            { label: 'Google Translate', url: 'https://translate.google.com', icon: Globe },
-          ].map(link => (
-            <a key={link.label} href={link.url} target="_blank" rel="noopener noreferrer" className="card flex items-center gap-3 p-3.5 no-underline transition-transform active:scale-[0.98]">
-              <link.icon size={18} style={{ color: 'var(--accent)' }} />
-              <span className="text-[13px] font-semibold">{link.label}</span>
-              <ExternalLink size={12} className="ml-auto" style={{ color: 'var(--text-tertiary)' }} />
-            </a>
-          ))}
-        </div>
-      </div>
     </section>
   );
 };
