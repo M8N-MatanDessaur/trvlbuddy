@@ -1367,3 +1367,76 @@ Be specific to ${locationName} and the current time of day. Return only valid JS
     return null;
   }
 }
+
+export interface PackingItem {
+  item: string;
+  reason: string;
+  category: 'clothing' | 'toiletries' | 'electronics' | 'documents' | 'health' | 'accessories' | 'other';
+  essential: boolean;
+}
+
+export async function generatePackingList(
+  destinations: string[],
+  startDate: string,
+  endDate: string,
+  activities: string[],
+  weatherSummary: string,
+): Promise<PackingItem[]> {
+  const prompt = `
+You are a travel packing expert. Generate a packing list for this trip:
+
+Destinations: ${destinations.join(', ')}
+Dates: ${startDate} to ${endDate}
+Planned activities: ${activities.slice(0, 15).join(', ')}
+Weather forecast: ${weatherSummary}
+
+Return ONLY a JSON array (no markdown, no explanation) with 15-25 items. Each item:
+{
+  "item": "Item name",
+  "reason": "Why you need this",
+  "category": "clothing" | "toiletries" | "electronics" | "documents" | "health" | "accessories" | "other",
+  "essential": true/false
+}
+
+Prioritize essential items first. Be specific to the destination and activities (e.g. "comfortable walking shoes for temple visits" not just "shoes"). Include destination-specific items (adapters, modest clothing, etc.).`;
+
+  try {
+    const response = await callGeminiAPI(prompt, true);
+    const jsonMatch = response.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+    return JSON.parse(jsonMatch[0]) as PackingItem[];
+  } catch {
+    return [];
+  }
+}
+
+export async function generateDayDebrief(
+  destinationName: string,
+  dayNumber: number,
+  placesVisited: string[],
+  distanceKm: number,
+  mood?: string,
+): Promise<string> {
+  const moodLine = mood ? `The traveler described their day as "${mood}".` : '';
+  const placesLine = placesVisited.length > 0
+    ? `Places visited: ${placesVisited.join(', ')}.`
+    : 'No specific places were tracked today (the app may have been in the background).';
+
+  const prompt = `
+You are writing a short, warm travel journal entry for a traveler.
+
+Day ${dayNumber} in ${destinationName}.
+${placesLine}
+Total distance walked: approximately ${distanceKm.toFixed(1)} km.
+${moodLine}
+
+Write a 2-3 sentence journal entry in first person that captures the feel of the day.
+Be specific about the places if known. If no places were tracked, write something general but warm about exploring ${destinationName}.
+Keep it concise and personal. Do not use emojis. Return only the journal text, no quotes or formatting.`;
+
+  try {
+    return await callGeminiAPI(prompt);
+  } catch {
+    return `Day ${dayNumber} in ${destinationName}. Explored the city${placesVisited.length > 0 ? `, visiting ${placesVisited.join(' and ')}` : ''}. Walked about ${distanceKm.toFixed(1)} km.`;
+  }
+}

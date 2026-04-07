@@ -1,19 +1,22 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useTravel } from '../contexts/TravelContext';
 import { translateCustomText } from '../services/aiService';
-import { groupTranslationsBySituation } from '../utils/situationGroups';
+import { groupTranslationsBySituation, getContextualGroups } from '../utils/situationGroups';
+import { useContextualContent } from '../hooks/useContextualContent';
+import ContextualPhraseBanner from './language/ContextualPhraseBanner';
 import ShowToLocal from './ShowToLocal';
 import { Volume2, Copy, Check, ArrowRight, Loader2, ChevronDown, ChevronRight, Maximize2 } from 'lucide-react';
 
 const DynamicTranslatorPage: React.FC = () => {
   const { currentPlan, translations } = useTravel();
+  const { moment, suggestedPhraseGroups } = useContextualContent();
   const [selectedLanguage, setSelectedLanguage] = useState('');
   const [customText, setCustomText] = useState('');
   const [translatedText, setTranslatedText] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState('');
   const [copiedText, setCopiedText] = useState('');
-  const [expandedGroup, setExpandedGroup] = useState<string | null>('emergency');
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [showToLocalData, setShowToLocalData] = useState<{ phrases: { local: string; english: string; pronunciation?: string }[]; index: number } | null>(null);
 
   if (!currentPlan) {
@@ -44,7 +47,29 @@ const DynamicTranslatorPage: React.FC = () => {
     });
   }, [translations, currentLanguage, currentPlan, languages]);
 
-  const situationGroups = useMemo(() => groupTranslationsBySituation(filteredTranslations), [filteredTranslations]);
+  // Context-aware group ordering
+  const situationGroups = useMemo(() => {
+    const base = groupTranslationsBySituation(filteredTranslations);
+    if (moment.tripPhase === 'active') {
+      return getContextualGroups(base, suggestedPhraseGroups);
+    }
+    return base;
+  }, [filteredTranslations, moment.tripPhase, suggestedPhraseGroups]);
+
+  // Auto-expand the most relevant group on mount/context change
+  useEffect(() => {
+    if (moment.tripPhase === 'active' && suggestedPhraseGroups.length > 0) {
+      // Find the first suggested group that has phrases
+      const match = situationGroups.find(
+        (g) => suggestedPhraseGroups.includes(g.group.id) && g.phrases.length > 0,
+      );
+      if (match) {
+        setExpandedGroup(match.group.id);
+        return;
+      }
+    }
+    setExpandedGroup('emergency');
+  }, [moment.tripPhase, suggestedPhraseGroups, situationGroups]);
 
   const handleTranslate = async () => {
     if (!customText.trim()) return;
@@ -61,7 +86,6 @@ const DynamicTranslatorPage: React.FC = () => {
     }
   };
 
-  // Map language names to BCP 47 codes for speech synthesis
   const langCodeMap: Record<string, string> = {
     'Korean': 'ko-KR', 'Japanese': 'ja-JP', 'Chinese': 'zh-CN', 'Mandarin': 'zh-CN',
     'French': 'fr-FR', 'Spanish': 'es-ES', 'Italian': 'it-IT', 'German': 'de-DE',
@@ -80,7 +104,6 @@ const DynamicTranslatorPage: React.FC = () => {
       const langCode = langCodeMap[currentLanguage] || 'en-US';
       u.lang = langCode;
       u.rate = 0.85;
-      // Try to find a matching voice
       const voices = window.speechSynthesis.getVoices();
       const match = voices.find(v => v.lang.startsWith(langCode.split('-')[0]));
       if (match) u.voice = match;
@@ -112,6 +135,13 @@ const DynamicTranslatorPage: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Contextual phrase banner */}
+      <ContextualPhraseBanner
+        langCode={langCodeMap[currentLanguage]}
+        onSpeak={speak}
+        onShowToLocal={(phrases, index) => setShowToLocalData({ phrases, index })}
+      />
 
       {/* AI Translator */}
       <div className="card p-4 space-y-3">

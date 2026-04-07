@@ -4,6 +4,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { TravelProvider, useTravel } from './contexts/TravelContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ChatProvider } from './contexts/ChatContext';
+import { ContextEngineProvider } from './contexts/ContextEngineContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
 import SwipeNavigator from './components/SwipeNavigator';
@@ -56,9 +57,11 @@ function App() {
     <ThemeProvider>
       <ToastProvider>
         <TravelProvider>
-          <ChatProvider>
-            <AppContent />
-          </ChatProvider>
+          <ContextEngineProvider>
+            <ChatProvider>
+              <AppContent />
+            </ChatProvider>
+          </ContextEngineProvider>
         </TravelProvider>
       </ToastProvider>
     </ThemeProvider>

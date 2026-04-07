@@ -102,3 +102,15 @@ export interface Translation {
   destinationId?: string; // Which destination/language this translation is for
   cityId?: string; // Which city this translation is for
 }
+
+export interface JournalEntry {
+  date: string; // YYYY-MM-DD
+  dayNumber: number;
+  destinationName: string;
+  placesVisited: string[];
+  distanceKm: number;
+  mood?: string;
+  generatedSummary: string;
+  userNotes?: string;
+  createdAt: string;
+}

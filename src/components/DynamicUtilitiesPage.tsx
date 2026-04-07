@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Phone, Thermometer, Cloud, Sun, CloudRain, Globe, Loader2, AlertTriangle, Building2, Volume2, ArrowRightLeft, ExternalLink, Map as MapIcon } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
+import PhotoScanner from './tools/PhotoScanner';
+import PackingList from './tools/PackingList';
 
 interface WeatherData {
   temp: number;
@@ -312,6 +314,12 @@ const DynamicUtilitiesPage: React.FC = () => {
 
         {ratesLoading && <div className="text-[10px] text-center text-[var(--text-tertiary)]">Loading rates...</div>}
       </div>
+
+      {/* Photo Scanner */}
+      <PhotoScanner />
+
+      {/* Packing List (pre-trip only) */}
+      <PackingList />
 
     </section>
   );

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTravel } from '../contexts/TravelContext';
 import { getSmartSuggestion } from '../services/aiService';
 import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb, Heart, RefreshCw, Loader2, Pencil, X as XIcon } from 'lucide-react';
+import DayDebrief from './trip/DayDebrief';
 
 // Cache suggestion outside component so it persists across remounts
 let cachedSuggestion: { title: string; description: string; activityName: string } | null = null;
@@ -202,6 +203,9 @@ const DynamicDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Day Debrief + Journal Timeline */}
+      <DayDebrief />
 
       {/* ---- ACTIONS ---- */}
       <div className="grid grid-cols-2 gap-3">
