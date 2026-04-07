@@ -1,25 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Navigation, Loader2, Volume2 } from 'lucide-react';
+import { Send, MapPin, Navigation, Loader2 } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
+import { useChat, ChatMessage } from '../contexts/ChatContext';
 import { chatWithTripAssistant } from '../services/aiService';
-
-interface ChatMessage {
-  id: string;
-  type: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-  suggestions?: string[];
-  locations?: { name: string; address: string; type: string }[];
-}
 
 const ChatPage: React.FC = () => {
   const { currentPlan, activities } = useTravel();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { messages, addMessage, setMessages } = useChat();
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Welcome message on first mount (only if no messages yet)
   useEffect(() => {
     if (messages.length === 0 && currentPlan) {
       const dest = currentPlan.destination || currentPlan.destinations?.[0];
@@ -41,13 +34,17 @@ const ChatPage: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
   const sendMessage = async (text?: string) => {
     const msg = text || inputValue.trim();
     if (!msg || isLoading || !currentPlan) return;
     setInputValue('');
 
     const userMsg: ChatMessage = { id: Date.now().toString(), type: 'user', content: msg, timestamp: new Date() };
-    setMessages(prev => [...prev, userMsg]);
+    addMessage(userMsg);
     setIsLoading(true);
 
     try {
@@ -60,14 +57,14 @@ const ChatPage: React.FC = () => {
         suggestions: response.suggestions,
         locations: response.locations,
       };
-      setMessages(prev => [...prev, assistantMsg]);
+      addMessage(assistantMsg);
     } catch {
-      setMessages(prev => [...prev, {
+      addMessage({
         id: (Date.now() + 1).toString(),
         type: 'assistant',
         content: 'Sorry, something went wrong. Please try again.',
         timestamp: new Date(),
-      }]);
+      });
     } finally {
       setIsLoading(false);
     }

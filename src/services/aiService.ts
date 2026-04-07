@@ -1187,3 +1187,100 @@ Be direct, specific, and helpful. Focus on real places with exact details and cu
     throw error;
   }
 }
+
+// Conversational onboarding: extract trip details from natural language
+export interface OnboardingExtraction {
+  destination?: string;
+  country?: string;
+  travelers?: number;
+  duration?: number;
+  startDate?: string;
+  interests?: string[];
+  budget?: 'budget' | 'mid-range' | 'luxury';
+  tripType?: 'full-trip' | 'day-trip';
+  accommodation?: string;
+  accommodationAddress?: string;
+  complete: boolean;
+  missingFields: string[];
+  aiResponse: string;
+}
+
+export async function onboardingChat(
+  conversationHistory: { role: 'user' | 'assistant'; text: string }[],
+  userMessage: string
+): Promise<OnboardingExtraction> {
+  const historyText = conversationHistory
+    .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.text}`)
+    .join('\n');
+
+  const prompt = `You are a friendly travel planning assistant helping someone set up their trip. You are having a conversation to gather trip details naturally.
+
+CONVERSATION SO FAR:
+${historyText}
+User: ${userMessage}
+
+TASK: Respond naturally and extract any trip details from the ENTIRE conversation so far. Be warm, brief, and conversational (2-3 sentences max for your response). Ask about missing details naturally.
+
+The details you need to collect:
+1. Destination (city/country) - REQUIRED
+2. Trip type (day-trip or multi-day) - REQUIRED
+3. Number of travelers - REQUIRED
+4. Duration / dates (how many days, when) - REQUIRED for multi-day trips
+5. Interests (what they want to do) - REQUIRED (at least 1)
+6. Budget level (budget, mid-range, luxury) - OPTIONAL, default mid-range
+7. Accommodation name and address - OPTIONAL
+
+IMPORTANT RULES:
+- Do NOT list all missing fields at once. Ask about ONE thing at a time.
+- If the user gave destination, ask about who is coming or what they want to do next.
+- If you have destination + travelers + interests, you probably have enough. Set complete to true.
+- Be smart about inferring: "with my family" = 3-4 travelers, "weekend trip" = 2-3 days, "backpacking" = budget.
+- Valid interests: Historical Sites, Outdoor Adventures, Food & Dining, Museums & Art, Beach & Water, Shopping, Nightlife, Nature & Wildlife, Photography, Culture & Shows, Wellness & Spa, Architecture, Local Markets, Water Activities, Religious Sites
+
+Respond in this EXACT JSON format (no markdown, no code blocks):
+{
+  "destination": "city name or null",
+  "country": "country name or null",
+  "travelers": number or null,
+  "duration": number of days or null,
+  "startDate": "YYYY-MM-DD or null",
+  "interests": ["interest1", "interest2"] or [],
+  "budget": "budget|mid-range|luxury or null",
+  "tripType": "full-trip|day-trip or null",
+  "accommodation": "hotel name or null",
+  "accommodationAddress": "address or null",
+  "complete": true/false,
+  "missingFields": ["field1", "field2"],
+  "aiResponse": "your conversational response to the user"
+}`;
+
+  const raw = await callGeminiAPI(prompt, true);
+
+  // Parse JSON from response
+  try {
+    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    return {
+      destination: parsed.destination || undefined,
+      country: parsed.country || undefined,
+      travelers: parsed.travelers || undefined,
+      duration: parsed.duration || undefined,
+      startDate: parsed.startDate || undefined,
+      interests: parsed.interests || [],
+      budget: parsed.budget || undefined,
+      tripType: parsed.tripType || undefined,
+      accommodation: parsed.accommodation || undefined,
+      accommodationAddress: parsed.accommodationAddress || undefined,
+      complete: parsed.complete || false,
+      missingFields: parsed.missingFields || [],
+      aiResponse: parsed.aiResponse || 'Tell me more about your trip!',
+    };
+  } catch {
+    return {
+      complete: false,
+      missingFields: ['destination'],
+      interests: [],
+      aiResponse: raw.length > 200 ? 'Sounds great! Where are you heading?' : raw,
+    };
+  }
+}
