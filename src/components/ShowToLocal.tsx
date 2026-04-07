@@ -8,15 +8,22 @@ interface Props {
   localText: string;
   englishText: string;
   pronunciation?: string;
+  langCode?: string;
 }
 
-const ShowToLocal: React.FC<Props> = ({ isOpen, onClose, localText, englishText, pronunciation }) => {
+const ShowToLocal: React.FC<Props> = ({ isOpen, onClose, localText, englishText, pronunciation, langCode }) => {
   const speak = () => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(localText);
-      utterance.rate = 0.8;
-      window.speechSynthesis.speak(utterance);
+      const u = new SpeechSynthesisUtterance(localText);
+      if (langCode) {
+        u.lang = langCode;
+        const voices = window.speechSynthesis.getVoices();
+        const match = voices.find(v => v.lang.startsWith(langCode.split('-')[0]));
+        if (match) u.voice = match;
+      }
+      u.rate = 0.85;
+      window.speechSynthesis.speak(u);
     }
   };
 
