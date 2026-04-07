@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Sun, Moon, Settings, RotateCcw, Plane } from 'lucide-react';
+import { Sun, Moon, Settings, RotateCcw, Plane, Share2 } from 'lucide-react';
+import { useToast } from '../contexts/ToastContext';
+import { exportTrip, shareTrip } from '../utils/tripShare';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTravel } from '../contexts/TravelContext';
@@ -13,13 +15,22 @@ interface Props {
 
 const Header: React.FC<Props> = ({ pages }) => {
   const { theme, toggleTheme } = useTheme();
-  const { setCurrentPlan, setActivities, setTranslations, setEmergencyContacts, setHasCompletedOnboarding } = useTravel();
+  const { currentPlan, activities, translations, emergencyContacts, savedActivities, setCurrentPlan, setActivities, setTranslations, setEmergencyContacts, setHasCompletedOnboarding } = useTravel();
+  const { toast } = useToast();
   const [showResetModal, setShowResetModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
   const currentPage = pages?.find(p => p.path === location.pathname) || pages?.[0];
+
+  const handleShare = async () => {
+    if (!currentPlan) return;
+    setShowMenu(false);
+    const bundle = exportTrip(currentPlan, activities, translations, emergencyContacts, savedActivities);
+    const shared = await shareTrip(bundle);
+    if (shared) toast('Trip shared!', 'success');
+  };
 
   const handleReset = () => {
     setCurrentPlan(null);
@@ -92,6 +103,16 @@ const Header: React.FC<Props> = ({ pages }) => {
 
             {showMenu && (
               <div className="absolute right-0 top-full mt-1.5 w-48 rounded-2xl p-1.5 z-50 animate-[slideUp_0.15s_ease-out]" style={{ background: 'var(--surface-container)', boxShadow: 'var(--shadow-xl)', border: '0.5px solid var(--outline)' }}>
+                {currentPlan && (
+                  <button
+                    onClick={handleShare}
+                    className="w-full flex items-center gap-3 px-3.5 py-3 text-sm rounded-xl transition-colors"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    <Share2 size={15} />
+                    Share Trip
+                  </button>
+                )}
                 <button
                   onClick={() => { setShowResetModal(true); setShowMenu(false); }}
                   className="w-full flex items-center gap-3 px-3.5 py-3 text-sm rounded-xl transition-colors"

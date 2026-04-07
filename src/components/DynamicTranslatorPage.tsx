@@ -61,11 +61,29 @@ const DynamicTranslatorPage: React.FC = () => {
     }
   };
 
+  // Map language names to BCP 47 codes for speech synthesis
+  const langCodeMap: Record<string, string> = {
+    'Korean': 'ko-KR', 'Japanese': 'ja-JP', 'Chinese': 'zh-CN', 'Mandarin': 'zh-CN',
+    'French': 'fr-FR', 'Spanish': 'es-ES', 'Italian': 'it-IT', 'German': 'de-DE',
+    'Portuguese': 'pt-BR', 'Russian': 'ru-RU', 'Arabic': 'ar-SA', 'Hindi': 'hi-IN',
+    'Thai': 'th-TH', 'Vietnamese': 'vi-VN', 'Turkish': 'tr-TR', 'Dutch': 'nl-NL',
+    'Greek': 'el-GR', 'Polish': 'pl-PL', 'Swedish': 'sv-SE', 'Danish': 'da-DK',
+    'Norwegian': 'nb-NO', 'Finnish': 'fi-FI', 'Czech': 'cs-CZ', 'Hungarian': 'hu-HU',
+    'Romanian': 'ro-RO', 'Indonesian': 'id-ID', 'Malay': 'ms-MY', 'Tagalog': 'fil-PH',
+    'English': 'en-US', 'Hebrew': 'he-IL',
+  };
+
   const speak = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.rate = 0.8;
+      const langCode = langCodeMap[currentLanguage] || 'en-US';
+      u.lang = langCode;
+      u.rate = 0.85;
+      // Try to find a matching voice
+      const voices = window.speechSynthesis.getVoices();
+      const match = voices.find(v => v.lang.startsWith(langCode.split('-')[0]));
+      if (match) u.voice = match;
       window.speechSynthesis.speak(u);
     }
   };
@@ -154,7 +172,7 @@ const DynamicTranslatorPage: React.FC = () => {
         })}
       </div>
 
-      <ShowToLocal isOpen={!!showToLocal} onClose={() => setShowToLocal(null)} localText={showToLocal?.local || ''} englishText={showToLocal?.english || ''} pronunciation={showToLocal?.pronunciation} />
+      <ShowToLocal isOpen={!!showToLocal} onClose={() => setShowToLocal(null)} localText={showToLocal?.local || ''} englishText={showToLocal?.english || ''} pronunciation={showToLocal?.pronunciation} langCode={langCodeMap[currentLanguage]} />
     </section>
   );
 };

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Plane, Check, Sparkles, Globe, Languages, Wrench, ArrowRight } from 'lucide-react';
+import { Send, Loader2, Plane, Check, Sparkles, Globe, Languages, Wrench, ArrowRight, Upload } from 'lucide-react';
+import { importTripFromJson, TripBundle } from '../utils/tripShare';
 
 import { useTravel } from '../contexts/TravelContext';
 import { useToast } from '../contexts/ToastContext';
@@ -180,6 +181,37 @@ const ConversationalOnboarding: React.FC = () => {
           Plan My Trip
           <ArrowRight size={18} />
         </button>
+
+        <label
+          className="w-full max-w-xs flex items-center justify-center gap-2 py-3.5 rounded-2xl text-[14px] font-semibold mt-3 cursor-pointer transition-all active:scale-[0.98]"
+          style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)' }}
+        >
+          <Upload size={16} />
+          Import Shared Trip
+          <input
+            type="file"
+            accept=".trvlbuddy,.json"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const text = await file.text();
+              const bundle = importTripFromJson(text);
+              if (bundle) {
+                setCurrentPlan(bundle.plan);
+                setActivities(bundle.activities);
+                setTranslations(bundle.translations);
+                setEmergencyContacts(bundle.emergencyContacts);
+                if (bundle.savedActivities) {
+                  localStorage.setItem('savedActivities', JSON.stringify(bundle.savedActivities));
+                }
+                setHasCompletedOnboarding(true);
+              } else {
+                toast('Invalid trip file. Please try again.', 'error');
+              }
+            }}
+          />
+        </label>
       </div>
     );
   }
