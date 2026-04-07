@@ -14,12 +14,16 @@ const LoadingScreen: React.FC = () => {
 
   useEffect(() => {
     const progressInterval = setInterval(() => {
-      setProgress(prev => (prev >= 95 ? prev : prev + Math.random() * 12));
-    }, 800);
+      setProgress(prev => {
+        if (prev >= 90) return prev + 0.3; // Slow crawl near the end
+        if (prev >= 70) return prev + 1; // Slow down
+        return prev + 2 + Math.random() * 3; // Steady progress
+      });
+    }, 500);
 
     const stepInterval = setInterval(() => {
       setActiveStep(prev => Math.min(prev + 1, loadingSteps.length - 1));
-    }, 2500);
+    }, 3500);
 
     return () => {
       clearInterval(progressInterval);
