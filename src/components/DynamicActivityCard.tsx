@@ -40,10 +40,10 @@ const DynamicActivityCard: React.FC<DynamicActivityCardProps> = ({ activity, onC
           </span>
           <button
             onClick={e => { e.stopPropagation(); toggleSavedActivity(activity.name); }}
-            className="flex items-center justify-center"
-            style={{ height: '24px', aspectRatio: '1', borderRadius: '50%', color: isSaved ? 'var(--accent)' : 'var(--text-tertiary)' }}
+            className="flex items-center justify-center -mr-1"
+            style={{ height: '32px', aspectRatio: '1', borderRadius: '50%', color: isSaved ? 'var(--accent)' : 'var(--text-tertiary)' }}
           >
-            <Heart size={13} fill={isSaved ? 'currentColor' : 'none'} />
+            <Heart size={16} fill={isSaved ? 'currentColor' : 'none'} />
           </button>
         </div>
 
