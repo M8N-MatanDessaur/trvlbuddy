@@ -68,21 +68,19 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
             <div className="overflow-y-auto px-5 pb-6" style={{ maxHeight: 'calc(88vh - 140px)' }}>
               <div className="space-y-4">
 
-                {/* Key info grid - the important stuff first */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="p-3 rounded-xl text-center" style={{ background: 'var(--surface-container-high)' }}>
-                    <Clock size={16} className="mx-auto mb-1.5" style={{ color: 'var(--accent)' }} />
-                    <div className="text-[13px] font-bold">{activity.duration}</div>
-                    <div className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>Duration</div>
+                {/* Key info grid */}
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="p-3.5 rounded-xl" style={{ background: 'var(--surface-container-high)' }}>
+                    <div className="text-[11px] font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>Duration</div>
+                    <div className="text-[15px] font-bold">{activity.duration}</div>
                   </div>
-                  <div className="p-3 rounded-xl text-center" style={{ background: 'var(--surface-container-high)' }}>
-                    <div className="text-[18px] font-extrabold mb-0.5" style={{ color: 'var(--accent)' }}>{activity.estimatedCost.includes('ree') ? 'Free' : activity.estimatedCost}</div>
-                    <div className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>Cost</div>
+                  <div className="p-3.5 rounded-xl" style={{ background: 'var(--surface-container-high)' }}>
+                    <div className="text-[11px] font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>Cost</div>
+                    <div className="text-[15px] font-bold" style={{ color: 'var(--accent)' }}>{activity.estimatedCost.includes('ree') ? 'Free' : activity.estimatedCost}</div>
                   </div>
-                  <div className="p-3 rounded-xl text-center" style={{ background: 'var(--surface-container-high)' }}>
-                    <Clock size={16} className="mx-auto mb-1.5" style={{ color: 'var(--text-tertiary)' }} />
-                    <div className="text-[13px] font-bold">{activity.bestTime || 'Anytime'}</div>
-                    <div className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>Best time</div>
+                  <div className="p-3.5 rounded-xl" style={{ background: 'var(--surface-container-high)' }}>
+                    <div className="text-[11px] font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>Best time</div>
+                    <div className="text-[15px] font-bold">{activity.bestTime || 'Anytime'}</div>
                   </div>
                 </div>
 
