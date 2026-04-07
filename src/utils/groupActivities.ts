@@ -4,6 +4,7 @@ export interface ActivitySection {
   id: string;
   title: string;
   subtitle: string;
+  dataCategory: string; // The actual category value on activities (e.g. "Food", not "Food & Dining")
   activities: GeneratedActivity[];
 }
 
@@ -13,7 +14,7 @@ export function groupActivities(activities: GeneratedActivity[]): ActivitySectio
   // 1. Recommended: top 6 with variety (pick one per category, prefer easy + varied price)
   const recommended = pickRecommended(activities, 6);
   if (recommended.length > 0) {
-    sections.push({ id: 'recommended', title: 'Recommended for You', subtitle: 'Our top picks based on your interests', activities: recommended });
+    sections.push({ id: 'recommended', title: 'Recommended for You', subtitle: 'Our top picks based on your interests', dataCategory: '', activities: recommended });
   }
 
   // 2. Free things
@@ -22,19 +23,19 @@ export function groupActivities(activities: GeneratedActivity[]): ActivitySectio
     return cost.includes('free') || cost === '0' || cost.includes('$0');
   });
   if (free.length > 0) {
-    sections.push({ id: 'free', title: 'Free Things to Do', subtitle: 'Great experiences, zero cost', activities: free });
+    sections.push({ id: 'free', title: 'Free Things to Do', subtitle: 'Great experiences, zero cost', dataCategory: '', activities: free });
   }
 
   // 3. Food & Dining
   const food = activities.filter(a => a.category === 'Food');
   if (food.length > 0) {
-    sections.push({ id: 'food', title: 'Food & Dining', subtitle: 'Local flavors to try', activities: food });
+    sections.push({ id: 'food', title: 'Food & Dining', subtitle: 'Local flavors to try', dataCategory: 'Food', activities: food });
   }
 
   // 4. Day Trips
   const dayTrips = activities.filter(a => a.category === 'Daytrips');
   if (dayTrips.length > 0) {
-    sections.push({ id: 'daytrips', title: 'Day Trips', subtitle: 'Nearby adventures', activities: dayTrips });
+    sections.push({ id: 'daytrips', title: 'Day Trips', subtitle: 'Nearby adventures', dataCategory: 'Daytrips', activities: dayTrips });
   }
 
   // 5. Remaining categories
@@ -43,7 +44,7 @@ export function groupActivities(activities: GeneratedActivity[]): ActivitySectio
   remaining.forEach(cat => {
     const catActivities = activities.filter(a => a.category === cat);
     if (catActivities.length > 0) {
-      sections.push({ id: cat.toLowerCase().replace(/\s+/g, '-'), title: cat, subtitle: `${catActivities.length} activities`, activities: catActivities });
+      sections.push({ id: cat.toLowerCase().replace(/\s+/g, '-'), title: cat, subtitle: `${catActivities.length} activities`, dataCategory: cat, activities: catActivities });
     }
   });
 

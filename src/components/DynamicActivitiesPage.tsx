@@ -46,21 +46,19 @@ const DynamicActivitiesPage: React.FC = () => {
     })).filter(s => s.activities.length > 0);
   }, [sections, activeFilter]);
 
-  const handleDiscoverMore = async (category: string) => {
+  const handleDiscoverMore = async (dataCategory: string, sectionId: string) => {
     const dest = currentPlan.destination || currentPlan.destinations?.[0];
     const seg = currentPlan.segments?.[0];
-    if (!dest || !seg) return;
+    if (!dest || !seg || !dataCategory) return;
 
-    setLoadingSection(category);
+    setLoadingSection(sectionId);
     try {
       const locationName = seg.city ? `${seg.city.name}, ${dest.country}` : `${dest.name}, ${dest.country}`;
-      const existingNames = activities.filter(a => a.category === category).map(a => a.name);
-      const newActivities = await discoverMoreActivities(locationName, category, existingNames, dest.id, seg.city?.id || dest.id);
+      const existingNames = activities.filter(a => a.category === dataCategory).map(a => a.name);
+      const newActivities = await discoverMoreActivities(locationName, dataCategory, existingNames, dest.id, seg.city?.id || dest.id);
 
       if (newActivities.length > 0) {
         setActivities([...activities, ...newActivities]);
-        // Auto-expand section to show new results
-        const sectionId = category.toLowerCase().replace(/\s+/g, '-');
         setExpandedSection(sectionId);
       }
     } catch {
@@ -186,7 +184,7 @@ const DynamicActivitiesPage: React.FC = () => {
         filteredSections.map(section => {
           const isExpanded = expandedSection === section.id;
           const displayActivities = isExpanded ? section.activities : section.activities.slice(0, 4);
-          const isLoadingThis = loadingSection === section.title;
+          const isLoadingThis = loadingSection === section.id;
 
           return (
             <div key={section.id} className="space-y-3">
@@ -212,9 +210,9 @@ const DynamicActivitiesPage: React.FC = () => {
                 ))}
 
                 {/* Find More card - sits in the grid like an activity card */}
-                {section.title !== 'Recommended for You' && section.title !== 'Free Things to Do' && (
+                {section.dataCategory && (
                   <button
-                    onClick={() => handleDiscoverMore(section.title)}
+                    onClick={() => handleDiscoverMore(section.dataCategory, section.id)}
                     disabled={isLoadingThis}
                     className="activity-card flex flex-col items-center justify-center gap-3 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
                     style={{ border: '2px dashed var(--outline)' }}
