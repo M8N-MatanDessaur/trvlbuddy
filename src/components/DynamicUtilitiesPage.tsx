@@ -1,37 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Phone, Thermometer, Cloud, Sun, CloudRain, Globe, Loader2, AlertTriangle, Building2, Volume2, ArrowRightLeft, ExternalLink, Map as MapIcon } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import PhotoScanner from './tools/PhotoScanner';
 import PackingList from './tools/PackingList';
 
-interface WeatherData {
-  temp: number;
-  condition: string;
-  icon: React.ComponentType<any>;
-  humidity: number;
-  feelsLike: number;
-  isLoading: boolean;
-  error?: string;
-}
-
 interface CurrencyInfo { code: string; rate: number; }
-interface LocationInfo { id: string; name: string; country: string; type: 'city' | 'destination'; coordinates?: { lat: number; lng: number }; }
-interface CountryInfo { id: string; name: string; languages: string[]; }
 
 const COMMON_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'KRW', 'CHF', 'CNY', 'INR', 'BRL', 'MXN', 'SGD', 'HKD', 'NZD', 'THB', 'TRY', 'ILS'];
 const QUICK_AMOUNTS = [10, 20, 50, 100];
 
 const DynamicUtilitiesPage: React.FC = () => {
-  const { currentPlan, emergencyContacts } = useTravel();
+  const { currentPlan } = useTravel();
   const [selectedCurrency, setSelectedCurrency] = useState('');
-  const [selectedWeatherLocation, setSelectedWeatherLocation] = useState('');
-  const [selectedEmergencyCountry, setSelectedEmergencyCountry] = useState('');
   const [localAmount, setLocalAmount] = useState('');
   const [homeAmount, setHomeAmount] = useState('');
   const [homeCurrency, setHomeCurrency] = useState(() => localStorage.getItem('homeCurrency') || 'USD');
   const [exchangeRates, setExchangeRates] = useState<{ [key: string]: number }>({});
   const [ratesLoading, setRatesLoading] = useState(true);
-  const [weatherData, setWeatherData] = useState<{ [key: string]: WeatherData }>({});
 
   if (!currentPlan) {
     return (
@@ -53,37 +38,6 @@ const DynamicUtilitiesPage: React.FC = () => {
       currentPlan.destinations?.forEach((d: any) => { if (d.currency) codes.add(d.currency); });
     }
     return Array.from(codes).map(code => ({ code, rate: getRate(code) }));
-  };
-
-  const getAllLocations = (): LocationInfo[] => {
-    const locs: LocationInfo[] = [];
-    if (currentPlan.tripType === 'day-trip') {
-      const d = currentPlan.destination || currentPlan.destinations?.[0];
-      if (d) locs.push({ id: d.id, name: d.name, country: d.country, type: 'destination', coordinates: d.coordinates });
-    } else {
-      const citySegs = currentPlan.segments?.filter((s: any) => s.city) || [];
-      if (citySegs.length > 0) {
-        citySegs.forEach((s: any) => locs.push({ id: s.city!.id, name: s.city!.name, country: s.destination.country, type: 'city', coordinates: s.city!.coordinates }));
-      } else {
-        currentPlan.segments?.filter((s: any) => !s.city).forEach((s: any) => {
-          if (s.destination.name) locs.push({ id: s.destination.id, name: s.destination.name, country: s.destination.country, type: 'destination', coordinates: s.destination.coordinates });
-        });
-      }
-    }
-    return locs;
-  };
-
-  const getAllCountries = (): CountryInfo[] => {
-    const countries = new Map<string, CountryInfo>();
-    if (currentPlan.tripType === 'day-trip') {
-      const d = currentPlan.destination || currentPlan.destinations?.[0];
-      if (d) countries.set(d.id, { id: d.id, name: d.country, languages: d.languages || [] });
-    } else {
-      currentPlan.destinations?.forEach((d: any) => {
-        if (!countries.has(d.id)) countries.set(d.id, { id: d.id, name: d.country, languages: d.languages || [] });
-      });
-    }
-    return Array.from(countries.values());
   };
 
   useEffect(() => {
@@ -112,44 +66,12 @@ const DynamicUtilitiesPage: React.FC = () => {
 
   const getRate = (fc: string): number => exchangeRates[fc.toLowerCase()] || 0;
 
-  const fetchWeather = async (loc: LocationInfo): Promise<WeatherData> => {
-    try {
-      const res = await fetch(`https://wttr.in/${encodeURIComponent(loc.name)}?format=j1`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      const cur = data.current_condition[0];
-      const code = parseInt(cur.weatherCode);
-      const icon = code >= 200 && code < 700 ? CloudRain : code === 800 ? Sun : Cloud;
-      return { temp: parseInt(cur.temp_C), condition: cur.weatherDesc[0].value, icon, humidity: parseInt(cur.humidity), feelsLike: parseInt(cur.FeelsLikeC), isLoading: false };
-    } catch {
-      const baseTemp = loc.coordinates ? (Math.abs(loc.coordinates.lat) > 45 ? 15 : Math.abs(loc.coordinates.lat) > 23 ? 22 : 28) : 22;
-      return { temp: baseTemp + Math.floor(Math.random() * 6) - 3, condition: 'Partly Cloudy', icon: Cloud, humidity: 55, feelsLike: baseTemp, isLoading: false, error: 'Estimated weather' };
-    }
-  };
-
   const allCurrencies = getAllCurrencies();
-  const allLocations = getAllLocations();
-  const allCountries = getAllCountries();
   const currentCurrency = selectedCurrency || allCurrencies[0]?.code || 'EUR';
-  const currentWeatherLoc = selectedWeatherLocation || allLocations[0]?.id || '';
-  const currentEmergencyCtry = selectedEmergencyCountry || allCountries[0]?.id || '';
 
   useEffect(() => {
     if (!selectedCurrency && allCurrencies.length > 0) setSelectedCurrency(allCurrencies[0].code);
-    if (!selectedWeatherLocation && allLocations.length > 0) setSelectedWeatherLocation(allLocations[0].id);
-    if (!selectedEmergencyCountry && allCountries.length > 0) setSelectedEmergencyCountry(allCountries[0].id);
-  }, [allCurrencies.length, allLocations.length, allCountries.length]);
-
-  useEffect(() => {
-    if (allLocations.length === 0) return;
-    const init: { [k: string]: WeatherData } = {};
-    allLocations.forEach(l => { init[l.id] = { temp: 0, condition: 'Loading', icon: Loader2, humidity: 0, feelsLike: 0, isLoading: true }; });
-    setWeatherData(init);
-    allLocations.forEach(async loc => {
-      const w = await fetchWeather(loc);
-      setWeatherData(prev => ({ ...prev, [loc.id]: w }));
-    });
-  }, [allLocations.length]);
+  }, [allCurrencies.length]);
 
   const handleLocalChange = (v: string) => {
     setLocalAmount(v);
@@ -170,17 +92,7 @@ const DynamicUtilitiesPage: React.FC = () => {
     return rate > 0 ? (homeAmt * rate).toFixed(0) : '...';
   };
 
-  const weather = weatherData[currentWeatherLoc];
-  const weatherLoc = allLocations.find(l => l.id === currentWeatherLoc);
-  const emergencyCountry = allCountries.find(c => c.id === currentEmergencyCtry);
-  const filteredContacts = emergencyContacts.filter(c => c.destinationId === currentEmergencyCtry && !c.cityId);
-  const mainEmergency = filteredContacts.find(c => c.type === 'emergency') || filteredContacts[0];
-
-  const speak = (text: string) => {
-    if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.rate = 0.8; window.speechSynthesis.speak(u); }
-  };
-
-  if (allLocations.length === 0) {
+  if (allCurrencies.length === 0) {
     return (
       <section className="page">
         <div className="text-center py-16">
@@ -196,83 +108,10 @@ const DynamicUtilitiesPage: React.FC = () => {
     <section className="page space-y-5">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight mb-1">Tools</h1>
-        <p className="text-[13px] text-[var(--text-secondary)]">Essential travel utilities</p>
+        <p className="text-[13px] text-[var(--text-secondary)]">Currency, photos, and packing</p>
       </div>
 
-      {/* Emergency - always visible at top */}
-      <div className="space-y-2.5">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <Phone size={16} style={{ color: 'var(--error)' }} />
-            <span className="text-[13px] font-bold" style={{ color: 'var(--error)' }}>Emergency</span>
-          </div>
-          {allCountries.length > 1 && (
-            <div className="flex gap-1">
-              {allCountries.map(c => (
-                <button key={c.id} onClick={() => setSelectedEmergencyCountry(c.id)} className="px-2 py-1 rounded-lg text-[11px] font-semibold" style={{ background: c.id === currentEmergencyCtry ? 'var(--error)' : 'transparent', color: c.id === currentEmergencyCtry ? 'white' : 'var(--error)' }}>
-                  {c.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {mainEmergency && (
-          <a href={`tel:${mainEmergency.number}`} className="flex items-center justify-center gap-3 w-full py-3.5 rounded-2xl text-[15px] font-bold no-underline transition-transform active:scale-[0.98]" style={{ background: 'var(--error)', color: 'white' }}>
-            <Phone size={18} />
-            Call {mainEmergency.number}
-          </a>
-        )}
-
-        {filteredContacts.filter(c => c !== mainEmergency).slice(0, 3).map((contact, i) => (
-          <a key={i} href={`tel:${contact.number}`} className="flex items-center justify-between px-3.5 py-3 rounded-xl no-underline" style={{ background: 'var(--surface-container)' }}>
-            <div className="flex-1 min-w-0 mr-3">
-              <div className="text-[13px] font-semibold" style={{ color: 'var(--text-primary)' }}>{contact.name}</div>
-              <div className="text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{contact.description}</div>
-            </div>
-            <span className="text-[14px] font-bold flex-shrink-0" style={{ color: 'var(--error)' }}>{contact.number}</span>
-          </a>
-        ))}
-      </div>
-
-      {/* Weather - compact card */}
-      <div className="card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-[11px] font-bold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Weather</span>
-          {allLocations.length > 1 && (
-            <div className="flex gap-1">
-              {allLocations.map(l => (
-                <button key={l.id} onClick={() => setSelectedWeatherLocation(l.id)} className="px-2 py-1 rounded-lg text-[11px] font-semibold" style={{ background: l.id === currentWeatherLoc ? 'var(--accent)' : 'transparent', color: l.id === currentWeatherLoc ? 'white' : 'var(--text-secondary)' }}>
-                  {l.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {weather?.isLoading ? (
-          <div className="flex items-center gap-2 justify-center py-4">
-            <Loader2 size={18} className="animate-spin" style={{ color: 'var(--accent)' }} />
-            <span className="text-[13px] text-[var(--text-secondary)]">Loading weather...</span>
-          </div>
-        ) : weather ? (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              {React.createElement(weather.icon, { size: 28, style: { color: 'var(--accent)' } })}
-              <span className="text-[28px] font-extrabold">{weather.temp}°</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-semibold capitalize">{weather.condition}</div>
-              <div className="text-[11px] text-[var(--text-secondary)]">
-                Feels {weather.feelsLike}° / Humidity {weather.humidity}%
-                {weatherLoc && ` / ${weatherLoc.name}`}
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Currency converter - always visible */}
+      {/* Currency converter */}
       <div className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Currency</span>

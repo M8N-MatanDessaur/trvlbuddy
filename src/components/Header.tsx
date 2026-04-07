@@ -82,15 +82,6 @@ const Header: React.FC<Props> = ({ pages }) => {
 
         {/* Right: controls */}
         <div className="flex items-center gap-0.5">
-          <button
-            onClick={toggleTheme}
-            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-            style={{ color: 'var(--text-secondary)' }}
-            aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-          >
-            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-          </button>
-
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu(!showMenu)}
@@ -103,6 +94,14 @@ const Header: React.FC<Props> = ({ pages }) => {
 
             {showMenu && (
               <div className="absolute right-0 top-full mt-1.5 w-48 rounded-2xl p-1.5 z-50 animate-[slideUp_0.15s_ease-out]" style={{ background: 'var(--surface-container)', boxShadow: 'var(--shadow-xl)', border: '0.5px solid var(--outline)' }}>
+                <button
+                  onClick={() => { toggleTheme(); setShowMenu(false); }}
+                  className="w-full flex items-center gap-3 px-3.5 py-3 text-sm rounded-xl transition-colors"
+                  style={{ color: 'var(--text-primary)' }}
+                >
+                  {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+                  {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+                </button>
                 {currentPlan && (
                   <button
                     onClick={handleShare}

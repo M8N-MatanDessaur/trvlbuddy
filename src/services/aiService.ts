@@ -1006,6 +1006,27 @@ Use natural, conversational language appropriate for travelers.
   return await callGeminiAPI(prompt, true); // Enable grounding for translations
 }
 
+export async function translateWithPronunciation(text: string, targetLanguage: string): Promise<{ translation: string; pronunciation: string }> {
+  const prompt = `
+Translate this English text to ${targetLanguage}:
+"${text}"
+
+Respond in exactly this JSON format, no other text:
+{"translation":"<the translation>","pronunciation":"<romanized pronunciation guide>"}
+
+Use natural, conversational language appropriate for travelers.
+The pronunciation should be a phonetic romanization that an English speaker can read aloud.
+`;
+
+  const raw = await callGeminiAPI(prompt, true);
+  try {
+    const cleaned = raw.replace(/```json\s*|```\s*/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch {
+    return { translation: raw, pronunciation: '' };
+  }
+}
+
 export async function chatWithTripAssistant(
   userMessage: string,
   travelPlan: TravelPlan,
