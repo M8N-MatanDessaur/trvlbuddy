@@ -19,9 +19,12 @@ export const useTheme = () => {
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => {
-    const savedTheme = localStorage.getItem('theme') as Theme;
-    if (savedTheme) return savedTheme;
-    // Detect system preference
+    // Only respect saved theme if user manually toggled it
+    if (localStorage.getItem('theme-manual')) {
+      const savedTheme = localStorage.getItem('theme') as Theme;
+      if (savedTheme) return savedTheme;
+    }
+    // Otherwise detect system preference
     if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark';
     return 'light';
   });
@@ -31,7 +34,21 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // Listen for system theme changes (only if user hasn't manually toggled)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      // Only auto-switch if there's no saved preference yet
+      if (!localStorage.getItem('theme-manual')) {
+        setTheme(e.matches ? 'dark' : 'light');
+      }
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   const toggleTheme = () => {
+    localStorage.setItem('theme-manual', 'true');
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
 
