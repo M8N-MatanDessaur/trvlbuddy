@@ -81,7 +81,7 @@ const SwipeNavigator: React.FC<Props> = ({ pages }) => {
             }}
             className="absolute inset-0 overflow-y-auto"
           >
-            <div className="h-full px-5 pb-2 flex flex-col">
+            <div className="h-full px-5 pb-8 flex flex-col">
               <Suspense fallback={<PageLoader />}>
                 <CurrentPage />
               </Suspense>
