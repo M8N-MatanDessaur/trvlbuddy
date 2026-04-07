@@ -59,6 +59,9 @@ const DynamicActivitiesPage: React.FC = () => {
 
       if (newActivities.length > 0) {
         setActivities([...activities, ...newActivities]);
+        // Auto-expand section to show new results
+        const sectionId = category.toLowerCase().replace(/\s+/g, '-');
+        setExpandedSection(sectionId);
       }
     } catch {
       // silently fail

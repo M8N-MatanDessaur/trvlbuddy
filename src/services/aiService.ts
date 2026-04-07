@@ -1296,13 +1296,14 @@ export async function discoverMoreActivities(
   const exclusionList = existingNames.slice(0, 20).join(', ');
 
   const prompt = `
-Generate 8-12 NEW activities for ${locationName} in the "${category}" category.
+Generate EXACTLY 10 NEW and UNIQUE activities for ${locationName} in the "${category}" category.
 
-IMPORTANT: Do NOT include any of these already-listed activities: ${exclusionList}
+CRITICAL: You MUST return exactly 10 activities. No fewer.
+CRITICAL: Do NOT include any of these existing activities: ${exclusionList}
 
 Use ONLY this category: ${category}
 
-Return a JSON array:
+Return a JSON array with exactly 10 items:
 [
   {
     "name": "Activity name",
@@ -1319,7 +1320,7 @@ Return a JSON array:
   }
 ]
 
-Focus on lesser-known, authentic local experiences. Include hidden gems and local favorites. Return only valid JSON.
+Focus on lesser-known, authentic local experiences. Include hidden gems, local favorites, and off-the-beaten-path spots that most tourists miss. You MUST return 10 items. Return only valid JSON.
 `;
 
   try {
