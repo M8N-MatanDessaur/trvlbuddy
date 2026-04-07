@@ -9,26 +9,14 @@ const loadingSteps = [
 ];
 
 const LoadingScreen: React.FC = () => {
-  const [progress, setProgress] = useState(0);
   const [activeStep, setActiveStep] = useState(0);
 
   useEffect(() => {
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 90) return prev + 0.3; // Slow crawl near the end
-        if (prev >= 70) return prev + 1; // Slow down
-        return prev + 2 + Math.random() * 3; // Steady progress
-      });
-    }, 500);
-
     const stepInterval = setInterval(() => {
       setActiveStep(prev => Math.min(prev + 1, loadingSteps.length - 1));
     }, 3500);
 
-    return () => {
-      clearInterval(progressInterval);
-      clearInterval(stepInterval);
-    };
+    return () => clearInterval(stepInterval);
   }, []);
 
   return (
@@ -76,15 +64,9 @@ const LoadingScreen: React.FC = () => {
           })}
         </div>
 
-        {/* Progress bar */}
-        <div className="bg-[var(--surface-container-high)] rounded-full h-1.5 mb-3 overflow-hidden">
-          <div
-            className="progress-bar h-1.5 rounded-full transition-all duration-1000 ease-out"
-            style={{ width: `${Math.min(progress, 95)}%` }}
-          />
-        </div>
+        {/* Status text */}
         <p className="text-xs text-text-tertiary">
-          {Math.round(Math.min(progress, 95))}% complete
+          {activeStep < loadingSteps.length - 1 ? loadingSteps[activeStep].text : 'Almost ready...'}
         </p>
 
         {/* Tip */}
