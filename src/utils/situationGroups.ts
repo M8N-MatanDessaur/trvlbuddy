@@ -1,19 +1,22 @@
 import { Translation } from '../types/TravelData';
+import { AlertTriangle, UtensilsCrossed, Car, Hotel, ShoppingBag, HandHeart, MessageCircle } from 'lucide-react';
 
 export interface SituationGroup {
   id: string;
   title: string;
-  emoji: string;
+  icon: React.FC<any>;
   categories: string[];
 }
 
+import React from 'react';
+
 export const situationGroups: SituationGroup[] = [
-  { id: 'emergency', title: 'Emergency', emoji: '🚨', categories: ['Emergency'] },
-  { id: 'restaurant', title: 'At a Restaurant', emoji: '🍽', categories: ['Food', 'Numbers'] },
-  { id: 'transport', title: 'Getting Around', emoji: '🚕', categories: ['Directions', 'Transportation', 'Travel'] },
-  { id: 'hotel', title: 'At Your Hotel', emoji: '🏨', categories: ['Accommodation'] },
-  { id: 'shopping', title: 'Shopping', emoji: '🛍', categories: ['Shopping'] },
-  { id: 'social', title: 'Being Polite', emoji: '👋', categories: ['Greetings'] },
+  { id: 'emergency', title: 'Emergency', icon: AlertTriangle, categories: ['Emergency'] },
+  { id: 'restaurant', title: 'At a Restaurant', icon: UtensilsCrossed, categories: ['Food', 'Numbers'] },
+  { id: 'transport', title: 'Getting Around', icon: Car, categories: ['Directions', 'Transportation', 'Travel'] },
+  { id: 'hotel', title: 'At Your Hotel', icon: Hotel, categories: ['Accommodation'] },
+  { id: 'shopping', title: 'Shopping', icon: ShoppingBag, categories: ['Shopping'] },
+  { id: 'social', title: 'Being Polite', icon: HandHeart, categories: ['Greetings'] },
 ];
 
 export function groupTranslationsBySituation(translations: Translation[]): { group: SituationGroup; phrases: Translation[] }[] {
@@ -30,11 +33,10 @@ export function groupTranslationsBySituation(translations: Translation[]): { gro
     }
   }
 
-  // Catch-all for unmatched
   const unmatched = translations.filter(t => !assigned.has(t.english));
   if (unmatched.length > 0) {
     result.push({
-      group: { id: 'other', title: 'Other Phrases', emoji: '💬', categories: [] },
+      group: { id: 'other', title: 'Other Phrases', icon: MessageCircle, categories: [] },
       phrases: unmatched,
     });
   }
