@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Navigation, Loader2 } from 'lucide-react';
+import { Send, MapPin, Navigation, Loader2, LocateFixed } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { useChat, ChatMessage } from '../contexts/ChatContext';
 import { chatWithTripAssistant } from '../services/aiService';
+import { getCurrentLocation, getCachedLocation, startWatchingLocation, UserLocation } from '../utils/geolocation';
 
 const ChatPage: React.FC = () => {
   const { currentPlan, activities } = useTravel();
@@ -11,6 +12,8 @@ const ChatPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(getCachedLocation());
+  const [locationLoading, setLocationLoading] = useState(false);
 
   // Welcome message on first mount (only if no messages yet)
   useEffect(() => {
@@ -36,6 +39,8 @@ const ChatPage: React.FC = () => {
 
   useEffect(() => {
     inputRef.current?.focus();
+    // Start watching location in background
+    startWatchingLocation(loc => setUserLocation(loc));
   }, []);
 
   const sendMessage = async (text?: string) => {
@@ -48,7 +53,12 @@ const ChatPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await chatWithTripAssistant(msg, currentPlan, activities);
+      // Append location context to the message if available
+      let enrichedMsg = msg;
+      if (userLocation) {
+        enrichedMsg += ` [USER_LOCATION: ${userLocation.lat},${userLocation.lng}]`;
+      }
+      const response = await chatWithTripAssistant(enrichedMsg, currentPlan, activities);
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
@@ -156,6 +166,29 @@ const ChatPage: React.FC = () => {
 
       {/* Input */}
       <div className="px-4 py-3" style={{ borderTop: '0.33px solid var(--outline)' }}>
+        {/* Location status */}
+        <div className="flex items-center gap-2 mb-2">
+          <button
+            onClick={async () => {
+              setLocationLoading(true);
+              try {
+                const loc = await getCurrentLocation();
+                setUserLocation(loc);
+              } catch {}
+              setLocationLoading(false);
+            }}
+            className="flex items-center gap-1.5 px-2.5 text-[11px] font-medium transition-all active:scale-95"
+            style={{
+              height: '28px',
+              borderRadius: '14px',
+              background: userLocation ? 'var(--accent-container)' : 'var(--surface-container)',
+              color: userLocation ? 'var(--accent)' : 'var(--text-tertiary)',
+            }}
+          >
+            {locationLoading ? <Loader2 size={12} className="animate-spin" /> : <LocateFixed size={12} />}
+            {userLocation ? 'Location active' : 'Enable location'}
+          </button>
+        </div>
         <div className="flex gap-2">
           <input
             ref={inputRef}
@@ -163,7 +196,7 @@ const ChatPage: React.FC = () => {
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-            placeholder="Ask me anything..."
+            placeholder={userLocation ? 'Ask about things near you...' : 'Ask me anything...'}
             className="flex-1 px-4 py-3 rounded-2xl text-[14px] border-none outline-none"
             style={{ background: 'var(--surface-container)', color: 'var(--text-primary)' }}
             disabled={isLoading}
