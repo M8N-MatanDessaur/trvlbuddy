@@ -207,23 +207,34 @@ const DynamicActivitiesPage: React.FC = () => {
                 {displayActivities.map((activity, i) => (
                   <DynamicActivityCard key={`${activity.name}-${i}`} activity={activity} onClick={a => { setSelectedActivity(a); setIsModalOpen(true); }} />
                 ))}
-              </div>
 
-              {/* Discover More button */}
-              {isExpanded && section.title !== 'Recommended for You' && section.title !== 'Free Things to Do' && (
-                <button
-                  onClick={() => handleDiscoverMore(section.title)}
-                  disabled={isLoadingThis}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[12px] font-semibold transition-all active:scale-[0.98] disabled:opacity-50"
-                  style={{ background: 'var(--surface-container)', color: 'var(--accent)' }}
-                >
-                  {isLoadingThis ? (
-                    <><Loader2 size={14} className="animate-spin" /> Finding more...</>
-                  ) : (
-                    <><Plus size={14} /> Discover more {section.title}</>
-                  )}
-                </button>
-              )}
+                {/* Find More card - sits in the grid like an activity card */}
+                {section.title !== 'Recommended for You' && section.title !== 'Free Things to Do' && (
+                  <button
+                    onClick={() => handleDiscoverMore(section.title)}
+                    disabled={isLoadingThis}
+                    className="activity-card flex flex-col items-center justify-center gap-3 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
+                    style={{ border: '2px dashed var(--outline)' }}
+                  >
+                    {isLoadingThis ? (
+                      <>
+                        <Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent)' }} />
+                        <span className="text-[12px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Finding more...</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-center" style={{ height: '48px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent-container)', color: 'var(--accent)' }}>
+                          <Plus size={24} />
+                        </div>
+                        <div className="text-center">
+                          <div className="text-[13px] font-bold" style={{ color: 'var(--accent)' }}>Find More</div>
+                          <div className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{section.title}</div>
+                        </div>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           );
         })
