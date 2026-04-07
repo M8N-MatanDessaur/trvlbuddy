@@ -124,6 +124,7 @@ const ConversationalOnboarding: React.FC = () => {
 
       await generateTravelContent(travelPlan, setActivities, setTranslations, setEmergencyContacts);
       setCurrentPlan(travelPlan);
+      setIsLoading(false);
       setHasCompletedOnboarding(true);
     } catch {
       toast('Failed to create your trip. Please try again.', 'error');
