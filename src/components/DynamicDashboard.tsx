@@ -251,23 +251,23 @@ const DynamicDashboard: React.FC = () => {
 
                   {/* Quick info + actions */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    {lang && (
-                      <span className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-medium" style={{ background: 'var(--surface-container-high)' }}>
-                        <Globe size={11} style={{ color: 'var(--text-tertiary)' }} /> {lang}
-                      </span>
-                    )}
-                    {currency && (
-                      <span className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-medium" style={{ background: 'var(--surface-container-high)' }}>
-                        <Coins size={11} style={{ color: 'var(--text-tertiary)' }} /> {currency}
-                      </span>
-                    )}
-                    <a
-                      href={`tel:${emergency}`}
-                      className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold no-underline transition-colors"
-                      style={{ background: 'var(--error-container)', color: 'var(--error)' }}
-                    >
-                      <Phone size={11} /> {emergency}
-                    </a>
+                    {[
+                      lang ? { icon: Globe, text: lang, bg: 'var(--surface-container-high)', color: 'var(--text-primary)' } : null,
+                      currency ? { icon: Coins, text: currency, bg: 'var(--surface-container-high)', color: 'var(--text-primary)' } : null,
+                      { icon: Phone, text: emergency, bg: 'var(--error-container)', color: 'var(--error)', href: `tel:${emergency}` },
+                    ].filter(Boolean).map((item: any, i) => {
+                      const inner = (
+                        <>
+                          <item.icon size={12} />
+                          <span>{item.text}</span>
+                        </>
+                      );
+                      const cls = "inline-flex items-center gap-1.5 px-3 rounded-lg text-[11px] font-semibold no-underline";
+                      const st = { background: item.bg, color: item.color, height: '32px' };
+                      return item.href
+                        ? <a key={i} href={item.href} className={cls} style={st}>{inner}</a>
+                        : <span key={i} className={cls} style={st}>{inner}</span>;
+                    })}
                   </div>
                 </div>
 
