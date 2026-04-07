@@ -1,7 +1,7 @@
 import React from 'react';
 import { GeneratedActivity } from '../types/TravelData';
-import { Clock, MapPin } from 'lucide-react';
-import { getCategoryIcon, getCategoryColor } from '../utils/categoryIcons';
+import { Clock } from 'lucide-react';
+import { getCategoryIcon } from '../utils/categoryIcons';
 
 interface DynamicActivityCardProps {
   activity: GeneratedActivity;
@@ -9,91 +9,61 @@ interface DynamicActivityCardProps {
 }
 
 const DynamicActivityCard: React.FC<DynamicActivityCardProps> = ({ activity, onClick }) => {
-  const getDifficultyStyle = (difficulty?: string) => {
-    switch (difficulty) {
-      case 'easy': return { bg: 'var(--success-container)', color: 'var(--success)' };
-      case 'moderate': return { bg: 'var(--warning-container)', color: 'var(--warning)' };
-      case 'challenging': return { bg: 'var(--error-container)', color: 'var(--error)' };
-      default: return { bg: 'var(--surface-container-high)', color: 'var(--text-secondary)' };
-    }
-  };
-
-  const getPriceSymbols = (estimatedCost: string) => {
-    const cost = estimatedCost.toLowerCase();
-    if (cost.includes('free') || cost === '0' || cost.includes('$0')) return 'Free';
-    const numbers = estimatedCost.match(/\d+/g);
-    if (!numbers || numbers.length === 0) return '$';
-    const maxPrice = Math.max(...numbers.map(n => parseInt(n)));
-    if (maxPrice <= 15) return '$';
-    if (maxPrice <= 35) return '$$';
-    if (maxPrice <= 60) return '$$$';
+  const getPriceLabel = (cost: string) => {
+    const c = cost.toLowerCase();
+    if (c.includes('free') || c === '0' || c.includes('$0')) return 'Free';
+    const nums = cost.match(/\d+/g);
+    if (!nums) return '$';
+    const max = Math.max(...nums.map(n => parseInt(n)));
+    if (max <= 15) return '$';
+    if (max <= 35) return '$$';
+    if (max <= 60) return '$$$';
     return '$$$$';
   };
 
   const CategoryIcon = getCategoryIcon(activity.category);
-  const categoryColor = getCategoryColor(activity.category);
-  const isDayTrip = activity.category === 'Daytrips';
-  const diffStyle = getDifficultyStyle(activity.difficulty);
 
   return (
     <div
-      className="activity-card cursor-pointer flex flex-col overflow-hidden group"
+      className="activity-card cursor-pointer flex flex-col"
       onClick={() => onClick(activity)}
     >
-      {/* Category accent stripe */}
-      <div className="h-1 w-full" style={{ backgroundColor: categoryColor }} />
-
-      <div className="p-5 flex flex-col flex-1">
-        {/* Top row: category chip + price */}
-        <div className="flex items-center justify-between mb-3">
-          <span
-            className="chip"
-            style={{ backgroundColor: categoryColor + '18', color: categoryColor }}
-          >
-            <CategoryIcon size={12} />
+      <div className="p-3.5 flex flex-col h-full">
+        {/* Category + price */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="flex items-center gap-1 text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>
+            <CategoryIcon size={11} />
             {activity.category}
           </span>
-          <span className="text-sm font-semibold" style={{ color: categoryColor }}>
-            {getPriceSymbols(activity.estimatedCost)}
+          <span className="text-[10px] font-bold" style={{ color: 'var(--text-tertiary)' }}>
+            {getPriceLabel(activity.estimatedCost)}
           </span>
         </div>
 
-        {/* Title */}
-        <h4 className="font-bold text-base leading-snug mb-2 group-hover:text-[var(--accent)] transition-colors">
+        {/* Title - 2 lines max */}
+        <h4
+          className="font-bold text-[13px] leading-tight mb-1.5"
+          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}
+        >
           {activity.name}
         </h4>
 
-        {/* Description */}
-        <p className="text-xs text-text-secondary leading-relaxed mb-4 flex-1">
-          {activity.description.substring(0, 100)}...
+        {/* Description - 3 lines max, fills space */}
+        <p
+          className="text-[11px] leading-relaxed flex-1"
+          style={{ color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as React.CSSProperties}
+        >
+          {activity.description}
         </p>
 
-        {/* Metadata row */}
-        <div className="flex items-center gap-4 text-xs text-text-tertiary mb-3">
+        {/* Bottom row */}
+        <div className="flex items-center gap-2 mt-2 text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
           <span className="flex items-center gap-1">
-            <Clock size={12} />
+            <Clock size={10} />
             {activity.duration}
           </span>
-          <span className="flex items-center gap-1 truncate">
-            <MapPin size={12} />
-            {activity.location}
-          </span>
-        </div>
-
-        {/* Bottom: difficulty badge */}
-        <div className="flex items-center gap-2">
           {activity.difficulty && (
-            <span
-              className="chip text-[10px] font-semibold uppercase tracking-wider"
-              style={{ backgroundColor: diffStyle.bg, color: diffStyle.color }}
-            >
-              {activity.difficulty}
-            </span>
-          )}
-          {isDayTrip && (
-            <span className="chip chip-accent text-[10px] font-semibold uppercase tracking-wider">
-              Day Trip
-            </span>
+            <span className="font-semibold capitalize">{activity.difficulty}</span>
           )}
         </div>
       </div>

@@ -1,417 +1,205 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTravel } from '../contexts/TravelContext';
-import { MapPin, Calendar, Users, Plane, Train, Car, Ship, Bus, Map, Navigation, Phone, Globe, Coins, Hotel, Sparkles } from 'lucide-react';
+import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles } from 'lucide-react';
 
 const DynamicDashboard: React.FC = () => {
   const { currentPlan } = useTravel();
+  const navigate = useNavigate();
 
   if (!currentPlan) {
     return (
       <section className="page">
-        <div className="text-center max-w-3xl mx-auto">
-          <h2 className="mb-4">Welcome to Your Travel Companion!</h2>
-          <p className="leading-relaxed text-main-secondary text-lg">
-            It looks like you haven't set up your trip yet. Please complete the onboarding to get started.
-          </p>
+        <div className="text-center py-16">
+          <h2 className="mb-3">Welcome!</h2>
+          <p className="text-[var(--text-secondary)]">Complete onboarding to get started.</p>
         </div>
       </section>
     );
   }
 
-  // CRITICAL FIX: Proper date formatting that matches the date picker exactly
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'Not set';
+  const fmtDate = (d: string) => {
+    if (!d) return '';
+    try { const [y, m, dd] = d.split('-').map(Number); return new Date(y, m - 1, dd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+    catch { return ''; }
+  };
+
+  const getDuration = () => {
+    if (currentPlan.tripType === 'day-trip') return 1;
+    const segs = (currentPlan.segments || []).filter((s: any) => s.city && s.startDate && s.endDate);
+    if (!segs.length) return 0;
+    const sorted = [...segs].sort((a: any, b: any) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
     try {
-      // Parse the YYYY-MM-DD string directly without timezone conversion
-      const [year, month, day] = dateString.split('-').map(Number);
-      
-      // Validate the parsed values
-      if (isNaN(year) || isNaN(month) || isNaN(day) || 
-          month < 1 || month > 12 || day < 1 || day > 31) {
-        return 'Invalid date';
-      }
-
-      // Create date object with local timezone (month is 0-indexed)
-      // This ensures the date displays exactly as selected
-      const date = new Date(year, month - 1, day);
-
-      // Double-check the date is valid
-      if (isNaN(date.getTime())) {
-        return 'Invalid date';
-      }
-
-      return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      });
-    } catch (error) {
-      return 'Invalid date';
-    }
+      const p = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+      return Math.max(Math.ceil((p(sorted.at(-1)!.endDate).getTime() - p(sorted[0].startDate).getTime()) / 86400000) + 1, 1);
+    } catch { return 0; }
   };
 
-  // CRITICAL FIX: Short date format for accordion headers (DD/MM/YYYY)
-  const formatDateShort = (dateString: string) => {
-    if (!dateString) return 'Not set';
-    try {
-      // Parse the YYYY-MM-DD string directly without timezone conversion
-      const [year, month, day] = dateString.split('-').map(Number);
+  const transportIcon = (m?: string) => ({ flight: Plane, train: Train, car: Car, ferry: Ship, bus: Bus }[m || ''] || Plane);
 
-      // Validate the parsed values
-      if (isNaN(year) || isNaN(month) || isNaN(day) ||
-          month < 1 || month > 12 || day < 1 || day > 31) {
-        return 'Invalid date';
-      }
-
-      // Create date object with local timezone (month is 0-indexed)
-      // This ensures the date displays exactly as selected
-      const date = new Date(year, month - 1, day);
-
-      // Double-check the date is valid
-      if (isNaN(date.getTime())) {
-        return 'Invalid date';
-      }
-      
-      // Format as DD/MM/YYYY to match the accordion display
-      const formattedDay = String(date.getDate()).padStart(2, '0');
-      const formattedMonth = String(date.getMonth() + 1).padStart(2, '0');
-      const formattedYear = date.getFullYear();
-      
-      return `${formattedDay}/${formattedMonth}/${formattedYear}`;
-    } catch (error) {
-      return 'Invalid date';
-    }
-  };
-
-  const getTripDuration = () => {
-    // For day trips, always return 1
-    if (currentPlan.tripType === 'day-trip') {
-      return 1;
-    }
-
-    // For full trips, calculate total duration from first to last segment
-    const segments = currentPlan.segments || [];
-    const citySegments = segments.filter(s => s.city && s.startDate && s.endDate);
-    
-    if (citySegments.length === 0) {
-      return 0;
-    }
-
-    // Sort segments by start date to ensure proper chronological order
-    const sortedSegments = [...citySegments].sort((a, b) => 
-      new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
-    );
-
-    try {
-      // Get the earliest start date and latest end date
-      const firstSegment = sortedSegments[0];
-      const lastSegment = sortedSegments[sortedSegments.length - 1];
-      
-      // Parse dates correctly without timezone issues - SAME METHOD AS formatDate
-      const parseLocalDate = (dateStr: string) => {
-        const [year, month, day] = dateStr.split('-').map(Number);
-        return new Date(year, month - 1, day);
-      };
-      
-      const startDate = parseLocalDate(firstSegment.startDate);
-      const endDate = parseLocalDate(lastSegment.endDate);
-      
-      // Check if dates are valid
-      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-        return 0;
-      }
-      
-      // Calculate total duration in days (including both start and end days)
-      const diffTime = endDate.getTime() - startDate.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end days
-      
-      // Ensure we return a positive number
-      return Math.max(diffDays, 1);
-    } catch (error) {
-      return 0;
-    }
-  };
-
-  const getTransportationIcon = (method?: string) => {
-    switch (method) {
-      case 'flight': return Plane;
-      case 'train': return Train;
-      case 'car': return Car;
-      case 'ferry': return Ship;
-      case 'bus': return Bus;
-      default: return Plane;
-    }
-  };
-
-  // Helper function to open location in maps - ONLY use address
-  const openInMaps = (address: string) => {
-    const query = encodeURIComponent(address);
-    window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
-  };
-
-  // Helper function to get directions - ONLY use address
-  const getDirections = (address: string) => {
-    const query = encodeURIComponent(address);
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${query}`, '_blank');
-  };
-
-  // Get display segments - PROPERLY SORTED BY START DATE
-  const getDisplaySegments = () => {
+  const segments = (() => {
     if (!currentPlan.segments) return [];
-    
-    if (currentPlan.tripType === 'full-trip') {
-      // CRITICAL FIX: Only show city segments and sort by start date chronologically
-      const citySegments = currentPlan.segments.filter(segment => segment.city && segment.startDate);
-      return citySegments.sort((a, b) => {
-        // Parse dates using the same method to ensure consistency
-        const parseLocalDate = (dateStr: string) => {
-          const [year, month, day] = dateStr.split('-').map(Number);
-          return new Date(year, month - 1, day);
-        };
-        
-        const dateA = parseLocalDate(a.startDate).getTime();
-        const dateB = parseLocalDate(b.startDate).getTime();
-        return dateA - dateB; // Ascending order (earliest first)
-      });
-    } else {
-      // For day trips, show all segments
-      return currentPlan.segments;
-    }
-  };
+    const s = currentPlan.tripType === 'full-trip'
+      ? currentPlan.segments.filter((s: any) => s.city && s.startDate)
+      : currentPlan.segments;
+    return [...s].sort((a: any, b: any) => {
+      const p = (d: string) => { const [y, m, dd] = d.split('-').map(Number); return new Date(y, m - 1, dd); };
+      return (a.startDate ? p(a.startDate).getTime() : 0) - (b.startDate ? p(b.startDate).getTime() : 0);
+    });
+  })();
 
-  const getSegmentDisplayName = (segment: any) => {
-    if (segment.city) {
-      return `${segment.city.name}, ${segment.destination.country}`;
-    }
-    return segment.destination.name;
-  };
-
-  const renderTripOverview = () => {
-    if (currentPlan.tripType === 'day-trip') {
-      const destination = currentPlan.destination || currentPlan.destinations?.[0];
-      
-      return (
-        <div className="space-y-6">
-          {/* Day Trip Header */}
-          <div className="text-center p-6 bg-primary-container rounded-2xl">
-            <h3 className="text-xl font-bold text-on-primary-container mb-2 flex items-center justify-center gap-2">
-              <MapPin size={20} /> {destination?.name}
-            </h3>
-            <p className="text-on-primary-container/80">
-              {destination?.country} • {currentPlan.travelers} travelers • 1 day
-            </p>
-          </div>
-
-          {/* Quick Info Cards */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-secondary-container rounded-xl">
-              <div className="text-center">
-                <Globe size={20} className="text-secondary mx-auto mb-2" />
-                <div className="text-sm font-medium text-on-secondary-container">Language</div>
-                <div className="text-xs text-on-secondary-container/80">
-                  {destination?.languages?.join(', ') || 'Local'}
-                </div>
-              </div>
-            </div>
-            <div className="p-4 bg-surface-container-high rounded-xl">
-              <div className="text-center">
-                <Coins size={20} className="mx-auto mb-2" />
-                <div className="text-sm font-medium text-text-primary">Currency</div>
-                <div className="text-xs text-text-secondary">
-                  {destination?.currency || 'Local'}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    } else {
-      // Full trip - show properly sorted segments
-      const displaySegments = getDisplaySegments();
-      const totalDuration = getTripDuration();
-      
-      return (
-        <div className="space-y-6">
-          {/* Trip Summary */}
-          <div className="text-center p-6 bg-primary-container rounded-2xl">
-            <h3 className="text-xl font-bold text-on-primary-container mb-2 flex items-center justify-center gap-2">
-              <Map size={20} /> Your Journey
-            </h3>
-            <div className="grid grid-cols-3 gap-4 mt-4">
-              <div className="text-center">
-                <div className="text-lg font-bold text-on-primary-container">{displaySegments.length}</div>
-                <div className="text-xs text-on-primary-container/80">Cities</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-on-primary-container">{totalDuration}</div>
-                <div className="text-xs text-on-primary-container/80">Days</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-bold text-on-primary-container">{currentPlan.travelers}</div>
-                <div className="text-xs text-on-primary-container/80">Travelers</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Cities List - NOW PROPERLY SORTED BY START DATE */}
-          <div className="space-y-4">
-            {displaySegments.map((segment, index) => {
-              const displayName = getSegmentDisplayName(segment);
-              
-              return (
-                <div key={segment.id} className="bg-surface-container rounded-2xl p-4 border border-outline">
-                  {/* City Header */}
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-8 h-8 bg-primary text-on-primary rounded-full flex items-center justify-center text-sm font-bold">
-                      {index + 1}
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-lg">{displayName}</h4>
-                      <div className="flex items-center gap-2 text-sm text-main-secondary">
-                        <Calendar size={12} />
-                        {/* CRITICAL FIX: Use formatDateShort for accordion header display */}
-                        <span>{formatDateShort(segment.startDate)} - {formatDateShort(segment.endDate)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Quick Info Grid */}
-                  <div className="grid grid-cols-3 gap-3 mb-4">
-                    <div className="text-center p-3 bg-primary-container rounded-xl">
-                      <Globe size={14} className="text-primary mx-auto mb-1" />
-                      <div className="text-xs font-medium text-on-primary-container">Language</div>
-                      <div className="text-xs text-on-primary-container/80 truncate">
-                        {segment.destination.languages?.[0] || 'Local'}
-                      </div>
-                    </div>
-                    <div className="text-center p-3 bg-secondary-container rounded-xl">
-                      <Coins size={14} className="mx-auto mb-1 text-secondary" />
-                      <div className="text-xs font-medium text-on-secondary-container">Currency</div>
-                      <div className="text-xs text-on-secondary-container/80">
-                        {segment.destination.currency || 'Local'}
-                      </div>
-                    </div>
-                    <div className="text-center p-3 bg-surface-container-high rounded-xl">
-                      <Phone size={14} className="text-primary mx-auto mb-1" />
-                      <div className="text-xs font-medium text-text-primary">Emergency</div>
-                      <div className="text-xs text-text-secondary">
-                        {segment.destination.emergencyNumber || '112'}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Accommodations */}
-                  {segment.accommodations && segment.accommodations.length > 0 && (
-                    <div>
-                      <h5 className="font-semibold mb-3 flex items-center gap-2 text-sm">
-                        <Hotel size={16} /> Accommodations ({segment.accommodations.length})
-                      </h5>
-                      <div className="space-y-3">
-                        {segment.accommodations.map((accommodation, accIndex) => (
-                          <div key={accommodation.id} className="p-3 rounded-xl bg-surface-container-high border border-outline">
-                            <div className="flex justify-between items-start gap-3">
-                              <div className="flex-1 min-w-0">
-                                <h6 className="font-semibold text-text-primary mb-1 text-sm">
-                                  {accommodation.name || `Accommodation ${accIndex + 1}`}
-                                </h6>
-                                <div className="flex items-start gap-2 mb-2">
-                                  <MapPin size={12} className="text-primary flex-shrink-0 mt-0.5" />
-                                  <span className="text-xs text-text-secondary leading-relaxed">
-                                    {accommodation.address || 'Address not specified'}
-                                  </span>
-                                </div>
-                                {accommodation.checkIn && accommodation.checkOut && (
-                                  <div className="flex items-center gap-2 text-xs text-main-secondary">
-                                    <Calendar size={10} />
-                                    {/* CRITICAL FIX: Use formatDateShort for accommodation dates too */}
-                                    <span>
-                                      {formatDateShort(accommodation.checkIn)} - {formatDateShort(accommodation.checkOut)}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                              
-                              {/* Action Buttons */}
-                              {accommodation.address && (
-                                <div className="flex gap-2 flex-shrink-0">
-                                  <button
-                                    onClick={() => openInMaps(accommodation.address)}
-                                    className="p-2 rounded-full hover:bg-primary/20 transition-colors"
-                                    title="View on map"
-                                  >
-                                    <Map size={14} className="text-primary" />
-                                  </button>
-                                  <button
-                                    onClick={() => getDirections(accommodation.address)}
-                                    className="p-2 rounded-full hover:bg-secondary/20 transition-colors"
-                                    title="Get directions"
-                                  >
-                                    <Navigation size={14} className="text-secondary" />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Transportation to Next */}
-                  {index < displaySegments.length - 1 && segment.transportationToNext && (
-                    <div className="mt-4 pt-4 border-t border-outline">
-                      <div className="flex items-center justify-center gap-2 p-3 bg-secondary-container rounded-xl">
-                        {React.createElement(getTransportationIcon(segment.transportationToNext.method), { 
-                          size: 16, 
-                          className: "text-secondary" 
-                        })}
-                        <div className="text-center">
-                          <div className="text-sm font-medium text-on-secondary-container">
-                            {segment.transportationToNext.method}
-                          </div>
-                          {segment.transportationToNext.duration && (
-                            <div className="text-xs text-on-secondary-container/70">
-                              {segment.transportationToNext.duration}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-  };
+  const duration = getDuration();
+  const dest = currentPlan.destination || currentPlan.destinations?.[0];
+  const isDayTrip = currentPlan.tripType === 'day-trip';
 
   return (
-    <section className="page">
-      {/* Main title */}
-      <div className="text-center max-w-4xl mx-auto mb-8">
-        <h1 className="mb-2 text-primary-color text-3xl sm:text-4xl lg:text-5xl">
-          {currentPlan.title || 'Your Travel Discovery'}
+    <section className="page space-y-5">
+
+      {/* ---- HEADER ---- */}
+      <div>
+        <h1 className="text-2xl font-extrabold tracking-tight leading-tight mb-1">
+          {currentPlan.title || 'Your Trip'}
         </h1>
-        <p className="text-lg sm:text-xl text-main-secondary mb-6">
-          {currentPlan.tripType === 'day-trip' ? 'Your Day Trip Guide' : 'Your Personalized Travel Guide'}
-        </p>
+        <div className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+          <span>{duration} {duration === 1 ? 'day' : 'days'}</span>
+          <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+          <span>{currentPlan.travelers} traveler{currentPlan.travelers !== 1 ? 's' : ''}</span>
+          {!isDayTrip && segments.length > 1 && (
+            <>
+              <span style={{ color: 'var(--text-tertiary)' }}>-</span>
+              <span>{segments.length} cities</span>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="text-center max-w-3xl mx-auto mb-8">
-        <h2 className="mb-4 text-xl sm:text-2xl">Welcome to your adventure!</h2>
-        <p className="leading-relaxed text-main-secondary text-base sm:text-lg">
-          {currentPlan.tripType === 'day-trip' 
-            ? 'Your personalized day trip guide is ready. Explore activities, use the translator, and discover amazing local experiences!'
-            : 'Your personalized travel guide is ready. Explore activities, use the translator, and try the AI Hub to create custom itineraries!'
-          }
-        </p>
+      {/* ---- ACTIONS ---- */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => navigate('/explore')}
+          className="card p-4 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+        >
+          <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent)', color: 'white' }}>
+            <Compass size={20} />
+          </div>
+          <div>
+            <div className="font-bold text-[14px] leading-tight">Explore</div>
+            <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">Activities & places</div>
+          </div>
+        </button>
+        <button
+          onClick={() => navigate('/language')}
+          className="card p-4 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
+        >
+          <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent-container)' }}>
+            <Globe size={20} style={{ color: 'var(--accent)' }} />
+          </div>
+          <div>
+            <div className="font-bold text-[14px] leading-tight">Translate</div>
+            <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">Key phrases</div>
+          </div>
+        </button>
       </div>
-      
-      {/* Trip Overview */}
-      {renderTripOverview()}
+
+      {/* ---- DESTINATIONS ---- */}
+      <div className="space-y-3">
+        <h3 className="text-[11px] font-bold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">
+          {isDayTrip ? 'Destination' : 'Itinerary'}
+        </h3>
+
+        {(isDayTrip && dest ? [{ id: 'day', city: { name: dest.name }, destination: dest, startDate: '', endDate: '', accommodations: [], transportationToNext: null }] : segments).map((segment: any, index: number) => {
+          const cityName = segment.city?.name || segment.destination?.name || '';
+          const country = segment.destination?.country || '';
+          const lang = segment.destination?.languages?.[0];
+          const currency = segment.destination?.currency;
+          const emergency = segment.destination?.emergencyNumber || '112';
+
+          return (
+            <React.Fragment key={segment.id}>
+              <div className="card overflow-hidden">
+                {/* City */}
+                <div className="p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    {!isDayTrip && (
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0" style={{ background: 'var(--accent)', color: 'white' }}>
+                        {index + 1}
+                      </div>
+                    )}
+                    {isDayTrip && (
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent-container)' }}>
+                        <MapPin size={15} style={{ color: 'var(--accent)' }} />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-[15px] leading-tight">{cityName}{country ? `, ${country}` : ''}</div>
+                      {segment.startDate && (
+                        <div className="text-[12px] text-[var(--text-secondary)] mt-0.5">{fmtDate(segment.startDate)} - {fmtDate(segment.endDate)}</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quick info + actions */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {lang && (
+                      <span className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-medium" style={{ background: 'var(--surface-container-high)' }}>
+                        <Globe size={11} style={{ color: 'var(--text-tertiary)' }} /> {lang}
+                      </span>
+                    )}
+                    {currency && (
+                      <span className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-medium" style={{ background: 'var(--surface-container-high)' }}>
+                        <Coins size={11} style={{ color: 'var(--text-tertiary)' }} /> {currency}
+                      </span>
+                    )}
+                    <a
+                      href={`tel:${emergency}`}
+                      className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold no-underline transition-colors"
+                      style={{ background: 'var(--error-container)', color: 'var(--error)' }}
+                    >
+                      <Phone size={11} /> {emergency}
+                    </a>
+                  </div>
+                </div>
+
+                {/* Accommodations */}
+                {segment.accommodations?.length > 0 && segment.accommodations.map((acc: any, i: number) => (
+                  <div key={acc.id} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: '0.33px solid var(--outline)' }}>
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--surface-container-high)' }}>
+                      <Hotel size={14} style={{ color: 'var(--text-secondary)' }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-semibold leading-tight truncate">{acc.name || `Stay ${i + 1}`}</div>
+                      {acc.address && <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">{acc.address}</div>}
+                    </div>
+                    {acc.address && (
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(acc.address)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
+                        title="Directions"
+                      >
+                        <NavIcon size={14} />
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Transport connector */}
+              {!isDayTrip && index < segments.length - 1 && segment.transportationToNext && (
+                <div className="flex items-center justify-center py-0.5">
+                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-tertiary)]">
+                    {React.createElement(transportIcon(segment.transportationToNext.method), { size: 12 })}
+                    <span className="capitalize">{segment.transportationToNext.method}</span>
+                    {segment.transportationToNext.duration && <span>({segment.transportationToNext.duration})</span>}
+                  </div>
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
     </section>
   );
 };

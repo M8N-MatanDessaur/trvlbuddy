@@ -1,250 +1,198 @@
 import React, { useState, useMemo } from 'react';
 import { useTravel } from '../contexts/TravelContext';
 import { GeneratedActivity } from '../types/TravelData';
-import FilterDropdown from './FilterDropdown';
 import DynamicActivityCard from './DynamicActivityCard';
 import DynamicActivityModal from './DynamicActivityModal';
+import PlannerModal from './PlannerModal';
 import { getCategoryIcon } from '../utils/categoryIcons';
-import { Globe, Building2, Bus, Search } from 'lucide-react';
+import { groupActivities } from '../utils/groupActivities';
+import { generateCustomItinerary } from '../services/aiService';
+import { Globe, Sparkles, Search, Check, Wand2 } from 'lucide-react';
 
 const DynamicActivitiesPage: React.FC = () => {
   const { currentPlan, activities } = useTravel();
-  const [activeCategory, setActiveCategory] = useState('All');
-  const [activeDestination, setActiveDestination] = useState('All');
+  const [activeFilter, setActiveFilter] = useState('all');
   const [selectedActivity, setSelectedActivity] = useState<GeneratedActivity | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+
+  // Day planner state
+  const [plannerMode, setPlannerMode] = useState(false);
+  const [selectedForPlan, setSelectedForPlan] = useState<string[]>([]);
+  const [isPlannerModalOpen, setIsPlannerModalOpen] = useState(false);
+  const [plannerLoading, setPlannerLoading] = useState(false);
+  const [itineraryResult, setItineraryResult] = useState('');
 
   if (!currentPlan) {
     return (
       <section className="page">
-        <div className="text-center max-w-3xl mx-auto">
-          <h2 className="mb-4">No Travel Plan Found</h2>
-          <p className="leading-relaxed text-main-secondary text-lg">
-            Please complete the onboarding to see personalized activities.
-          </p>
+        <div className="text-center py-16">
+          <h2 className="mb-3">No Travel Plan</h2>
+          <p className="text-[var(--text-secondary)]">Complete onboarding to see activities.</p>
         </div>
       </section>
     );
   }
 
-  const categories = useMemo(() => {
-    const uniqueCategories = [...new Set(activities.map(item => item.category))];
-    return ['All', ...uniqueCategories];
-  }, [activities]);
+  const sections = useMemo(() => groupActivities(activities), [activities]);
 
-  const destinations = useMemo(() => {
-    if (currentPlan.tripType === 'day-trip') {
-      return ['All'];
-    }
-    
-    // Only show cities, not countries
-    const uniqueCities = [...new Set(
-      currentPlan.segments
-        ?.filter(segment => segment.city) // Only segments with cities
-        .map(segment => segment.city!.name) || []
-    )];
-    
-    return ['All', ...uniqueCities];
-  }, [currentPlan]);
+  const categories = useMemo(() => ['all', ...new Set(activities.map(a => a.category))], [activities]);
 
-  const categoryIconElements: { [key: string]: React.ReactNode } = {
-    'All': <Globe size={18} />,
-    ...Object.fromEntries(
-      categories.filter(c => c !== 'All').map(c => [c, React.createElement(getCategoryIcon(c), { size: 18 })])
-    )
-  };
-
-  const destinationIconElements: { [key: string]: React.ReactNode } = {
-    'All': <Globe size={18} />
-  };
-
-  const filteredActivities = useMemo(() => {
-    let filtered = activities;
-    
-    if (activeCategory !== 'All') {
-      filtered = filtered.filter(activity => activity.category === activeCategory);
-    }
-    
-    if (activeDestination !== 'All' && currentPlan.tripType !== 'day-trip') {
-      // Find the city ID for the selected destination
-      const citySegment = currentPlan.segments?.find(segment => 
-        segment.city && segment.city.name === activeDestination
-      );
-      
-      if (citySegment?.city) {
-        filtered = filtered.filter(activity => activity.cityId === citySegment.city!.id);
-      }
-    }
-    
-    return filtered;
-  }, [activities, activeCategory, activeDestination, currentPlan]);
+  const filteredSections = useMemo(() => {
+    if (activeFilter === 'all') return sections;
+    return sections.map(s => ({
+      ...s,
+      activities: s.activities.filter(a => a.category === activeFilter),
+    })).filter(s => s.activities.length > 0);
+  }, [sections, activeFilter]);
 
   const handleActivityClick = (activity: GeneratedActivity) => {
-    setSelectedActivity(activity);
-    setIsModalOpen(true);
+    if (plannerMode) {
+      setSelectedForPlan(prev =>
+        prev.includes(activity.name) ? prev.filter(n => n !== activity.name) : [...prev, activity.name]
+      );
+    } else {
+      setSelectedActivity(activity);
+      setIsModalOpen(true);
+    }
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedActivity(null);
+  const generatePlan = async () => {
+    if (selectedForPlan.length === 0) return;
+    setPlannerLoading(true);
+    setItineraryResult('');
+    setIsPlannerModalOpen(true);
+    try {
+      const dest = currentPlan.destination || currentPlan.destinations?.[0];
+      const locationName = dest ? `${dest.name}, ${dest.country}` : 'your destination';
+      const result = await generateCustomItinerary(selectedForPlan, locationName);
+      setItineraryResult(result);
+    } catch {
+      setItineraryResult('<p style="color:var(--error)">Failed to generate itinerary. Please try again.</p>');
+    } finally {
+      setPlannerLoading(false);
+    }
   };
-
-  const getCityName = (cityId?: string) => {
-    if (!cityId) return '';
-    const segment = currentPlan.segments?.find(segment => segment.city?.id === cityId);
-    return segment?.city?.name || '';
-  };
-
-  // Count day trips for display
-  const dayTripsCount = activities.filter(activity => activity.category === 'Daytrips').length;
 
   return (
-    <section className="page">
-      <div className="text-center max-w-3xl mx-auto mb-12">
-        <h2 className="mb-4">
-          Discover {currentPlan.tripType === 'day-trip' 
-            ? (currentPlan.destination?.name || currentPlan.destinations[0]?.name)
-            : 'Your Cities'
-          }
-        </h2>
-        <p className="leading-relaxed text-main-secondary text-lg">
-          Personalized activities based on your interests: {currentPlan.interests.join(', ')}. 
-          {currentPlan.tripType !== 'day-trip' && destinations.length > 2 && ' Use the filters below to explore by category and city.'}
-          {dayTripsCount > 0 && (
-            <span className="inline-flex items-center gap-1 mt-2 text-primary font-medium">
-              <Bus size={16} /> Plus {dayTripsCount} amazing day trips to nearby destinations!
-            </span>
-          )}
+    <section className="page space-y-5">
+      {/* Title */}
+      <div>
+        <h1 className="text-2xl font-extrabold tracking-tight mb-1">Explore</h1>
+        <p className="text-[13px] text-[var(--text-secondary)]">
+          {activities.length} activities based on your interests
         </p>
       </div>
 
-      {/* Filter Section */}
-      <div className="mb-12">
-        <div className="flex flex-col md:flex-row gap-6 justify-center items-start md:items-end">
-          {/* Category Filter */}
-          <div className="w-full md:w-auto">
-            <FilterDropdown
-              categories={categories}
-              activeCategory={activeCategory}
-              onCategoryChange={setActiveCategory}
-              categoryIcons={categoryIconElements}
-              label="Filter by Category"
-            />
-          </div>
-
-          {/* City Filter (for full trips with multiple cities) */}
-          {currentPlan.tripType !== 'day-trip' && destinations.length > 2 && (
-            <div className="w-full md:w-auto">
-              <FilterDropdown
-                categories={destinations}
-                activeCategory={activeDestination}
-                onCategoryChange={setActiveDestination}
-                categoryIcons={destinationIconElements}
-                label="Filter by City"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Active Filters Display */}
-        <div className="mt-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-container rounded-full text-on-primary-container text-sm max-w-full">
-            <span className="flex-shrink-0">Showing:</span>
-            <span className="font-semibold flex-shrink-0">
-              {filteredActivities.length} {filteredActivities.length === 1 ? 'activity' : 'activities'}
-            </span>
-            
-            {/* Filter badges container with overflow handling */}
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              {activeCategory !== 'All' && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-primary text-on-primary rounded-full text-xs font-medium flex-shrink-0">
-                  <span>{React.createElement(getCategoryIcon(activeCategory), { size: 12 })}</span>
-                  <span className="truncate max-w-[80px]">{activeCategory}</span>
-                </span>
-              )}
-              {activeDestination !== 'All' && currentPlan.tripType !== 'day-trip' && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-secondary text-on-secondary rounded-full text-xs font-medium flex-shrink-0">
-                  <Building2 size={12} />
-                  <span className="truncate max-w-[80px]">{activeDestination}</span>
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* Filter chips */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        {categories.map(cat => {
+          const isActive = activeFilter === cat;
+          const CatIcon = cat === 'all' ? Globe : getCategoryIcon(cat);
+          return (
+            <button
+              key={cat}
+              onClick={() => setActiveFilter(cat)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
+              style={{
+                background: isActive ? 'var(--accent)' : 'var(--surface-container)',
+                color: isActive ? 'white' : 'var(--text-secondary)',
+              }}
+            >
+              <CatIcon size={14} />
+              {cat === 'all' ? 'All' : cat}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Day Trips Info Banner */}
-      {activeCategory === 'Daytrips' && filteredActivities.length > 0 && (
-        <div className="mb-8 p-6 bg-secondary-container rounded-2xl">
-          <div className="text-center">
-            <h3 className="text-xl font-bold text-on-secondary-container mb-2 flex items-center justify-center gap-2">
-              <Bus size={20} /> Day Trip Adventures
-            </h3>
-            <p className="text-on-secondary-container/80 leading-relaxed">
-              Discover amazing nearby destinations perfect for day trips! These are carefully selected cities and attractions 
-              within easy reach of your planned destinations, offering unique experiences you can enjoy and return the same day.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Plan My Day toggle */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => { setPlannerMode(!plannerMode); if (plannerMode) setSelectedForPlan([]); }}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all"
+          style={{
+            background: plannerMode ? 'var(--accent)' : 'var(--accent-container)',
+            color: plannerMode ? 'white' : 'var(--accent)',
+          }}
+        >
+          <Wand2 size={15} />
+          {plannerMode ? `${selectedForPlan.length} selected` : 'Plan My Day'}
+        </button>
 
-      {filteredActivities.length === 0 ? (
-        <div className="text-center py-12">
-          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Search size={24} className="text-primary" />
-          </div>
-          <h3 className="text-xl font-semibold mb-2">No activities found</h3>
-          <p className="text-main-secondary text-lg mb-4">
-            {currentPlan.tripType === 'day-trip' 
-              ? 'No activities available for this destination yet.'
-              : 'Try adjusting your filters or make sure you have cities added to your trip plan.'
-            }
-          </p>
+        {plannerMode && selectedForPlan.length > 0 && (
           <button
-            onClick={() => {
-              setActiveCategory('All');
-              setActiveDestination('All');
-            }}
-            className="action-button"
+            onClick={generatePlan}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-bold transition-all active:scale-95"
+            style={{ background: 'var(--accent)', color: 'white' }}
           >
-            Clear All Filters
+            <Sparkles size={15} />
+            Generate
           </button>
+        )}
+      </div>
+
+      {/* Activity sections - ALL GRID, no horizontal scroll */}
+      {filteredSections.length === 0 ? (
+        <div className="text-center py-12">
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--surface-container-high)' }}>
+            <Search size={22} style={{ color: 'var(--text-tertiary)' }} />
+          </div>
+          <h3 className="text-base font-bold mb-1">No activities found</h3>
+          <p className="text-sm text-[var(--text-secondary)] mb-4">Try a different filter</p>
+          <button onClick={() => setActiveFilter('all')} className="text-sm font-semibold" style={{ color: 'var(--accent)' }}>Clear filters</button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-          {filteredActivities.map((activity, index) => (
-            <div key={`${activity.name}-${index}`} className="relative">
-              {/* City badge for full trips */}
-              {currentPlan.tripType !== 'day-trip' && activity.cityId && activity.category !== 'Daytrips' && (
-                <div className="absolute top-4 right-4 z-10">
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-secondary text-on-secondary rounded-full text-xs font-medium shadow-sm">
-                    <Building2 size={12} /> {getCityName(activity.cityId)}
-                  </span>
+        filteredSections.map(section => {
+          const isExpanded = expandedSection === section.id;
+          const displayActivities = isExpanded ? section.activities : section.activities.slice(0, 4);
+
+          return (
+            <div key={section.id} className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-[15px] font-bold">{section.title}</h2>
+                  <p className="text-[11px] text-[var(--text-tertiary)]">{section.subtitle}</p>
                 </div>
-              )}
-              
-              {/* Day trip badge */}
-              {activity.category === 'Daytrips' && (
-                <div className="absolute top-4 right-4 z-10">
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-primary text-on-primary rounded-full text-xs font-medium shadow-sm">
-                    <Bus size={12} /> Day Trip
-                  </span>
-                </div>
-              )}
-              
-              <DynamicActivityCard
-                activity={activity}
-                onClick={handleActivityClick}
-              />
+                {section.activities.length > 4 && (
+                  <button
+                    onClick={() => setExpandedSection(isExpanded ? null : section.id)}
+                    className="text-[12px] font-semibold"
+                    style={{ color: 'var(--accent)' }}
+                  >
+                    {isExpanded ? 'Less' : `All ${section.activities.length}`}
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                {displayActivities.map((activity, i) => (
+                  <div key={`${activity.name}-${i}`} className="relative">
+                    {plannerMode && selectedForPlan.includes(activity.name) && (
+                      <div className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)', color: 'white' }}>
+                        <Check size={14} />
+                      </div>
+                    )}
+                    <DynamicActivityCard activity={activity} onClick={handleActivityClick} />
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
+          );
+        })
       )}
 
       <DynamicActivityModal
         activity={selectedActivity}
         isOpen={isModalOpen}
-        onClose={handleCloseModal}
+        onClose={() => { setIsModalOpen(false); setSelectedActivity(null); }}
+      />
+
+      <PlannerModal
+        isOpen={isPlannerModalOpen}
+        onClose={() => { setIsPlannerModalOpen(false); setItineraryResult(''); }}
+        isLoading={plannerLoading}
+        result={itineraryResult}
       />
     </section>
   );
