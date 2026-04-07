@@ -2,8 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTravel } from '../contexts/TravelContext';
 import { getSmartSuggestion } from '../services/aiService';
-import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb, Heart, RefreshCw, Loader2, Pencil, X as XIcon } from 'lucide-react';
+import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb, Heart, RefreshCw, Loader2, Pencil, X as XIcon, Cloud, Sun, CloudRain } from 'lucide-react';
 import DayDebrief from './trip/DayDebrief';
+
+interface WeatherData {
+  temp: number;
+  condition: string;
+  icon: React.ComponentType<any>;
+  humidity: number;
+  feelsLike: number;
+  isLoading: boolean;
+  error?: string;
+}
+interface LocationInfo { id: string; name: string; country: string; coordinates?: { lat: number; lng: number }; }
 
 // Cache suggestion outside component so it persists across remounts
 let cachedSuggestion: { title: string; description: string; activityName: string } | null = null;
@@ -15,6 +26,8 @@ const DynamicDashboard: React.FC = () => {
   const [suggestion, setSuggestion] = useState(cachedSuggestion);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [editingAcc, setEditingAcc] = useState<{ segmentId: string; accId: string; name: string; address: string } | null>(null);
+  const [weatherData, setWeatherData] = useState<{ [key: string]: WeatherData }>({});
+  const [selectedWeatherLoc, setSelectedWeatherLoc] = useState('');
 
   const saveAccommodation = () => {
     if (!editingAcc || !currentPlan) return;
@@ -33,6 +46,56 @@ const DynamicDashboard: React.FC = () => {
     setCurrentPlan(updated);
     setEditingAcc(null);
   };
+
+  const getWeatherLocations = (): LocationInfo[] => {
+    if (!currentPlan) return [];
+    const locs: LocationInfo[] = [];
+    if (currentPlan.tripType === 'day-trip') {
+      const d = currentPlan.destination || currentPlan.destinations?.[0];
+      if (d) locs.push({ id: d.id, name: d.name, country: d.country, coordinates: d.coordinates });
+    } else {
+      const citySegs = currentPlan.segments?.filter((s: any) => s.city) || [];
+      if (citySegs.length > 0) {
+        citySegs.forEach((s: any) => locs.push({ id: s.city!.id, name: s.city!.name, country: s.destination.country, coordinates: s.city!.coordinates }));
+      } else {
+        currentPlan.segments?.filter((s: any) => !s.city).forEach((s: any) => {
+          if (s.destination.name) locs.push({ id: s.destination.id, name: s.destination.name, country: s.destination.country, coordinates: s.destination.coordinates });
+        });
+      }
+    }
+    return locs;
+  };
+
+  const fetchWeather = async (loc: LocationInfo): Promise<WeatherData> => {
+    try {
+      const res = await fetch(`https://wttr.in/${encodeURIComponent(loc.name)}?format=j1`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const cur = data.current_condition[0];
+      const code = parseInt(cur.weatherCode);
+      const icon = code >= 200 && code < 700 ? CloudRain : code === 800 ? Sun : Cloud;
+      return { temp: parseInt(cur.temp_C), condition: cur.weatherDesc[0].value, icon, humidity: parseInt(cur.humidity), feelsLike: parseInt(cur.FeelsLikeC), isLoading: false };
+    } catch {
+      const baseTemp = loc.coordinates ? (Math.abs(loc.coordinates.lat) > 45 ? 15 : Math.abs(loc.coordinates.lat) > 23 ? 22 : 28) : 22;
+      return { temp: baseTemp + Math.floor(Math.random() * 6) - 3, condition: 'Partly Cloudy', icon: Cloud, humidity: 55, feelsLike: baseTemp, isLoading: false, error: 'Estimated weather' };
+    }
+  };
+
+  const weatherLocations = getWeatherLocations();
+  const currentWeatherLocId = selectedWeatherLoc || weatherLocations[0]?.id || '';
+  const weather = weatherData[currentWeatherLocId];
+  const weatherLoc = weatherLocations.find(l => l.id === currentWeatherLocId);
+
+  useEffect(() => {
+    if (weatherLocations.length === 0) return;
+    const init: { [k: string]: WeatherData } = {};
+    weatherLocations.forEach(l => { init[l.id] = { temp: 0, condition: 'Loading', icon: Loader2, humidity: 0, feelsLike: 0, isLoading: true }; });
+    setWeatherData(init);
+    weatherLocations.forEach(async loc => {
+      const w = await fetchWeather(loc);
+      setWeatherData(prev => ({ ...prev, [loc.id]: w }));
+    });
+  }, [weatherLocations.length]);
 
   if (!currentPlan) {
     return (
@@ -144,6 +207,44 @@ const DynamicDashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Weather */}
+      {weatherLocations.length > 0 && (
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-bold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Weather</span>
+            {weatherLocations.length > 1 && (
+              <div className="flex gap-1">
+                {weatherLocations.map(l => (
+                  <button key={l.id} onClick={() => setSelectedWeatherLoc(l.id)} className="px-2 py-1 rounded-lg text-[11px] font-semibold" style={{ background: l.id === currentWeatherLocId ? 'var(--accent)' : 'transparent', color: l.id === currentWeatherLocId ? 'white' : 'var(--text-secondary)' }}>
+                    {l.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {weather?.isLoading ? (
+            <div className="flex items-center gap-2 justify-center py-4">
+              <Loader2 size={18} className="animate-spin" style={{ color: 'var(--accent)' }} />
+              <span className="text-[13px] text-[var(--text-secondary)]">Loading weather...</span>
+            </div>
+          ) : weather ? (
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                {React.createElement(weather.icon, { size: 28, style: { color: 'var(--accent)' } })}
+                <span className="text-[28px] font-extrabold">{weather.temp}°</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold capitalize">{weather.condition}</div>
+                <div className="text-[11px] text-[var(--text-secondary)]">
+                  Feels {weather.feelsLike}° / Humidity {weather.humidity}%
+                  {weatherLoc && ` / ${weatherLoc.name}`}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* Smart Suggestion */}
       <div className="flex items-center gap-2">

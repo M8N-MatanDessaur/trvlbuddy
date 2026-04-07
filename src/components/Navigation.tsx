@@ -1,11 +1,12 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Compass, Languages, Wrench } from 'lucide-react';
+import { Home, Compass, Languages, Phone, Wrench } from 'lucide-react';
 
 const navItems = [
   { path: '/', icon: Home, label: 'Trip' },
   { path: '/explore', icon: Compass, label: 'Explore' },
   { path: '/language', icon: Languages, label: 'Language' },
+  { path: '/emergency', icon: Phone, label: 'SOS' },
   { path: '/utilities', icon: Wrench, label: 'Tools' },
 ];
 

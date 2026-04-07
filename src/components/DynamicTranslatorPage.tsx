@@ -1,11 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useTravel } from '../contexts/TravelContext';
-import { translateCustomText } from '../services/aiService';
+import { translateWithPronunciation } from '../services/aiService';
 import { groupTranslationsBySituation, getContextualGroups } from '../utils/situationGroups';
 import { useContextualContent } from '../hooks/useContextualContent';
 import ContextualPhraseBanner from './language/ContextualPhraseBanner';
 import ShowToLocal from './ShowToLocal';
-import { Volume2, Copy, Check, ArrowRight, Loader2, ChevronDown, ChevronRight, Maximize2 } from 'lucide-react';
+import { Volume2, Copy, Check, ArrowRight, Loader2, ChevronDown, ChevronRight, Maximize2, BookmarkPlus, Bookmark, Trash2 } from 'lucide-react';
 
 const DynamicTranslatorPage: React.FC = () => {
   const { currentPlan, translations } = useTravel();
@@ -13,10 +13,18 @@ const DynamicTranslatorPage: React.FC = () => {
   const [selectedLanguage, setSelectedLanguage] = useState('');
   const [customText, setCustomText] = useState('');
   const [translatedText, setTranslatedText] = useState('');
+  const [translatedPronunciation, setTranslatedPronunciation] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState('');
+
+  interface SavedWord { english: string; local: string; pronunciation: string; language: string; savedAt: number; }
+  const MY_WORDS_KEY = 'myWords';
+  const [savedWords, setSavedWords] = useState<SavedWord[]>(() => {
+    try { return JSON.parse(localStorage.getItem(MY_WORDS_KEY) || '[]'); } catch { return []; }
+  });
   const [copiedText, setCopiedText] = useState('');
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+  const userToggledAccordion = useRef(false);
   const [showToLocalData, setShowToLocalData] = useState<{ phrases: { local: string; english: string; pronunciation?: string }[]; index: number } | null>(null);
 
   if (!currentPlan) {
@@ -56,10 +64,10 @@ const DynamicTranslatorPage: React.FC = () => {
     return base;
   }, [filteredTranslations, moment.tripPhase, suggestedPhraseGroups]);
 
-  // Auto-expand the most relevant group on mount/context change
+  // Auto-expand the most relevant group on mount only (skip if user manually toggled)
   useEffect(() => {
+    if (userToggledAccordion.current) return;
     if (moment.tripPhase === 'active' && suggestedPhraseGroups.length > 0) {
-      // Find the first suggested group that has phrases
       const match = situationGroups.find(
         (g) => suggestedPhraseGroups.includes(g.group.id) && g.phrases.length > 0,
       );
@@ -69,22 +77,43 @@ const DynamicTranslatorPage: React.FC = () => {
       }
     }
     setExpandedGroup('emergency');
-  }, [moment.tripPhase, suggestedPhraseGroups, situationGroups]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleTranslate = async () => {
     if (!customText.trim()) return;
     setIsTranslating(true);
     setTranslationError('');
     setTranslatedText('');
+    setTranslatedPronunciation('');
     try {
-      const result = await translateCustomText(customText.trim(), currentLanguage);
-      setTranslatedText(result);
+      const result = await translateWithPronunciation(customText.trim(), currentLanguage);
+      setTranslatedText(result.translation);
+      setTranslatedPronunciation(result.pronunciation);
     } catch {
       setTranslationError('Translation failed. Please try again.');
     } finally {
       setIsTranslating(false);
     }
   };
+
+  const saveWord = () => {
+    if (!translatedText || !customText.trim()) return;
+    const word: SavedWord = { english: customText.trim(), local: translatedText, pronunciation: translatedPronunciation, language: currentLanguage, savedAt: Date.now() };
+    const updated = [word, ...savedWords.filter(w => !(w.english === word.english && w.language === word.language))];
+    setSavedWords(updated);
+    localStorage.setItem(MY_WORDS_KEY, JSON.stringify(updated));
+  };
+
+  const removeWord = (index: number) => {
+    const updated = savedWords.filter((_, i) => i !== index);
+    setSavedWords(updated);
+    localStorage.setItem(MY_WORDS_KEY, JSON.stringify(updated));
+  };
+
+  const isWordSaved = translatedText && savedWords.some(w => w.english === customText.trim() && w.language === currentLanguage);
+
+  const myWordsForLanguage = savedWords.filter(w => w.language === currentLanguage);
 
   const langCodeMap: Record<string, string> = {
     'Korean': 'ko-KR', 'Japanese': 'ja-JP', 'Chinese': 'zh-CN', 'Mandarin': 'zh-CN',
@@ -154,15 +183,43 @@ const DynamicTranslatorPage: React.FC = () => {
         {translatedText && (
           <div className="p-3 rounded-xl" style={{ background: 'var(--accent-container)' }}>
             <div className="text-[16px] font-bold mb-1" style={{ color: 'var(--on-accent-container)' }}>{translatedText}</div>
+            {translatedPronunciation && (
+              <div className="text-[12px] mb-1" style={{ color: 'var(--on-accent-container)', opacity: 0.7 }}>{translatedPronunciation}</div>
+            )}
             <div className="flex gap-2 mt-2">
               <button onClick={() => speak(translatedText)} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-container)', color: 'var(--accent)' }}><Volume2 size={18} /></button>
               <button onClick={() => copyText(translatedText)} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-container)', color: copiedText === translatedText ? 'var(--success)' : 'var(--text-secondary)' }}>{copiedText === translatedText ? <Check size={18} /> : <Copy size={18} />}</button>
-              <button onClick={() => setShowToLocalData({ phrases: [{ local: translatedText, english: customText }], index: 0 })} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)' }}><Maximize2 size={18} /></button>
+              <button onClick={() => setShowToLocalData({ phrases: [{ local: translatedText, english: customText, pronunciation: translatedPronunciation }], index: 0 })} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)' }}><Maximize2 size={18} /></button>
+              <button onClick={saveWord} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--surface-container)', color: isWordSaved ? 'var(--success)' : 'var(--text-secondary)' }}>{isWordSaved ? <Bookmark size={18} /> : <BookmarkPlus size={18} />}</button>
             </div>
           </div>
         )}
         {translationError && <div className="text-[12px] text-center" style={{ color: 'var(--error)' }}>{translationError}</div>}
       </div>
+
+      {/* My Words */}
+      {myWordsForLanguage.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-[11px] font-bold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">My Words</h3>
+          <div className="card overflow-hidden">
+            {myWordsForLanguage.map((word, i) => (
+              <div key={word.savedAt} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: i > 0 ? '0.33px solid var(--outline)' : 'none' }}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[15px] font-bold leading-tight">{word.local}</div>
+                  {word.pronunciation && <div className="text-[11px] text-[var(--text-tertiary)] mt-0.5">{word.pronunciation}</div>}
+                  <div className="text-[12px] text-[var(--text-secondary)] mt-0.5">{word.english}</div>
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  <button onClick={() => speak(word.local)} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: 'var(--accent)' }}><Volume2 size={18} /></button>
+                  <button onClick={() => copyText(word.local)} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: copiedText === word.local ? 'var(--success)' : 'var(--text-tertiary)' }}>{copiedText === word.local ? <Check size={18} /> : <Copy size={18} />}</button>
+                  <button onClick={() => setShowToLocalData({ phrases: myWordsForLanguage.map(w => ({ local: w.local, english: w.english, pronunciation: w.pronunciation })), index: i })} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: 'var(--text-tertiary)' }}><Maximize2 size={18} /></button>
+                  <button onClick={() => removeWord(savedWords.indexOf(word))} className="w-10 h-10 rounded-full flex items-center justify-center" style={{ color: 'var(--text-tertiary)' }}><Trash2 size={18} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Situation groups */}
       <div className="space-y-2">
@@ -171,7 +228,7 @@ const DynamicTranslatorPage: React.FC = () => {
           const isExpanded = expandedGroup === group.id;
           return (
             <div key={group.id} className="card overflow-hidden">
-              <button onClick={() => setExpandedGroup(isExpanded ? null : group.id)} className="w-full flex items-center gap-3 p-4 text-left">
+              <button onClick={() => { userToggledAccordion.current = true; setExpandedGroup(isExpanded ? null : group.id); }} className="w-full flex items-center gap-3 p-4 text-left">
                 <div className="flex items-center justify-center flex-shrink-0" style={{ height: '36px', aspectRatio: '1', borderRadius: '12px', background: 'var(--accent-container)', color: 'var(--accent)' }}>
                   <group.icon size={18} />
                 </div>
