@@ -142,7 +142,9 @@ const DynamicTranslatorPage: React.FC = () => {
           return (
             <div key={group.id} className="card overflow-hidden">
               <button onClick={() => setExpandedGroup(isExpanded ? null : group.id)} className="w-full flex items-center gap-3 p-4 text-left">
-                <span className="text-xl">{group.emoji}</span>
+                <div className="flex items-center justify-center flex-shrink-0" style={{ height: '36px', aspectRatio: '1', borderRadius: '12px', background: 'var(--accent-container)', color: 'var(--accent)' }}>
+                  <group.icon size={18} />
+                </div>
                 <div className="flex-1">
                   <div className="text-[14px] font-bold">{group.title}</div>
                   <div className="text-[11px] text-[var(--text-tertiary)]">{phrases.length} phrases</div>

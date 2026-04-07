@@ -38,7 +38,7 @@ const ChatPage: React.FC = () => {
   }, [messages]);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    // Don't auto-focus input (prevents keyboard from opening on page load)
     // Start watching location in background
     startWatchingLocation(loc => setUserLocation(loc));
   }, []);

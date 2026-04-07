@@ -302,8 +302,8 @@ const DynamicDashboard: React.FC = () => {
                       {acc.address ? <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">{acc.address}</div> : <div className="text-[11px] mt-0.5" style={{ color: 'var(--accent)' }}>Tap to edit</div>}
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
-                      <div className="flex items-center justify-center" style={{ height: '32px', aspectRatio: '1', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
-                        <Pencil size={13} />
+                      <div className="flex items-center justify-center" style={{ height: '32px', aspectRatio: '1', borderRadius: '50%', background: 'var(--surface-container-high)', color: 'var(--text-secondary)' }}>
+                        <Pencil size={14} />
                       </div>
                       {acc.address && (
                         <a
