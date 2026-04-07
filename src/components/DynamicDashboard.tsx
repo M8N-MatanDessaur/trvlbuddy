@@ -2,12 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTravel } from '../contexts/TravelContext';
 import { getSmartSuggestion } from '../services/aiService';
-import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb } from 'lucide-react';
+import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb, Heart, RefreshCw, Loader2 } from 'lucide-react';
+
+// Cache suggestion outside component so it persists across remounts
+let cachedSuggestion: { title: string; description: string; activityName: string } | null = null;
+let suggestionFetched = false;
 
 const DynamicDashboard: React.FC = () => {
-  const { currentPlan, activities } = useTravel();
+  const { currentPlan, activities, savedActivities } = useTravel();
   const navigate = useNavigate();
-  const [suggestion, setSuggestion] = useState<{ title: string; description: string; activityName: string } | null>(null);
+  const [suggestion, setSuggestion] = useState(cachedSuggestion);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
 
   if (!currentPlan) {
     return (
@@ -54,28 +59,60 @@ const DynamicDashboard: React.FC = () => {
   const dest = currentPlan.destination || currentPlan.destinations?.[0];
   const isDayTrip = currentPlan.tripType === 'day-trip';
 
-  // Fetch smart suggestion on mount
-  useEffect(() => {
-    if (!currentPlan || activities.length === 0) return;
-    const dest = currentPlan.destination || currentPlan.destinations?.[0];
+  const fetchSuggestion = async (force = false) => {
+    if ((!force && suggestionFetched) || !currentPlan || activities.length === 0) return;
+    const d = currentPlan.destination || currentPlan.destinations?.[0];
     const seg = segments[0];
-    const locationName = seg?.city ? `${seg.city.name}, ${dest?.country}` : dest?.name || '';
-    if (!locationName) return;
+    const loc = seg?.city ? `${seg.city.name}, ${d?.country}` : d?.name || '';
+    if (!loc) return;
 
-    getSmartSuggestion(locationName, currentPlan.interests || [], activities.map(a => a.name))
-      .then(s => { if (s) setSuggestion(s); })
-      .catch(() => {});
-  }, [currentPlan?.id]);
+    setSuggestionLoading(true);
+    try {
+      const s = await getSmartSuggestion(loc, currentPlan.interests || [], activities.map(a => a.name));
+      if (s) { cachedSuggestion = s; setSuggestion(s); }
+      suggestionFetched = true;
+    } catch {} finally { setSuggestionLoading(false); }
+  };
+
+  useEffect(() => { fetchSuggestion(); }, [currentPlan?.id]);
+
+  // Trip day calculation
+  const getTripDayInfo = () => {
+    if (!currentPlan.startDate) return null;
+    const p = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+    const start = p(currentPlan.startDate);
+    const end = currentPlan.endDate ? p(currentPlan.endDate) : start;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const diff = Math.floor((today.getTime() - start.getTime()) / 86400000);
+    const total = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+
+    if (diff < 0) return { label: `Starts in ${Math.abs(diff)} day${Math.abs(diff) !== 1 ? 's' : ''}`, type: 'upcoming' as const };
+    if (diff >= total) return { label: 'Trip complete', type: 'past' as const };
+    return { label: `Day ${diff + 1} of ${total}`, type: 'active' as const };
+  };
+
+  const tripDay = getTripDayInfo();
+  const savedActivityList = activities.filter(a => savedActivities.includes(a.name));
 
   return (
     <section className="page space-y-5">
 
       {/* ---- HEADER ---- */}
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight leading-tight mb-1">
-          {currentPlan.title || 'Your Trip'}
-        </h1>
-        <div className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)]">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-extrabold tracking-tight leading-tight">
+            {currentPlan.title || 'Your Trip'}
+          </h1>
+          {tripDay && (
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg" style={{
+              background: tripDay.type === 'active' ? 'var(--accent)' : tripDay.type === 'upcoming' ? 'var(--accent-container)' : 'var(--surface-container-high)',
+              color: tripDay.type === 'active' ? 'white' : tripDay.type === 'upcoming' ? 'var(--accent)' : 'var(--text-tertiary)',
+            }}>
+              {tripDay.label}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)] mt-1">
           <span>{duration} {duration === 1 ? 'day' : 'days'}</span>
           <span style={{ color: 'var(--text-tertiary)' }}>-</span>
           <span>{currentPlan.travelers} traveler{currentPlan.travelers !== 1 ? 's' : ''}</span>
@@ -89,20 +126,62 @@ const DynamicDashboard: React.FC = () => {
       </div>
 
       {/* Smart Suggestion */}
-      {suggestion && (
+      <div className="flex items-center gap-2">
         <button
           onClick={() => navigate('/explore')}
-          className="w-full flex items-center gap-3 p-4 rounded-2xl text-left transition-transform active:scale-[0.98]"
+          className="flex-1 flex items-center gap-3 p-3.5 rounded-2xl text-left transition-transform active:scale-[0.98]"
           style={{ background: 'var(--accent-container)' }}
         >
-          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 aspect-square" style={{ background: 'var(--accent)', color: 'white' }}>
+          <div className="flex items-center justify-center flex-shrink-0" style={{ height: '40px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent)', color: 'white' }}>
             <Lightbulb size={18} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-bold" style={{ color: 'var(--accent)' }}>{suggestion.title}</div>
-            <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{suggestion.description}</div>
+            {suggestionLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 size={14} className="animate-spin" style={{ color: 'var(--accent)' }} />
+                <span className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>Getting suggestion...</span>
+              </div>
+            ) : suggestion ? (
+              <>
+                <div className="text-[13px] font-bold" style={{ color: 'var(--accent)' }}>{suggestion.title}</div>
+                <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{suggestion.description}</div>
+              </>
+            ) : (
+              <div className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>Tap to explore activities</div>
+            )}
           </div>
         </button>
+        <button
+          onClick={() => fetchSuggestion(true)}
+          disabled={suggestionLoading}
+          className="flex items-center justify-center flex-shrink-0 transition-all active:scale-90 disabled:opacity-40"
+          style={{ height: '40px', aspectRatio: '1', borderRadius: '50%', background: 'var(--surface-container)', color: 'var(--text-tertiary)' }}
+        >
+          <RefreshCw size={16} className={suggestionLoading ? 'animate-spin' : ''} />
+        </button>
+      </div>
+
+      {/* Saved Activities */}
+      {savedActivityList.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 px-1">
+            <Heart size={12} style={{ color: 'var(--accent)' }} fill="var(--accent)" />
+            <span className="text-[11px] font-bold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Saved ({savedActivityList.length})</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            {savedActivityList.slice(0, 8).map((a, i) => (
+              <button
+                key={i}
+                onClick={() => navigate('/explore')}
+                className="flex-shrink-0 px-3 py-2 rounded-xl text-[12px] font-medium text-left"
+                style={{ background: 'var(--surface-container)', maxWidth: '180px' }}
+              >
+                <div className="truncate">{a.name}</div>
+                <div className="text-[10px] truncate" style={{ color: 'var(--text-tertiary)' }}>{a.category} - {a.duration}</div>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* ---- ACTIONS ---- */}

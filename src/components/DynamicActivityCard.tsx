@@ -1,7 +1,8 @@
 import React from 'react';
 import { GeneratedActivity } from '../types/TravelData';
-import { Clock } from 'lucide-react';
+import { Clock, Heart } from 'lucide-react';
 import { getCategoryIcon } from '../utils/categoryIcons';
+import { useTravel } from '../contexts/TravelContext';
 
 interface DynamicActivityCardProps {
   activity: GeneratedActivity;
@@ -22,6 +23,8 @@ const DynamicActivityCard: React.FC<DynamicActivityCardProps> = ({ activity, onC
   };
 
   const CategoryIcon = getCategoryIcon(activity.category);
+  const { savedActivities, toggleSavedActivity } = useTravel();
+  const isSaved = savedActivities.includes(activity.name);
 
   return (
     <div
@@ -29,15 +32,19 @@ const DynamicActivityCard: React.FC<DynamicActivityCardProps> = ({ activity, onC
       onClick={() => onClick(activity)}
     >
       <div className="p-3.5 flex flex-col h-full">
-        {/* Category + price */}
+        {/* Category + save */}
         <div className="flex items-center justify-between mb-2">
           <span className="flex items-center gap-1 text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>
             <CategoryIcon size={11} />
             {activity.category}
           </span>
-          <span className="text-[10px] font-bold" style={{ color: 'var(--text-tertiary)' }}>
-            {getPriceLabel(activity.estimatedCost)}
-          </span>
+          <button
+            onClick={e => { e.stopPropagation(); toggleSavedActivity(activity.name); }}
+            className="flex items-center justify-center"
+            style={{ height: '24px', aspectRatio: '1', borderRadius: '50%', color: isSaved ? 'var(--accent)' : 'var(--text-tertiary)' }}
+          >
+            <Heart size={13} fill={isSaved ? 'currentColor' : 'none'} />
+          </button>
         </div>
 
         {/* Title - 2 lines max */}

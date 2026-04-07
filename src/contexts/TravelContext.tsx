@@ -10,6 +10,8 @@ interface TravelContextType {
   setTranslations: (translations: Translation[]) => void;
   emergencyContacts: EmergencyContact[];
   setEmergencyContacts: (contacts: EmergencyContact[]) => void;
+  savedActivities: string[];
+  toggleSavedActivity: (name: string) => void;
   isLoading: boolean;
   setIsLoading: (loading: boolean) => void;
   hasCompletedOnboarding: boolean;
@@ -64,6 +66,15 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved ? JSON.parse(saved) : [];
   });
   
+  const [savedActivities, setSavedActivities] = useState<string[]>(() => {
+    const saved = localStorage.getItem('savedActivities');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const toggleSavedActivity = (name: string) => {
+    setSavedActivities(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+  };
+
   const [isLoading, setIsLoading] = useState(false);
   
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(() => {
@@ -101,12 +112,18 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     localStorage.setItem('hasCompletedOnboarding', hasCompletedOnboarding.toString());
   }, [hasCompletedOnboarding]);
 
+  useEffect(() => {
+    localStorage.setItem('savedActivities', JSON.stringify(savedActivities));
+  }, [savedActivities]);
+
   return (
     <TravelContext.Provider value={{
       currentPlan,
       setCurrentPlan,
       activities,
       setActivities: setValidatedActivities,
+      savedActivities,
+      toggleSavedActivity,
       translations,
       setTranslations,
       emergencyContacts,

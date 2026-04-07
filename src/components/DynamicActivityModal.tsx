@@ -58,7 +58,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
               <button
                 onClick={onClose}
                 className="flex items-center justify-center flex-shrink-0"
-                style={{ background: 'var(--surface-container-high)', color: 'var(--text-secondary)', width: '36px', height: '36px', minWidth: '36px', borderRadius: '50%' }}
+                style={{ background: 'var(--surface-container-high)', color: 'var(--text-secondary)', height: '36px', aspectRatio: '1', borderRadius: '50%' }}
               >
                 <X size={18} />
               </button>

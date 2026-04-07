@@ -35,7 +35,7 @@ const ShowToLocal: React.FC<Props> = ({ isOpen, onClose, localText, englishText,
           <button
             onClick={onClose}
             className="absolute top-6 right-6 flex items-center justify-center"
-            style={{ background: 'var(--surface-container-high)', color: 'var(--text-secondary)', width: '40px', height: '40px', minWidth: '40px', borderRadius: '50%' }}
+            style={{ background: 'var(--surface-container-high)', color: 'var(--text-secondary)', height: '40px', aspectRatio: '1', borderRadius: '50%' }}
           >
             <X size={20} />
           </button>
@@ -55,7 +55,7 @@ const ShowToLocal: React.FC<Props> = ({ isOpen, onClose, localText, englishText,
             <button
               onClick={speak}
               className="flex items-center justify-center mx-auto transition-transform active:scale-90"
-              style={{ background: 'var(--accent)', color: 'white', width: '64px', height: '64px', minWidth: '64px', borderRadius: '50%' }}
+              style={{ background: 'var(--accent)', color: 'white', height: '64px', aspectRatio: '1', borderRadius: '50%' }}
             >
               <Volume2 size={28} />
             </button>
