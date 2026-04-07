@@ -249,25 +249,21 @@ const DynamicDashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Quick info + actions */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {[
-                      lang ? { icon: Globe, text: lang, bg: 'var(--surface-container-high)', color: 'var(--text-primary)' } : null,
-                      currency ? { icon: Coins, text: currency, bg: 'var(--surface-container-high)', color: 'var(--text-primary)' } : null,
-                      { icon: Phone, text: emergency, bg: 'var(--error-container)', color: 'var(--error)', href: `tel:${emergency}` },
-                    ].filter(Boolean).map((item: any, i) => {
-                      const inner = (
-                        <>
-                          <item.icon size={12} />
-                          <span>{item.text}</span>
-                        </>
-                      );
-                      const cls = "inline-flex items-center gap-1.5 px-3 rounded-lg text-[11px] font-semibold no-underline";
-                      const st = { background: item.bg, color: item.color, height: '32px' };
-                      return item.href
-                        ? <a key={i} href={item.href} className={cls} style={st}>{inner}</a>
-                        : <span key={i} className={cls} style={st}>{inner}</span>;
-                    })}
+                  {/* Quick info pills - all same height */}
+                  <div className="flex items-center gap-2 flex-wrap" style={{ lineHeight: 1 }}>
+                    {lang && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 12px', height: '32px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, background: 'var(--surface-container-high)', color: 'var(--text-primary)' }}>
+                        <Globe size={12} /> {lang}
+                      </span>
+                    )}
+                    {currency && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 12px', height: '32px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, background: 'var(--surface-container-high)', color: 'var(--text-primary)' }}>
+                        <Coins size={12} /> {currency}
+                      </span>
+                    )}
+                    <a href={`tel:${emergency}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 12px', height: '32px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, background: 'var(--error-container)', color: 'var(--error)', textDecoration: 'none' }}>
+                      <Phone size={12} /> {emergency}
+                    </a>
                   </div>
                 </div>
 

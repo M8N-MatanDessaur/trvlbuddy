@@ -604,13 +604,11 @@ Category Guidelines:
 - Wellness: Spas, thermal baths, relaxation, health activities
 - City: Urban exploration, architecture, city tours, neighborhoods
 
-CRITICAL PRICING FORMAT: Use ONLY simple price ranges like:
+CRITICAL PRICING FORMAT: Use the LOCAL CURRENCY for ${destination.country} (${destination.currency || 'local currency'}). Examples:
 - "Free"
-- "€5-15"
-- "€20-35"
-- "$10-25"
-- "¥500-1500"
-NO additional text, explanations, or conditions!
+- "${destination.currency || '$'}5-15"
+- "${destination.currency || '$'}20-35"
+Use ONLY simple price ranges with the correct local currency symbol. NO additional text!
 
 Return a JSON array of activities with this structure:
 [
