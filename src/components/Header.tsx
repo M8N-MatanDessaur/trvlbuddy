@@ -1,15 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Sun, Moon, Settings, RotateCcw, Plane } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
 import { useTravel } from '../contexts/TravelContext';
 import ConfirmationModal from './ConfirmationModal';
+import type { PageDef } from './SwipeNavigator';
 
-const Header: React.FC = () => {
+interface Props {
+  pages?: PageDef[];
+}
+
+const Header: React.FC<Props> = ({ pages }) => {
   const { theme, toggleTheme } = useTheme();
   const { setCurrentPlan, setActivities, setTranslations, setEmergencyContacts, setHasCompletedOnboarding } = useTravel();
   const [showResetModal, setShowResetModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
+
+  const currentPage = pages?.find(p => p.path === location.pathname) || pages?.[0];
 
   const handleReset = () => {
     setCurrentPlan(null);
@@ -37,37 +47,55 @@ const Header: React.FC = () => {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 h-12 flex items-center justify-between px-4 glass-card rounded-none border-t-0 border-x-0">
-        <div className="flex items-center gap-2">
-          <Plane size={18} className="text-[var(--accent)]" />
-          <span className="text-sm font-bold tracking-tight text-text-primary">TrvlBuddy</span>
+      <header className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5" style={{ height: '3.25rem', background: 'var(--bg-primary)', borderBottom: '0.33px solid var(--outline)' }}>
+        {/* Left: page title */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)', color: 'white' }}>
+            <Plane size={13} />
+          </div>
+          <AnimatePresence mode="wait">
+            <motion.span
+              key={currentPage?.label || 'app'}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.15 }}
+              className="text-sm font-extrabold tracking-tight"
+            >
+              {currentPage?.label || 'TrvlBuddy'}
+            </motion.span>
+          </AnimatePresence>
         </div>
 
-        <div className="flex items-center gap-1">
+        {/* Right: controls */}
+        <div className="flex items-center gap-0.5">
           <button
             onClick={toggleTheme}
-            className="w-9 h-9 rounded-lg flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-container-high transition-all"
+            className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+            style={{ color: 'var(--text-secondary)' }}
             aria-label={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
           >
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
 
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-surface-container-high transition-all"
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
+              style={{ color: 'var(--text-secondary)' }}
               aria-label="Settings"
             >
-              <Settings size={18} />
+              <Settings size={16} />
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 top-full mt-1 w-48 glass-card p-1 z-50 animate-[slideUp_0.15s_ease-out]">
+              <div className="absolute right-0 top-full mt-1.5 w-48 rounded-2xl p-1.5 z-50 animate-[slideUp_0.15s_ease-out]" style={{ background: 'var(--surface-container)', boxShadow: 'var(--shadow-xl)', border: '0.5px solid var(--outline)' }}>
                 <button
                   onClick={() => { setShowResetModal(true); setShowMenu(false); }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-[var(--error)] hover:bg-[var(--error-container)] rounded-lg transition-colors"
+                  className="w-full flex items-center gap-3 px-3.5 py-3 text-sm rounded-xl transition-colors"
+                  style={{ color: 'var(--error)' }}
                 >
-                  <RotateCcw size={16} />
+                  <RotateCcw size={15} />
                   Reset Trip Data
                 </button>
               </div>

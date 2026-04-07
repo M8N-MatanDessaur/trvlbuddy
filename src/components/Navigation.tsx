@@ -1,12 +1,12 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Compass, CalendarDays, Languages } from 'lucide-react';
+import { Home, Compass, Languages, Wrench } from 'lucide-react';
 
 const navItems = [
   { path: '/', icon: Home, label: 'Trip' },
   { path: '/explore', icon: Compass, label: 'Explore' },
-  { path: '/planner', icon: CalendarDays, label: 'Planner' },
   { path: '/language', icon: Languages, label: 'Language' },
+  { path: '/utilities', icon: Wrench, label: 'Tools' },
 ];
 
 const Navigation: React.FC = () => {
@@ -14,8 +14,8 @@ const Navigation: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <nav className="nav-container fixed bottom-0 left-0 right-0 w-full z-50 py-2 px-4 rounded-t-2xl">
-      <ul className="flex items-center justify-around max-w-md mx-auto">
+    <nav className="nav-container fixed bottom-0 left-0 right-0 w-full z-50 py-2 px-4">
+      <ul className="flex items-center justify-around max-w-sm mx-auto">
         {navItems.map(item => {
           const isActive = item.path === '/'
             ? location.pathname === '/'
@@ -28,11 +28,17 @@ const Navigation: React.FC = () => {
                   navigate(item.path);
                   window.scrollTo({ top: 0, behavior: 'instant' });
                 }}
-                className={`nav-link flex flex-col items-center gap-0.5 px-4 py-2 ${isActive ? 'active' : ''}`}
+                className="flex flex-col items-center gap-1 px-3 py-1.5 transition-colors"
+                style={{ color: isActive ? 'var(--accent)' : 'var(--text-tertiary)' }}
                 aria-label={item.label}
               >
-                <Icon size={22} strokeWidth={isActive ? 2.5 : 1.8} />
-                <span className="text-[10px] font-medium leading-none">{item.label}</span>
+                <div
+                  className="w-10 h-10 rounded-full flex items-center justify-center transition-all"
+                  style={{ background: isActive ? 'var(--accent-container)' : 'transparent' }}
+                >
+                  <Icon size={20} strokeWidth={isActive ? 2.2 : 1.6} />
+                </div>
+                <span className="text-[10px] font-semibold leading-none">{item.label}</span>
               </button>
             </li>
           );
