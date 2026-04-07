@@ -249,20 +249,20 @@ const DynamicDashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Quick info pills - all same height */}
-                  <div className="flex items-center gap-2 flex-wrap" style={{ lineHeight: 1 }}>
+                  {/* Quick info pills */}
+                  <div className="flex items-stretch gap-2 flex-wrap">
                     {lang && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 12px', height: '32px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, background: 'var(--surface-container-high)', color: 'var(--text-primary)' }}>
-                        <Globe size={12} /> {lang}
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 12px', minHeight: '36px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, background: 'var(--surface-container-high)', color: 'var(--text-primary)', lineHeight: 1 }}>
+                        <Globe size={13} /> {lang}
                       </span>
                     )}
                     {currency && (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 12px', height: '32px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, background: 'var(--surface-container-high)', color: 'var(--text-primary)' }}>
-                        <Coins size={12} /> {currency}
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 12px', minHeight: '36px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, background: 'var(--surface-container-high)', color: 'var(--text-primary)', lineHeight: 1 }}>
+                        <Coins size={13} /> {currency}
                       </span>
                     )}
-                    <a href={`tel:${emergency}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '0 12px', height: '32px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, background: 'var(--error-container)', color: 'var(--error)', textDecoration: 'none' }}>
-                      <Phone size={12} /> {emergency}
+                    <a href={`tel:${emergency}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 12px', minHeight: '36px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, background: 'var(--error-container)', color: 'var(--error)', textDecoration: 'none', lineHeight: 1 }}>
+                      <Phone size={13} /> {emergency}
                     </a>
                   </div>
                 </div>
