@@ -1219,20 +1219,23 @@ User: ${userMessage}
 
 TASK: Respond naturally and extract any trip details from the ENTIRE conversation so far. Be warm, brief, and conversational (2-3 sentences max for your response). Ask about missing details naturally.
 
-The details you need to collect:
+The details you need to collect (in roughly this order):
 1. Destination (city/country) - REQUIRED
-2. Trip type (day-trip or multi-day) - REQUIRED
+2. Trip type (day-trip or multi-day) - REQUIRED. If duration > 1 day, it's a full-trip.
 3. Number of travelers - REQUIRED
-4. Duration / dates (how many days, when) - REQUIRED for multi-day trips
-5. Interests (what they want to do) - REQUIRED (at least 1)
-6. Budget level (budget, mid-range, luxury) - OPTIONAL, default mid-range
-7. Accommodation name and address - OPTIONAL
+4. Duration / dates (how many days, approximate dates) - REQUIRED for multi-day trips
+5. Accommodation (where are they staying? hotel name, Airbnb, etc.) - ASK FOR THIS. Very important for navigation.
+6. Interests (what they want to do/see) - REQUIRED (at least 2-3)
+7. Budget level (budget, mid-range, luxury) - ASK if not mentioned
 
 IMPORTANT RULES:
-- Do NOT list all missing fields at once. Ask about ONE thing at a time.
-- If the user gave destination, ask about who is coming or what they want to do next.
-- If you have destination + travelers + interests, you probably have enough. Set complete to true.
-- Be smart about inferring: "with my family" = 3-4 travelers, "weekend trip" = 2-3 days, "backpacking" = budget.
+- Do NOT list all missing fields at once. Ask about ONE thing at a time naturally.
+- Follow this flow: destination -> who/how many -> how long -> where staying -> what interests them -> budget
+- ALWAYS ask about accommodation before marking complete. Ask "Where will you be staying?" or "Do you have a hotel booked?"
+- Only set complete to true when you have AT LEAST: destination + travelers + duration + interests (3+) + accommodation info (or they said they don't know yet)
+- For multi-city trips, ask about each city. "Will you be visiting other cities too?"
+- Be smart about inferring: "with my family" = 3-4 travelers, "weekend trip" = 2-3 days, "backpacking" = budget
+- If the user says they don't know their accommodation yet, that's fine, set accommodation to null and move on
 - Valid interests: Historical Sites, Outdoor Adventures, Food & Dining, Museums & Art, Beach & Water, Shopping, Nightlife, Nature & Wildlife, Photography, Culture & Shows, Wellness & Spa, Architecture, Local Markets, Water Activities, Religious Sites
 
 Respond in this EXACT JSON format (no markdown, no code blocks):
