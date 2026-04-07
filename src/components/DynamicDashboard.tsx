@@ -2,17 +2,36 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTravel } from '../contexts/TravelContext';
 import { getSmartSuggestion } from '../services/aiService';
-import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb, Heart, RefreshCw, Loader2 } from 'lucide-react';
+import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb, Heart, RefreshCw, Loader2, Pencil, X as XIcon } from 'lucide-react';
 
 // Cache suggestion outside component so it persists across remounts
 let cachedSuggestion: { title: string; description: string; activityName: string } | null = null;
 let suggestionFetched = false;
 
 const DynamicDashboard: React.FC = () => {
-  const { currentPlan, activities, savedActivities } = useTravel();
+  const { currentPlan, activities, savedActivities, setCurrentPlan } = useTravel();
   const navigate = useNavigate();
   const [suggestion, setSuggestion] = useState(cachedSuggestion);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [editingAcc, setEditingAcc] = useState<{ segmentId: string; accId: string; name: string; address: string } | null>(null);
+
+  const saveAccommodation = () => {
+    if (!editingAcc || !currentPlan) return;
+    const updated = {
+      ...currentPlan,
+      segments: currentPlan.segments?.map((seg: any) => {
+        if (seg.id !== editingAcc.segmentId) return seg;
+        return {
+          ...seg,
+          accommodations: seg.accommodations?.map((acc: any) =>
+            acc.id === editingAcc.accId ? { ...acc, name: editingAcc.name, address: editingAcc.address } : acc
+          ),
+        };
+      }),
+    };
+    setCurrentPlan(updated);
+    setEditingAcc(null);
+  };
 
   if (!currentPlan) {
     return (
@@ -269,26 +288,37 @@ const DynamicDashboard: React.FC = () => {
 
                 {/* Accommodations */}
                 {segment.accommodations?.length > 0 && segment.accommodations.map((acc: any, i: number) => (
-                  <div key={acc.id} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: '0.33px solid var(--outline)' }}>
+                  <div
+                    key={acc.id}
+                    className="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors active:opacity-80"
+                    style={{ borderTop: '0.33px solid var(--outline)' }}
+                    onClick={() => setEditingAcc({ segmentId: segment.id, accId: acc.id, name: acc.name || '', address: acc.address || '' })}
+                  >
                     <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--surface-container-high)' }}>
                       <Hotel size={14} style={{ color: 'var(--text-secondary)' }} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold leading-tight truncate">{acc.name || `Stay ${i + 1}`}</div>
-                      {acc.address && <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">{acc.address}</div>}
+                      <div className="text-[13px] font-semibold leading-tight truncate">{acc.name || `Tap to add accommodation`}</div>
+                      {acc.address ? <div className="text-[11px] text-[var(--text-secondary)] truncate mt-0.5">{acc.address}</div> : <div className="text-[11px] mt-0.5" style={{ color: 'var(--accent)' }}>Tap to edit</div>}
                     </div>
-                    {acc.address && (
-                      <a
-                        href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(acc.address)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
-                        title="Directions"
-                      >
-                        <NavIcon size={14} />
-                      </a>
-                    )}
+                    <div className="flex gap-1 flex-shrink-0">
+                      <div className="flex items-center justify-center" style={{ height: '32px', aspectRatio: '1', borderRadius: '50%', color: 'var(--text-tertiary)' }}>
+                        <Pencil size={13} />
+                      </div>
+                      {acc.address && (
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(acc.address)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center"
+                          style={{ height: '32px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent-container)', color: 'var(--accent)' }}
+                          title="Directions"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <NavIcon size={14} />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -307,6 +337,34 @@ const DynamicDashboard: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Edit Accommodation Modal */}
+      {editingAcc && (
+        <div className="flex items-end justify-center" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 60, background: 'rgba(0,0,0,0.4)', margin: 0, padding: 0 }} onClick={() => setEditingAcc(null)}>
+          <div className="w-full max-w-lg" style={{ background: 'var(--surface-container)', borderRadius: '24px 24px 0 0', padding: '20px' }} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center mb-3"><div className="w-8 h-1 rounded-full" style={{ background: 'var(--outline)' }} /></div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[16px] font-bold">Edit Accommodation</h3>
+              <button onClick={() => setEditingAcc(null)} className="flex items-center justify-center" style={{ height: '32px', aspectRatio: '1', borderRadius: '50%', background: 'var(--surface-container-high)', color: 'var(--text-secondary)' }}>
+                <XIcon size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--text-secondary)' }}>Name</label>
+                <input type="text" value={editingAcc.name} onChange={e => setEditingAcc({ ...editingAcc, name: e.target.value })} placeholder="Hotel name, Airbnb, etc." className="w-full px-4 py-3 rounded-xl text-[14px] border-none outline-none" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold mb-1 block" style={{ color: 'var(--text-secondary)' }}>Address</label>
+                <input type="text" value={editingAcc.address} onChange={e => setEditingAcc({ ...editingAcc, address: e.target.value })} placeholder="Full address" className="w-full px-4 py-3 rounded-xl text-[14px] border-none outline-none" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+              </div>
+            </div>
+            <button onClick={saveAccommodation} className="w-full py-3.5 rounded-2xl text-[14px] font-bold transition-all active:scale-[0.98]" style={{ background: 'var(--accent)', color: 'white' }}>
+              Save
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
