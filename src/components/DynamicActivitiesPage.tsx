@@ -117,7 +117,7 @@ const DynamicActivitiesPage: React.FC = () => {
     try {
       const locationName = activeSeg.city ? `${activeSeg.city.name}, ${dest.country}` : `${dest.name}, ${dest.country}`;
       const existingNames = activities.filter(a => a.category === dataCategory).map(a => a.name);
-      const newActivities = await discoverMoreActivities(locationName, dataCategory, existingNames, dest.id, activeSeg.city?.id || dest.id);
+      const newActivities = await discoverMoreActivities(locationName, dataCategory, existingNames, dest.id, activeSeg.city?.id || dest.id, dest.currency);
 
       if (newActivities.length > 0) {
         setActivities([...activities, ...newActivities]);

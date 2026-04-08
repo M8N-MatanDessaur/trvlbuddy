@@ -604,11 +604,11 @@ Category Guidelines:
 - Wellness: Spas, thermal baths, relaxation, health activities
 - City: Urban exploration, architecture, city tours, neighborhoods
 
-CRITICAL PRICING FORMAT: Use the LOCAL CURRENCY for ${destination.country} (${destination.currency || 'local currency'}). Examples:
+CRITICAL PRICING FORMAT: All prices MUST be in ${destination.currency || 'the local currency'} for ${destination.country}. NEVER use EUR, USD, or any other currency. Examples for ${destination.currency || 'local currency'}:
 - "Free"
-- "${destination.currency || '$'}5-15"
-- "${destination.currency || '$'}20-35"
-Use ONLY simple price ranges with the correct local currency symbol. NO additional text!
+- "${destination.currency || 'LOCAL'} 5,000-15,000" (for currencies like KRW, VND, PHP)
+- "${destination.currency || 'LOCAL'} 50-150" (for currencies like THB)
+Always prefix with the currency code "${destination.currency}". NO symbols like $ or EUR.
 
 Return a JSON array of activities with this structure:
 [
@@ -616,7 +616,7 @@ Return a JSON array of activities with this structure:
     "name": "Activity name",
     "category": "ONE SINGLE WORD from: History, Nature, Food, Museums, Beach, Shopping, Nightlife, Culture, Wellness, City",
     "description": "Detailed description (100-150 words)",
-    "estimatedCost": "SIMPLE price range ONLY (e.g., Free, €10-15, $20-30)",
+    "estimatedCost": "SIMPLE price range in ${destination.currency || 'local currency'} ONLY (e.g., Free, KRW 5,000-15,000)",
     "duration": "Time needed (e.g., 2-3 hours, Half day, Full day)",
     "bestTime": "Best time to visit",
     "location": "Specific location/address in ${city.name}",
@@ -686,10 +686,7 @@ Based on traveler preferences:
 
 IMPORTANT: Use ONLY the category "Daytrips" for ALL day trip activities.
 
-CRITICAL PRICING FORMAT: Include transportation + activity costs in simple ranges like:
-- "€25-45" (includes transport + entry)
-- "$30-60" (includes ferry + activities)
-- "Free-€15" (transport only, free activities)
+CRITICAL PRICING FORMAT: All prices MUST be in ${destination.currency || 'the local currency'} for ${destination.country}. NEVER use EUR, USD, or any other foreign currency. Include transportation + activity costs. Format: "${destination.currency} amount-amount".
 
 Return a JSON array with this structure:
 [
@@ -697,7 +694,7 @@ Return a JSON array with this structure:
     "name": "Day Trip to [Destination Name]",
     "category": "Daytrips",
     "description": "Detailed description of the day trip destination, what to see/do, why it's worth visiting, and what makes it special (150-200 words)",
-    "estimatedCost": "TOTAL cost including transport and main activities (e.g., €25-45, $30-60)",
+    "estimatedCost": "TOTAL cost in ${destination.currency || 'local currency'} including transport and main activities",
     "duration": "Full day" or "Half day",
     "bestTime": "Best time to visit this destination",
     "location": "Name of the destination city/town from ${city.name}",
@@ -1341,15 +1338,18 @@ export async function discoverMoreActivities(
   category: string,
   existingNames: string[],
   destinationId: string,
-  cityId: string
+  cityId: string,
+  currency?: string
 ): Promise<GeneratedActivity[]> {
   const exclusionList = existingNames.slice(0, 20).join(', ');
+  const currencyCode = currency || 'USD';
 
   const prompt = `
 Generate EXACTLY 10 NEW and UNIQUE activities for ${locationName} in the "${category}" category.
 
 CRITICAL: You MUST return exactly 10 activities. No fewer.
 CRITICAL: Do NOT include any of these existing activities: ${exclusionList}
+CRITICAL: All prices MUST be in ${currencyCode}. NEVER use EUR, USD, or any other foreign currency unless ${currencyCode} IS that currency.
 
 Use ONLY this category: ${category}
 
@@ -1359,7 +1359,7 @@ Return a JSON array with exactly 10 items:
     "name": "Activity name",
     "category": "${category}",
     "description": "Detailed description (80-120 words)",
-    "estimatedCost": "Simple price range (e.g., Free, $10-25)",
+    "estimatedCost": "Price range in ${currencyCode} (e.g., Free, ${currencyCode} 10,000-25,000)",
     "duration": "Time needed",
     "bestTime": "Best time to visit",
     "location": "Specific address in ${locationName}",
