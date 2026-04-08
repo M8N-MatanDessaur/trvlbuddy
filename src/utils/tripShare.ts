@@ -30,9 +30,9 @@ export function exportTrip(
 
 export async function shareTrip(bundle: TripBundle): Promise<boolean> {
   const json = JSON.stringify(bundle, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
+  const blob = new Blob([json], { type: 'application/octet-stream' });
   const filename = `${bundle.plan.title?.replace(/[^a-zA-Z0-9]/g, '-') || 'trip'}.trvlbuddy`;
-  const file = new File([blob], filename, { type: 'application/json' });
+  const file = new File([blob], filename, { type: 'application/octet-stream' });
 
   // Try Web Share API first (native share sheet on mobile)
   if (navigator.share && navigator.canShare?.({ files: [file] })) {
