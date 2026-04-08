@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Sun, Moon, Settings, RotateCcw, Plane, Share2 } from 'lucide-react';
+import { Sun, Moon, Settings, RotateCcw, Plane, Share2, X, Send, Download, Upload } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
 import { exportTrip, shareTrip } from '../utils/tripShare';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,15 +18,22 @@ const Header: React.FC<Props> = ({ pages }) => {
   const { currentPlan, activities, translations, emergencyContacts, savedActivities, setCurrentPlan, setActivities, setTranslations, setEmergencyContacts, setHasCompletedOnboarding } = useTravel();
   const { toast } = useToast();
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
   const currentPage = pages?.find(p => p.path === location.pathname) || pages?.[0];
 
-  const handleShare = async () => {
+  const handleShareClick = () => {
     if (!currentPlan) return;
     setShowMenu(false);
+    setShowShareModal(true);
+  };
+
+  const handleShareConfirm = async () => {
+    if (!currentPlan) return;
+    setShowShareModal(false);
     const bundle = exportTrip(currentPlan, activities, translations, emergencyContacts, savedActivities);
     const shared = await shareTrip(bundle);
     if (shared) toast('Trip shared!', 'success');
@@ -104,7 +111,7 @@ const Header: React.FC<Props> = ({ pages }) => {
                 </button>
                 {currentPlan && (
                   <button
-                    onClick={handleShare}
+                    onClick={handleShareClick}
                     className="w-full flex items-center gap-3 px-3.5 py-3 text-sm rounded-xl transition-colors"
                     style={{ color: 'var(--text-primary)' }}
                   >
@@ -125,6 +132,92 @@ const Header: React.FC<Props> = ({ pages }) => {
           </div>
         </div>
       </header>
+
+      {/* Share Trip Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[70]">
+          <div className="rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" style={{ background: 'var(--surface-container)' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--outline)', background: 'var(--surface-container-high)' }}>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)', color: 'white' }}>
+                  <Share2 size={16} />
+                </div>
+                <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Share Trip</h3>
+              </div>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-5 space-y-4">
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                Your trip will be shared as a <strong style={{ color: 'var(--text-primary)' }}>.trvlbuddy</strong> file containing all your destinations, activities, translations, and emergency contacts.
+              </p>
+
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-tertiary)' }}>
+                  How the recipient can open it
+                </p>
+
+                <div className="flex items-start gap-3 p-3 rounded-xl" style={{ background: 'var(--bg-primary)' }}>
+                  <Send size={16} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Share to app</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+                      If they have TrvlBuddy installed, they can share the file to the app directly from their share menu.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-3 rounded-xl" style={{ background: 'var(--bg-primary)' }}>
+                  <Upload size={16} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Import in app</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+                      Open TrvlBuddy and tap "Import Shared Trip" on the welcome screen to select the file.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-3 rounded-xl" style={{ background: 'var(--bg-primary)' }}>
+                  <Download size={16} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Save for later</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+                      The file can be saved and imported anytime.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-5 pt-0 flex gap-3">
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="flex-1 px-4 py-3 rounded-2xl text-sm font-medium border-2 transition-colors"
+                style={{ borderColor: 'var(--outline)', color: 'var(--text-primary)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleShareConfirm}
+                className="flex-1 px-4 py-3 rounded-2xl text-sm font-bold transition-colors flex items-center justify-center gap-2"
+                style={{ background: 'var(--accent)', color: 'white' }}
+              >
+                <Share2 size={15} />
+                Share Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmationModal
         isOpen={showResetModal}
