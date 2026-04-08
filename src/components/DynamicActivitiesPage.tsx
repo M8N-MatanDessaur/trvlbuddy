@@ -18,6 +18,7 @@ const DynamicActivitiesPage: React.FC = () => {
   useActivityPhotos();
   const { moment } = useContextualContent();
   const [activeFilter, setActiveFilter] = useState('all');
+  const [activeLocation, setActiveLocation] = useState('all');
   const [selectedActivity, setSelectedActivity] = useState<GeneratedActivity | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loadingSection, setLoadingSection] = useState<string | null>(null);
@@ -53,26 +54,70 @@ const DynamicActivitiesPage: React.FC = () => {
     return groupActivities(activities);
   }, [activities, moment.tripPhase, moment.timeOfDay]);
 
-  const categories = useMemo(() => ['all', ...new Set(activities.map(a => a.category))], [activities]);
+  // Build location options from segments (city, country pairs)
+  const locations = useMemo(() => {
+    if (!currentPlan?.segments || currentPlan.segments.length <= 1) return [];
+    const seen = new Set<string>();
+    const locs: { id: string; label: string; cityId?: string; destId?: string }[] = [];
+    for (const seg of currentPlan.segments) {
+      const key = seg.city?.id || seg.destination.id;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      locs.push({
+        id: key,
+        label: seg.city ? `${seg.city.name}` : seg.destination.name,
+        cityId: seg.city?.id,
+        destId: seg.destination.id,
+      });
+    }
+    return locs;
+  }, [currentPlan]);
+
+  // Activities filtered by location
+  const locationFilteredActivities = useMemo(() => {
+    if (activeLocation === 'all') return activities;
+    const loc = locations.find(l => l.id === activeLocation);
+    if (!loc) return activities;
+    return activities.filter(a => {
+      if (loc.cityId && a.cityId) return a.cityId === loc.cityId;
+      if (loc.destId && a.destinationId) return a.destinationId === loc.destId;
+      return true;
+    });
+  }, [activities, activeLocation, locations]);
+
+  const categories = useMemo(() => ['all', ...new Set(locationFilteredActivities.map(a => a.category))], [locationFilteredActivities]);
+
+  // Rebuild sections from location-filtered activities
+  const locationSections = useMemo(() => {
+    if (activeLocation === 'all') return sections;
+    if (moment.tripPhase === 'active') {
+      return groupActivitiesByContext(locationFilteredActivities, moment.timeOfDay);
+    }
+    return groupActivities(locationFilteredActivities);
+  }, [locationFilteredActivities, sections, activeLocation, moment.tripPhase, moment.timeOfDay]);
 
   const filteredSections = useMemo(() => {
-    if (activeFilter === 'all') return sections;
-    return sections.map(s => ({
+    const base = activeLocation === 'all' ? sections : locationSections;
+    if (activeFilter === 'all') return base;
+    return base.map(s => ({
       ...s,
       activities: s.activities.filter(a => a.category === activeFilter),
     })).filter(s => s.activities.length > 0);
-  }, [sections, activeFilter]);
+  }, [sections, locationSections, activeFilter, activeLocation]);
 
   const handleDiscoverMore = async (dataCategory: string, sectionId: string) => {
-    const dest = currentPlan.destination || currentPlan.destinations?.[0];
-    const seg = currentPlan.segments?.[0];
-    if (!dest || !seg || !dataCategory) return;
+    // Use the active location filter to determine which segment to discover more for
+    const activeSeg = activeLocation !== 'all'
+      ? currentPlan.segments?.find(s => s.city?.id === activeLocation || s.destination.id === activeLocation)
+      : currentPlan.segments?.[0];
+    const dest = activeSeg?.destination || currentPlan.destination || currentPlan.destinations?.[0];
+    if (!dest || !activeSeg || !dataCategory) return;
 
     setLoadingSection(sectionId);
     try {
-      const locationName = seg.city ? `${seg.city.name}, ${dest.country}` : `${dest.name}, ${dest.country}`;
+      const locationName = activeSeg.city ? `${activeSeg.city.name}, ${dest.country}` : `${dest.name}, ${dest.country}`;
       const existingNames = activities.filter(a => a.category === dataCategory).map(a => a.name);
-      const newActivities = await discoverMoreActivities(locationName, dataCategory, existingNames, dest.id, seg.city?.id || dest.id);
+      const newActivities = await discoverMoreActivities(locationName, dataCategory, existingNames, dest.id, activeSeg.city?.id || dest.id);
 
       if (newActivities.length > 0) {
         setActivities([...activities, ...newActivities]);
@@ -114,7 +159,41 @@ const DynamicActivitiesPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Filter chips */}
+      {/* Location filter chips (only for multi-destination trips) */}
+      {locations.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+          <button
+            onClick={() => { setActiveLocation('all'); setActiveFilter('all'); }}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
+            style={{
+              background: activeLocation === 'all' ? 'var(--accent)' : 'var(--surface-container)',
+              color: activeLocation === 'all' ? 'white' : 'var(--text-secondary)',
+            }}
+          >
+            <Globe size={14} />
+            All Locations
+          </button>
+          {locations.map(loc => {
+            const isActive = activeLocation === loc.id;
+            return (
+              <button
+                key={loc.id}
+                onClick={() => { setActiveLocation(loc.id); setActiveFilter('all'); }}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
+                style={{
+                  background: isActive ? 'var(--accent)' : 'var(--surface-container)',
+                  color: isActive ? 'white' : 'var(--text-secondary)',
+                }}
+              >
+                <MapPin size={14} />
+                {loc.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Category filter chips */}
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
         {categories.map(cat => {
           const isActive = activeFilter === cat;
