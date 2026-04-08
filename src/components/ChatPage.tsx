@@ -18,11 +18,14 @@ const ChatPage: React.FC = () => {
   // Welcome message on first mount (only if no messages yet)
   useEffect(() => {
     if (messages.length === 0 && currentPlan) {
-      const dest = currentPlan.destination || currentPlan.destinations?.[0];
+      const destinations = currentPlan.destinations || [];
+      const destLabel = destinations.length > 1
+        ? destinations.map(d => d.name).join(', ')
+        : destinations[0]?.name || currentPlan.destination?.name || 'your trip';
       setMessages([{
         id: 'welcome',
         type: 'assistant',
-        content: `Hey! I'm your travel assistant for ${dest?.name || 'your trip'}. Ask me anything: restaurant recommendations, directions, local tips, or help planning your day.`,
+        content: `Hey! I'm your travel assistant for ${destLabel}. Ask me anything: restaurant recommendations, directions, local tips, or help planning your day.`,
         timestamp: new Date(),
         suggestions: [
           'Best restaurants nearby?',
