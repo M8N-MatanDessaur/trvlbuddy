@@ -137,8 +137,16 @@ const DynamicTranslatorPage: React.FC = () => {
     'Thai': 'th-TH', 'Vietnamese': 'vi-VN', 'Turkish': 'tr-TR', 'Dutch': 'nl-NL',
     'Greek': 'el-GR', 'Polish': 'pl-PL', 'Swedish': 'sv-SE', 'Danish': 'da-DK',
     'Norwegian': 'nb-NO', 'Finnish': 'fi-FI', 'Czech': 'cs-CZ', 'Hungarian': 'hu-HU',
-    'Romanian': 'ro-RO', 'Indonesian': 'id-ID', 'Malay': 'ms-MY', 'Tagalog': 'fil-PH',
+    'Romanian': 'ro-RO', 'Indonesian': 'id-ID', 'Malay': 'ms-MY',
+    'Tagalog': 'fil-PH', 'Filipino': 'fil-PH',
     'English': 'en-US', 'Hebrew': 'he-IL',
+  };
+
+  // Some languages have alternate BCP-47 codes on different devices
+  const altLangCodes: Record<string, string[]> = {
+    'fil-PH': ['tl', 'fil', 'tl-PH'],
+    'zh-CN': ['zh', 'cmn'],
+    'nb-NO': ['no', 'nb'],
   };
 
   const speak = (text: string) => {
@@ -149,7 +157,10 @@ const DynamicTranslatorPage: React.FC = () => {
       u.lang = langCode;
       u.rate = 0.85;
       const voices = window.speechSynthesis.getVoices();
-      const match = voices.find(v => v.lang.startsWith(langCode.split('-')[0]));
+      const primary = langCode.split('-')[0];
+      const alts = altLangCodes[langCode] || [];
+      const candidates = [primary, ...alts];
+      const match = voices.find(v => candidates.some(c => v.lang.startsWith(c)));
       if (match) u.voice = match;
       window.speechSynthesis.speak(u);
     }
