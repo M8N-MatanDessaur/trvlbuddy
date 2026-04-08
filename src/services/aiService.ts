@@ -1208,6 +1208,14 @@ Be direct, specific, and helpful. Focus on real places with exact details and cu
 }
 
 // Conversational onboarding: extract trip details from natural language
+export interface SegmentExtraction {
+  country: string;
+  cities: string[];
+  startDate?: string;
+  endDate?: string;
+  accommodations: { city: string; name: string; address: string }[];
+}
+
 export interface OnboardingExtraction {
   destination?: string;
   country?: string;
@@ -1219,6 +1227,8 @@ export interface OnboardingExtraction {
   tripType?: 'full-trip' | 'day-trip';
   accommodation?: string;
   accommodationAddress?: string;
+  // Multi-destination support
+  segments?: SegmentExtraction[];
   complete: boolean;
   missingFields: string[];
   aiResponse: string;
@@ -1241,11 +1251,11 @@ User: ${userMessage}
 TASK: Respond naturally and extract any trip details from the ENTIRE conversation so far. Be warm, brief, and conversational (2-3 sentences max for your response). Ask about missing details naturally.
 
 The details you need to collect (in roughly this order):
-1. Destination (city/country) - REQUIRED
+1. Destination(s) (cities and countries) - REQUIRED
 2. Trip type (day-trip or multi-day) - REQUIRED. If duration > 1 day, it's a full-trip.
 3. Number of travelers - REQUIRED
 4. Duration / dates (how many days, approximate dates) - REQUIRED for multi-day trips
-5. Accommodation (where are they staying? hotel name, Airbnb, etc.) - ASK FOR THIS. Very important for navigation.
+5. Accommodation(s) (where are they staying in each city? hotel name, Airbnb, etc.) - ASK FOR THIS. Very important for navigation.
 6. Interests (what they want to do/see) - REQUIRED (at least 2-3)
 7. Budget level (budget, mid-range, luxury) - ASK if not mentioned
 
@@ -1254,27 +1264,44 @@ IMPORTANT RULES:
 - Follow this flow: destination -> who/how many -> how long -> where staying -> what interests them -> budget
 - ALWAYS ask about accommodation before marking complete. Ask "Where will you be staying?" or "Do you have a hotel booked?"
 - Only set complete to true when you have AT LEAST: destination + travelers + duration + interests (3+) + accommodation info (or they said they don't know yet)
-- For multi-city trips, ask about each city. "Will you be visiting other cities too?"
+- MULTI-DESTINATION TRIPS: If the user mentions multiple countries or cities, capture ALL of them in the "segments" array. Each segment = one country with its cities, dates, and accommodations. This is critical.
 - Be smart about inferring: "with my family" = 3-4 travelers, "weekend trip" = 2-3 days, "backpacking" = budget
 - If the user says they don't know their accommodation yet, that's fine, set accommodation to null and move on
 - Valid interests: Historical Sites, Outdoor Adventures, Food & Dining, Museums & Art, Beach & Water, Shopping, Nightlife, Nature & Wildlife, Photography, Culture & Shows, Wellness & Spa, Architecture, Local Markets, Water Activities, Religious Sites
 
 Respond in this EXACT JSON format (no markdown, no code blocks):
 {
-  "destination": "city name or null",
-  "country": "country name or null",
+  "destination": "primary city name or first city",
+  "country": "primary country name or first country",
   "travelers": number or null,
   "duration": number of days or null,
   "startDate": "YYYY-MM-DD or null",
   "interests": ["interest1", "interest2"] or [],
   "budget": "budget|mid-range|luxury or null",
   "tripType": "full-trip|day-trip or null",
-  "accommodation": "hotel name or null",
-  "accommodationAddress": "address or null",
+  "accommodation": "primary accommodation name or null",
+  "accommodationAddress": "primary accommodation address or null",
+  "segments": [
+    {
+      "country": "country name",
+      "cities": ["city1", "city2"],
+      "startDate": "YYYY-MM-DD or null",
+      "endDate": "YYYY-MM-DD or null",
+      "accommodations": [
+        { "city": "city name", "name": "hotel/airbnb name", "address": "full address" }
+      ]
+    }
+  ],
   "complete": true/false,
   "missingFields": ["field1", "field2"],
   "aiResponse": "your conversational response to the user"
-}`;
+}
+
+SEGMENTS RULES:
+- For a SINGLE city trip, segments should have ONE entry with that city.
+- For MULTI-CITY or MULTI-COUNTRY trips, create one segment PER COUNTRY. Each segment lists ALL cities within that country.
+- If a city has an accommodation, include it in that segment's accommodations array with the city name.
+- Always include segments, even for single-destination trips.`;
 
   const raw = await callGeminiAPI(prompt, true);
 
@@ -1293,6 +1320,7 @@ Respond in this EXACT JSON format (no markdown, no code blocks):
       tripType: parsed.tripType || undefined,
       accommodation: parsed.accommodation || undefined,
       accommodationAddress: parsed.accommodationAddress || undefined,
+      segments: Array.isArray(parsed.segments) ? parsed.segments : undefined,
       complete: parsed.complete || false,
       missingFields: parsed.missingFields || [],
       aiResponse: parsed.aiResponse || 'Tell me more about your trip!',

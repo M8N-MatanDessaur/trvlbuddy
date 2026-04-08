@@ -4,7 +4,7 @@ import { importTripFromJson } from '../utils/tripShare';
 
 import { useTravel } from '../contexts/TravelContext';
 import { useToast } from '../contexts/ToastContext';
-import { TravelPlan, Destination } from '../types/TravelData';
+import { TravelPlan, Destination, TripSegment, City } from '../types/TravelData';
 import { onboardingChat, OnboardingExtraction, generateTravelContent, generateDestinationInfo } from '../services/aiService';
 
 interface Message {
@@ -77,51 +77,126 @@ const ConversationalOnboarding: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Get destination info from AI
-      const destInfo = await generateDestinationInfo(extraction.destination, extraction.country || '');
-
-      const destination: Destination = {
-        id: `dest_${Date.now()}`,
-        name: extraction.destination,
-        country: extraction.country || '',
-        countryCode: destInfo.countryCode || '',
-        currency: destInfo.currency || '',
-        languages: destInfo.languages || [],
-        emergencyNumber: destInfo.emergencyNumber || '112',
-        timezone: destInfo.timezone || '',
-        coordinates: destInfo.coordinates || { lat: 0, lng: 0 },
-      };
-
       const isDayTrip = extraction.tripType === 'day-trip' || (extraction.duration && extraction.duration <= 1);
       const today = new Date();
-      const startDate = extraction.startDate || today.toISOString().split('T')[0];
-      const endDate = (() => {
-        const d = new Date(startDate);
+      const tripStartDate = extraction.startDate || today.toISOString().split('T')[0];
+      const tripEndDate = (() => {
+        const d = new Date(tripStartDate);
         d.setDate(d.getDate() + (extraction.duration || 1) - 1);
         return d.toISOString().split('T')[0];
       })();
 
-      const travelPlan: TravelPlan = {
-        id: `plan_${Date.now()}`,
-        title: isDayTrip ? `${extraction.destination} Day Trip` : `${extraction.destination} Adventure`,
-        tripType: isDayTrip ? 'day-trip' : 'full-trip',
-        destinations: [destination],
-        segments: [{
+      const hasSegments = extraction.segments && extraction.segments.length > 0;
+
+      let allDestinations: Destination[] = [];
+      let allSegments: TripSegment[] = [];
+      let titleParts: string[] = [];
+
+      if (hasSegments && extraction.segments!.length > 0) {
+        // Multi-destination trip: build from segments
+        let segIdx = 0;
+        for (const seg of extraction.segments!) {
+          const destInfo = await generateDestinationInfo(seg.cities[0] || seg.country, seg.country);
+
+          const destId = `dest_${Date.now()}_${segIdx}`;
+          const cities: City[] = seg.cities.map((cityName, ci) => ({
+            id: `city_${Date.now()}_${segIdx}_${ci}`,
+            name: cityName,
+            coordinates: destInfo.coordinates || { lat: 0, lng: 0 },
+            countryId: destId,
+          }));
+
+          const destination: Destination = {
+            id: destId,
+            name: seg.country,
+            country: seg.country,
+            countryCode: destInfo.countryCode || '',
+            currency: destInfo.currency || '',
+            languages: destInfo.languages || [],
+            emergencyNumber: destInfo.emergencyNumber || '112',
+            timezone: destInfo.timezone || '',
+            coordinates: destInfo.coordinates || { lat: 0, lng: 0 },
+            cities,
+          };
+          allDestinations.push(destination);
+
+          // Create one segment per city within this country
+          for (const city of cities) {
+            const cityAccom = (seg.accommodations || []).filter(
+              a => a.city.toLowerCase() === city.name.toLowerCase()
+            );
+            // If no city-specific match, check if there's a single accommodation for the whole segment
+            const accoms = cityAccom.length > 0 ? cityAccom :
+              (seg.accommodations?.length === 1 && cities.length === 1) ? seg.accommodations : [];
+
+            allSegments.push({
+              id: `segment_${Date.now()}_${segIdx}_${city.id}`,
+              destination,
+              city,
+              startDate: seg.startDate || tripStartDate,
+              endDate: seg.endDate || tripEndDate,
+              accommodations: accoms.map((a, ai) => ({
+                id: `acc_${Date.now()}_${segIdx}_${ai}`,
+                name: a.name,
+                address: a.address || '',
+                checkIn: seg.startDate || tripStartDate,
+                checkOut: seg.endDate || tripEndDate,
+                destinationId: destId,
+                cityId: city.id,
+              })),
+            });
+
+            titleParts.push(city.name);
+          }
+          segIdx++;
+        }
+      } else {
+        // Single destination fallback (existing behavior)
+        const destInfo = await generateDestinationInfo(extraction.destination, extraction.country || '');
+
+        const destination: Destination = {
+          id: `dest_${Date.now()}`,
+          name: extraction.destination,
+          country: extraction.country || '',
+          countryCode: destInfo.countryCode || '',
+          currency: destInfo.currency || '',
+          languages: destInfo.languages || [],
+          emergencyNumber: destInfo.emergencyNumber || '112',
+          timezone: destInfo.timezone || '',
+          coordinates: destInfo.coordinates || { lat: 0, lng: 0 },
+        };
+        allDestinations = [destination];
+        allSegments = [{
           id: `segment_${Date.now()}`,
           destination,
           city: { id: `city_${Date.now()}`, name: extraction.destination, coordinates: destination.coordinates, countryId: destination.id },
-          startDate,
-          endDate,
+          startDate: tripStartDate,
+          endDate: tripEndDate,
           accommodations: extraction.accommodation ? [{
             id: `acc_${Date.now()}`,
             name: extraction.accommodation,
             address: extraction.accommodationAddress || '',
-            checkIn: startDate,
-            checkOut: endDate,
+            checkIn: tripStartDate,
+            checkOut: tripEndDate,
           }] : [],
-        }],
-        startDate,
-        endDate,
+        }];
+        titleParts = [extraction.destination];
+      }
+
+      const title = isDayTrip
+        ? `${titleParts[0]} Day Trip`
+        : titleParts.length > 3
+          ? `${titleParts.slice(0, 3).join(', ')} Adventure`
+          : `${titleParts.join(', ')} Adventure`;
+
+      const travelPlan: TravelPlan = {
+        id: `plan_${Date.now()}`,
+        title,
+        tripType: isDayTrip ? 'day-trip' : 'full-trip',
+        destinations: allDestinations,
+        segments: allSegments,
+        startDate: tripStartDate,
+        endDate: tripEndDate,
         travelers: extraction.travelers || 1,
         interests: extraction.interests.length > 0 ? extraction.interests : ['Food & Dining', 'Culture & Shows', 'Historical Sites'],
         budget: extraction.budget || 'mid-range',
@@ -140,7 +215,9 @@ const ConversationalOnboarding: React.FC = () => {
   };
 
   const extractedItems = extraction ? [
-    extraction.destination && `${extraction.destination}${extraction.country ? `, ${extraction.country}` : ''}`,
+    extraction.segments && extraction.segments.length > 1
+      ? extraction.segments.map(s => s.cities.length > 0 ? s.cities.join(', ') : s.country).join(' / ')
+      : extraction.destination && `${extraction.destination}${extraction.country ? `, ${extraction.country}` : ''}`,
     extraction.travelers && `${extraction.travelers} traveler${extraction.travelers !== 1 ? 's' : ''}`,
     extraction.duration && `${extraction.duration} day${extraction.duration !== 1 ? 's' : ''}`,
     extraction.interests.length > 0 && extraction.interests.slice(0, 3).join(', '),
