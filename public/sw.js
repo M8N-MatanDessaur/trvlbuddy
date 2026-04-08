@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trvlbuddy-v2';
+const CACHE_NAME = 'trvlbuddy-v3';
 const urlsToCache = [
   '/',
   '/manifest.json',
@@ -77,16 +77,24 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (url.hostname !== self.location.hostname) return;
 
+  // Never cache hashed asset files (JS/CSS chunks). They have unique names
+  // per build, so serving a stale cached version causes MIME type errors
+  // when the old filename no longer exists on the server.
+  const isHashedAsset = url.pathname.startsWith('/assets/');
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      if (cached) return cached;
+      if (cached && !isHashedAsset) return cached;
 
       return fetch(event.request.clone()).then((response) => {
         if (!response || response.status !== 200 || response.type !== 'basic') {
           return response;
         }
-        const toCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, toCache));
+        // Only cache non-hashed assets (icons, manifest, root document)
+        if (!isHashedAsset) {
+          const toCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, toCache));
+        }
         return response;
       }).catch(() => {
         if (event.request.destination === 'document') {
