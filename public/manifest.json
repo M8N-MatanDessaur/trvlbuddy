@@ -98,5 +98,13 @@
   "display_override": ["window-controls-overlay", "standalone"],
   "launch_handler": {
     "client_mode": "navigate-existing"
-  }
+  },
+  "file_handlers": [
+    {
+      "action": "/",
+      "accept": {
+        "application/json": [".trvlbuddy"]
+      }
+    }
+  ]
 }
