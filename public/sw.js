@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trvlbuddy-v1';
+const CACHE_NAME = 'trvlbuddy-v2';
 const urlsToCache = [
   '/',
   '/manifest.json',
@@ -29,10 +29,52 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Open (or create) the IndexedDB used to pass shared files to the app
+function openShareDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('trvlbuddy-share', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('pending');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function storePendingFile(text) {
+  return openShareDB().then((db) => {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('pending', 'readwrite');
+      tx.objectStore('pending').put(text, 'shared-trip');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  });
+}
+
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // Handle Share Target POST: extract the file, store it, redirect to app
+  if (url.pathname === '/_share-target' && event.request.method === 'POST') {
+    event.respondWith(
+      (async () => {
+        try {
+          const formData = await event.request.formData();
+          const file = formData.get('trip');
+          if (file) {
+            const text = await file.text();
+            await storePendingFile(text);
+          }
+        } catch (e) {
+          // If anything fails, just redirect to app anyway
+        }
+        return Response.redirect('/?import=shared', 303);
+      })()
+    );
+    return;
+  }
+
   // Skip non-GET and API requests
   if (event.request.method !== 'GET') return;
-  const url = new URL(event.request.url);
   if (url.hostname !== self.location.hostname) return;
 
   event.respondWith(
