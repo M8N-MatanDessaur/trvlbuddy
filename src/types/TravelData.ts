@@ -83,6 +83,9 @@ export interface GeneratedActivity {
   difficulty?: 'easy' | 'moderate' | 'challenging';
   destinationId?: string; // Which destination this activity belongs to
   cityId?: string; // Which city this activity belongs to (for multi-city countries)
+  imageUrl?: string; // Google Places photo URL (primary, used on cards)
+  imageUrls?: string[]; // All available Google Places photos (used in modal carousel)
+  placeId?: string; // Google Place ID for photo lookups
 }
 
 export interface EmergencyContact {

@@ -11,9 +11,11 @@ import { groupActivities, groupActivitiesByContext } from '../utils/groupActivit
 import { useContextualContent } from '../hooks/useContextualContent';
 import { generateCustomItinerary, discoverMoreActivities } from '../services/aiService';
 import { Globe, Sparkles, Search, Loader2, Plus, Wand2, MapPin } from 'lucide-react';
+import { useActivityPhotos } from '../hooks/useActivityPhotos';
 
 const DynamicActivitiesPage: React.FC = () => {
   const { currentPlan, activities, setActivities } = useTravel();
+  useActivityPhotos();
   const { moment } = useContextualContent();
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedActivity, setSelectedActivity] = useState<GeneratedActivity | null>(null);

@@ -4,6 +4,7 @@ import { useContextualContent } from '../../hooks/useContextualContent';
 import { useTravel } from '../../contexts/TravelContext';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import type { GeneratedActivity } from '../../types/TravelData';
+import CachedImage from '../CachedImage';
 
 interface Props {
   onActivityClick: (activity: GeneratedActivity) => void;
@@ -74,12 +75,25 @@ const RightNowHero: React.FC<Props> = ({ onActivityClick }) => {
               className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all active:scale-[0.98]"
               style={{ background: 'var(--surface-container)' }}
             >
-              <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
-              >
-                <CatIcon size={16} />
-              </div>
+              {activity.imageUrl ? (
+                <div
+                  className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden"
+                >
+                  <CachedImage
+                    src={activity.imageUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+              ) : (
+                <div
+                  className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
+                >
+                  <CatIcon size={16} />
+                </div>
+              )}
               <div className="flex-1 min-w-0">
                 <div
                   className="text-[13px] font-semibold truncate"
