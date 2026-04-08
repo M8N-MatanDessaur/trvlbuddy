@@ -103,6 +103,7 @@
     {
       "action": "/",
       "accept": {
+        "application/octet-stream": [".trvlbuddy"],
         "application/json": [".trvlbuddy"]
       }
     }
