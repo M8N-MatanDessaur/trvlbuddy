@@ -38,22 +38,37 @@ const DynamicTranslatorPage: React.FC = () => {
     );
   }
 
-  const languages = useMemo(() => {
-    const langs = new Set<string>();
-    if (currentPlan.destination?.languages) currentPlan.destination.languages.forEach((l: string) => langs.add(l));
-    currentPlan.segments?.forEach((s: any) => s.destination?.languages?.forEach((l: string) => langs.add(l)));
-    return Array.from(langs);
+  // Build a map of language -> destinationId for filtering, excluding English
+  // since all phrases already show English in the left column.
+  const languageDestMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const destinations = currentPlan.destinations || (currentPlan.destination ? [currentPlan.destination] : []);
+    for (const dest of destinations) {
+      const primary = dest.languages?.[0];
+      if (primary && primary.toLowerCase() !== 'english') {
+        map.set(primary, dest.id);
+      }
+    }
+    // Also check segments for destinations not in the top-level array
+    currentPlan.segments?.forEach((s: any) => {
+      const primary = s.destination?.languages?.[0];
+      if (primary && primary.toLowerCase() !== 'english' && !map.has(primary)) {
+        map.set(primary, s.destination.id);
+      }
+    });
+    return map;
   }, [currentPlan]);
+
+  const languages = useMemo(() => Array.from(languageDestMap.keys()), [languageDestMap]);
 
   const currentLanguage = selectedLanguage || languages[0] || 'Local';
 
   const filteredTranslations = useMemo(() => {
     if (languages.length <= 1) return translations;
-    return translations.filter(t => {
-      const dest = currentPlan.segments?.find((s: any) => s.destination?.languages?.includes(currentLanguage));
-      return dest ? t.destinationId === dest.destination?.id || !t.destinationId : true;
-    });
-  }, [translations, currentLanguage, currentPlan, languages]);
+    const destId = languageDestMap.get(currentLanguage);
+    if (!destId) return translations;
+    return translations.filter(t => t.destinationId === destId || !t.destinationId);
+  }, [translations, currentLanguage, languageDestMap, languages]);
 
   // Context-aware group ordering
   const situationGroups = useMemo(() => {
