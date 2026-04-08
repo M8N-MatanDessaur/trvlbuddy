@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Plane, Check, Sparkles, Globe, Languages, Wrench, ArrowRight, Upload } from 'lucide-react';
-import { importTripFromJson, TripBundle } from '../utils/tripShare';
+import { Send, Loader2, Plane, Check, Sparkles, Globe, Languages, Wrench, ArrowRight, Upload, Map, Compass, Sun, Coffee, Camera, Music, Heart, Star, Utensils, ShoppingBag, Mountain, Landmark } from 'lucide-react';
+import { importTripFromJson } from '../utils/tripShare';
 
 import { useTravel } from '../contexts/TravelContext';
 import { useToast } from '../contexts/ToastContext';
@@ -147,71 +147,134 @@ const ConversationalOnboarding: React.FC = () => {
     extraction.budget && extraction.budget,
   ].filter(Boolean) : [];
 
+  const marqueeRow1 = [
+    { icon: Landmark, label: 'Tokyo' },
+    { icon: Coffee, label: 'Paris' },
+    { icon: Sun, label: 'Bali' },
+    { icon: Star, label: 'New York' },
+    { icon: Camera, label: 'Barcelona' },
+    { icon: Music, label: 'Seoul' },
+    { icon: Landmark, label: 'Rome' },
+    { icon: Compass, label: 'London' },
+    { icon: Mountain, label: 'Iceland' },
+    { icon: Utensils, label: 'Mexico City' },
+    { icon: ShoppingBag, label: 'Dubai' },
+    { icon: Map, label: 'Lisbon' },
+  ];
+
+  const marqueeRow2 = [
+    { icon: Sparkles, label: 'AI itineraries' },
+    { icon: Languages, label: 'Local phrases' },
+    { icon: Map, label: 'Hidden gems' },
+    { icon: Wrench, label: 'Currency tools' },
+    { icon: Heart, label: 'Save favorites' },
+    { icon: Compass, label: 'Day planner' },
+    { icon: Utensils, label: 'Food finder' },
+    { icon: Camera, label: 'Travel journal' },
+    { icon: Globe, label: 'Offline ready' },
+    { icon: Sun, label: 'Weather updates' },
+  ];
+
+  const MarqueeStrip = ({ items, direction, speed }: { items: typeof marqueeRow1; direction: 'left' | 'right'; speed: number }) => (
+    <div className="overflow-hidden" style={{ maskImage: 'linear-gradient(to right, transparent, black 8%, black 92%, transparent)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 8%, black 92%, transparent)' }}>
+      <div className={`flex gap-2.5 marquee-scroll-${direction}`} style={{ '--marquee-speed': `${speed}s` } as React.CSSProperties}>
+        {[...items, ...items].map((item, i) => (
+          <div
+            key={i}
+            className="flex-shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-full"
+            style={{ background: 'var(--surface-container)' }}
+          >
+            <item.icon size={13} style={{ color: 'var(--accent)' }} />
+            <span className="text-[12px] font-semibold whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   if (showLanding) {
     return (
-      <div className="flex flex-col items-center justify-center px-8 text-center" style={{ background: 'var(--bg-primary)', height: '100dvh' }}>
-        <div className="flex items-center justify-center mb-6" style={{ height: '72px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent)', color: 'white' }}>
-          <Plane size={32} />
-        </div>
-        <h1 className="text-3xl font-extrabold tracking-tight mb-3">TrvlBuddy</h1>
-        <p className="text-[15px] leading-relaxed mb-8 max-w-xs" style={{ color: 'var(--text-secondary)' }}>
-          Your AI travel companion. Activities, phrases, tools, all personalized for your trip.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3 w-full max-w-xs mb-10">
-          {[
-            { icon: Sparkles, label: 'AI Planning', desc: 'Smart itineraries' },
-            { icon: Globe, label: 'Activities', desc: 'Local discoveries' },
-            { icon: Languages, label: 'Translator', desc: 'Key phrases' },
-            { icon: Wrench, label: 'Tools', desc: 'Currency & more' },
-          ].map((f, i) => (
-            <div key={i} className="p-3.5 rounded-2xl text-left" style={{ background: 'var(--surface-container)' }}>
-              <f.icon size={18} style={{ color: 'var(--accent)' }} className="mb-2" />
-              <div className="text-[12px] font-bold">{f.label}</div>
-              <div className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{f.desc}</div>
-            </div>
-          ))}
+      <div
+        className="flex flex-col"
+        style={{ background: 'var(--bg-primary)', height: '100dvh', overflow: 'hidden' }}
+      >
+        {/* Top marquee section */}
+        <div className="flex-shrink-0 pt-16 space-y-2.5">
+          <MarqueeStrip items={marqueeRow1} direction="left" speed={35} />
+          <MarqueeStrip items={[...marqueeRow1].reverse()} direction="right" speed={40} />
         </div>
 
-        <button
-          onClick={() => setShowLanding(false)}
-          className="w-full max-w-xs flex items-center justify-center gap-2 py-4 rounded-2xl text-[15px] font-bold transition-all active:scale-[0.98]"
-          style={{ background: 'var(--accent)', color: 'white' }}
-        >
-          Plan My Trip
-          <ArrowRight size={18} />
-        </button>
-
-        <label
-          className="w-full max-w-xs flex items-center justify-center gap-2 py-3.5 rounded-2xl text-[14px] font-semibold mt-3 cursor-pointer transition-all active:scale-[0.98]"
-          style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)' }}
-        >
-          <Upload size={16} />
-          Import Shared Trip
-          <input
-            type="file"
-            accept=".trvlbuddy,.json"
-            className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              const text = await file.text();
-              const bundle = importTripFromJson(text);
-              if (bundle) {
-                setCurrentPlan(bundle.plan);
-                setActivities(bundle.activities);
-                setTranslations(bundle.translations);
-                setEmergencyContacts(bundle.emergencyContacts);
-                if (bundle.savedActivities) {
-                  localStorage.setItem('savedActivities', JSON.stringify(bundle.savedActivities));
-                }
-                setHasCompletedOnboarding(true);
-              } else {
-                toast('Invalid trip file. Please try again.', 'error');
-              }
+        {/* Hero center */}
+        <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
+          <div
+            className="flex items-center justify-center mb-5"
+            style={{
+              height: '80px',
+              aspectRatio: '1',
+              borderRadius: '24px',
+              background: 'var(--accent)',
+              color: 'white',
             }}
-          />
-        </label>
+          >
+            <Plane size={36} />
+          </div>
+          <h1 className="text-4xl font-black tracking-tight mb-2">TrvlBuddy</h1>
+          <p
+            className="text-[15px] leading-relaxed max-w-[280px]"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            Tell me where you're going. I'll handle the rest.
+          </p>
+        </div>
+
+        {/* Bottom marquee section */}
+        <div className="flex-shrink-0 space-y-2.5 pb-6">
+          <MarqueeStrip items={marqueeRow2} direction="left" speed={28} />
+          <MarqueeStrip items={[...marqueeRow2].reverse()} direction="right" speed={32} />
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex-shrink-0 px-6" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+          <button
+            onClick={() => setShowLanding(false)}
+            className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-[16px] font-bold transition-all active:scale-[0.97]"
+            style={{ background: 'var(--accent)', color: 'white' }}
+          >
+            Plan My Trip
+            <ArrowRight size={20} />
+          </button>
+
+          <label
+            className="w-full flex items-center justify-center gap-2 py-3 text-[13px] font-semibold cursor-pointer transition-all active:opacity-70 mt-2"
+            style={{ color: 'var(--text-tertiary)' }}
+          >
+            <Upload size={14} />
+            Import Shared Trip
+            <input
+              type="file"
+              accept=".trvlbuddy,.json"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const text = await file.text();
+                const bundle = importTripFromJson(text);
+                if (bundle) {
+                  setCurrentPlan(bundle.plan);
+                  setActivities(bundle.activities);
+                  setTranslations(bundle.translations);
+                  setEmergencyContacts(bundle.emergencyContacts);
+                  if (bundle.savedActivities) {
+                    localStorage.setItem('savedActivities', JSON.stringify(bundle.savedActivities));
+                  }
+                  setHasCompletedOnboarding(true);
+                } else {
+                  toast('Invalid trip file. Please try again.', 'error');
+                }
+              }}
+            />
+          </label>
+        </div>
       </div>
     );
   }
