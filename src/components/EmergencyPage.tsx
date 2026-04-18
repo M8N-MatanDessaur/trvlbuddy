@@ -3,8 +3,7 @@ import { Phone, Shield, Building2, Globe, Loader2, LocateFixed } from 'lucide-re
 import { useTravel } from '../contexts/TravelContext';
 import { EmergencyContact } from '../types/TravelData';
 import { getCachedLocation, getCurrentLocation, UserLocation } from '../utils/geolocation';
-import { reverseGeocodeCountry } from '../utils/geocoding';
-import { generateEmergencyContactsForDestination } from '../services/aiService';
+import { generateEmergencyContactsForCoordinates } from '../services/aiService';
 
 interface CountryInfo { id: string; name: string; languages: string[]; }
 
@@ -38,27 +37,14 @@ const EmergencyPage: React.FC = () => {
         }
       }
       setLocalStatus('fetching');
-      const country = await reverseGeocodeCountry(loc.lat, loc.lng);
+      const result = await generateEmergencyContactsForCoordinates(loc.lat, loc.lng);
       if (cancelled) return;
-      if (!country) {
+      if (!result || result.contacts.length === 0) {
         setLocalStatus('error');
         return;
       }
-      setLocalCountry(country);
-      const mockDestination = {
-        id: `local_${country.code}`,
-        name: country.name,
-        country: country.name,
-        countryCode: country.code,
-        currency: '',
-        languages: [],
-        emergencyNumber: '',
-        timezone: '',
-        coordinates: { lat: loc.lat, lng: loc.lng },
-      };
-      const contacts = await generateEmergencyContactsForDestination(mockDestination);
-      if (cancelled) return;
-      setLocalContacts(contacts);
+      setLocalCountry({ name: result.countryName, code: result.countryCode });
+      setLocalContacts(result.contacts);
       setLocalStatus('ready');
     })();
     return () => {
