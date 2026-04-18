@@ -227,6 +227,42 @@ function buildPhotoUrl(photoName: string, maxWidth = 1200): string {
   return `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=${maxWidth}&key=${GOOGLE_PLACES_API_KEY}`;
 }
 
+function buildLegacyPhotoUrl(photoReference: string, maxWidth = 1200): string {
+  return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photoreference=${photoReference}&key=${GOOGLE_PLACES_API_KEY}`;
+}
+
+// Google's legacy `types` list usually leads with the most specific type,
+// followed by very generic ones. We skip the generic end of the list when
+// deriving a dynamic label.
+const GENERIC_LEGACY_TYPES = new Set<string>([
+  'point_of_interest',
+  'establishment',
+  'food',
+  'premise',
+  'subpremise',
+]);
+
+function labelFromLegacyTypes(types: string[]): string {
+  const specific = types.find(t => !GENERIC_LEGACY_TYPES.has(t));
+  return specific ? titleCaseType(specific) : 'Place';
+}
+
+interface LegacyApiResult {
+  place_id?: string;
+  name?: string;
+  vicinity?: string;
+  formatted_address?: string;
+  geometry?: { location?: { lat: number; lng: number } };
+  rating?: number;
+  user_ratings_total?: number;
+  price_level?: number;
+  opening_hours?: { open_now?: boolean };
+  photos?: Array<{ photo_reference: string }>;
+  types?: string[];
+}
+
+let v1PermissionWarned = false;
+
 export class NearbyFeedCursor {
   private readonly userLocation: UserLocation;
   private readonly categories: CategoryDef[];
@@ -236,6 +272,11 @@ export class NearbyFeedCursor {
   private radiusIndex = 0;
   private readonly seenPlaceIds = new Set<string>();
   private exhausted = false;
+  // When the v1 API rejects a request (e.g. the key doesn't have Places API
+  // (New) enabled, or enablement is still propagating), we flip this flag
+  // and use the legacy API for the rest of this session. The feed keeps
+  // working; categories come out less precise until v1 is available.
+  private v1Disabled = false;
 
   constructor(
     userLocation: UserLocation,
@@ -312,6 +353,21 @@ export class NearbyFeedCursor {
 
   private async fetchCategory(cat: CategoryDef, radius: number): Promise<NearbyPlace[]> {
     if (!GOOGLE_PLACES_API_KEY) return [];
+    if (!this.v1Disabled) {
+      const v1Result = await this.fetchCategoryV1(cat, radius);
+      if (v1Result !== null) return v1Result;
+      this.v1Disabled = true;
+    }
+    return this.fetchCategoryLegacy(cat, radius);
+  }
+
+  // Returns null on any v1 failure (network, non-2xx, etc.) so the caller
+  // can fall back to legacy. Empty-but-OK responses return an empty array
+  // (no failure — there just aren't any places of this type in radius).
+  private async fetchCategoryV1(
+    cat: CategoryDef,
+    radius: number,
+  ): Promise<NearbyPlace[] | null> {
     try {
       const useTextSearch = Boolean(cat.noTypeSearch && this.globalKeyword);
       const endpoint = useTextSearch
@@ -356,25 +412,28 @@ export class NearbyFeedCursor {
 
       const data: PlacesV1Response = await res.json();
       if (!res.ok) {
-        console.warn('Places v1 non-OK:', endpoint, data.error?.status, data.error?.message);
-        return [];
+        if (!v1PermissionWarned) {
+          v1PermissionWarned = true;
+          console.warn(
+            '[nearby] Places API (New) request failed — falling back to legacy API.',
+            'Enable "Places API (New)" in Google Cloud Console and allow it on the API key.',
+            'If you just enabled it, give it 1–2 minutes to propagate.',
+            { status: data.error?.status, message: data.error?.message },
+          );
+        }
+        return null;
       }
 
       const raw: PlacesV1Place[] = data.places || [];
       return raw
         .filter(r => r.id && r.location?.latitude != null && r.location?.longitude != null)
         .filter(r => {
-          // Drop explicitly-closed places; keep unknown + open. Nearby search
-          // doesn't support a server-side openNow filter, so we do it here
-          // for both endpoints for consistency.
           const openNow =
             r.currentOpeningHours?.openNow ?? r.regularOpeningHours?.openNow;
           return openNow !== false;
         })
         .filter(r => !(r.types || []).some(t => EXCLUDED_PLACE_TYPES.has(t)))
         .filter(r => {
-          // Text Search uses locationBias (not restriction), so results outside
-          // the transport-mode radius can come back. Enforce it here.
           if (!useTextSearch) return true;
           const lat = r.location?.latitude;
           const lng = r.location?.longitude;
@@ -383,9 +442,76 @@ export class NearbyFeedCursor {
         })
         .map(r => this.toPlace(r));
     } catch (err) {
-      console.error('Places v1 fetch failed', err);
+      if (!v1PermissionWarned) {
+        v1PermissionWarned = true;
+        console.warn('[nearby] Places API (New) fetch threw — falling back to legacy.', err);
+      }
+      return null;
+    }
+  }
+
+  private async fetchCategoryLegacy(cat: CategoryDef, radius: number): Promise<NearbyPlace[]> {
+    try {
+      const useTextSearch = Boolean(cat.noTypeSearch && this.globalKeyword);
+      const endpoint = useTextSearch ? 'textsearch' : 'nearbysearch';
+      const params = new URLSearchParams({
+        location: `${this.userLocation.lat},${this.userLocation.lng}`,
+        radius: String(radius),
+        opennow: 'true',
+        key: GOOGLE_PLACES_API_KEY,
+      });
+      if (useTextSearch) {
+        params.set('query', this.globalKeyword!);
+      } else {
+        if (!cat.noTypeSearch) params.set('type', cat.type);
+        const keyword = [this.globalKeyword, cat.keyword].filter(Boolean).join(' ').trim();
+        if (keyword) params.set('keyword', keyword);
+      }
+      const res = await fetch(`/api/places/${endpoint}/json?${params.toString()}`);
+      const data = await res.json();
+      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+        console.warn('[nearby] Legacy Places non-OK:', endpoint, data.status, data.error_message);
+        return [];
+      }
+      const raw: LegacyApiResult[] = data.results || [];
+      return raw
+        .filter(r => r.place_id && r.geometry?.location)
+        .filter(r => r.opening_hours?.open_now !== false)
+        .filter(r => !(r.types || []).some(t => EXCLUDED_PLACE_TYPES.has(t)))
+        .filter(r => {
+          if (!useTextSearch) return true;
+          const loc = r.geometry?.location;
+          if (!loc) return false;
+          return haversineMeters(this.userLocation, loc) <= radius;
+        })
+        .map(r => this.toLegacyPlace(r));
+    } catch (err) {
+      console.error('[nearby] Legacy Places fetch failed', err);
       return [];
     }
+  }
+
+  private toLegacyPlace(raw: LegacyApiResult): NearbyPlace {
+    const loc = raw.geometry!.location!;
+    const types = raw.types || [];
+    const imageUrls = (raw.photos || [])
+      .slice(0, MAX_POST_PHOTOS)
+      .map(p => buildLegacyPhotoUrl(p.photo_reference));
+    return {
+      placeId: raw.place_id!,
+      name: raw.name || '',
+      category: types[0] || 'place',
+      categoryLabel: labelFromLegacyTypes(types),
+      categoryIcon: iconForPrimaryType(types[0], types),
+      address: raw.vicinity || raw.formatted_address || '',
+      location: { lat: loc.lat, lng: loc.lng },
+      distance: haversineMeters(this.userLocation, loc),
+      rating: raw.rating,
+      userRatingsTotal: raw.user_ratings_total,
+      priceLevel: raw.price_level,
+      openNow: raw.opening_hours?.open_now,
+      imageUrls,
+    };
   }
 
   private toPlace(raw: PlacesV1Place): NearbyPlace {
