@@ -3,6 +3,12 @@
   publish = "dist"
 
 [[redirects]]
+  from = "/api/placesv1/*"
+  to = "https://places.googleapis.com/v1/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/places/*"
   to = "https://maps.googleapis.com/maps/api/place/:splat"
   status = 200
