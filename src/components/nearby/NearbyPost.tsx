@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Star, Navigation, Share2, MapPin } from 'lucide-react';
 import CachedImage from '../CachedImage';
 import { NearbyPlace, formatDistance, priceLevelLabel } from '../../services/nearbyService';
@@ -15,6 +15,11 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
   const [errorSet, setErrorSet] = useState<Set<number>>(new Set());
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const swipingRef = useRef(false);
+  // Only fetch detailed photos (a Place Details call + extra Photo fetches)
+  // after the user actually engages with this card. Most cards in the feed
+  // are scrolled past without interaction, so this cuts the bulk of the
+  // Place Details / Places Photo spend.
+  const detailsRequestedRef = useRef(false);
 
   const validImages = images.filter((_, i) => !errorSet.has(i));
   const count = validImages.length;
@@ -22,18 +27,16 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
   const price = priceLevelLabel(place.priceLevel);
   const mapsQuery = encodeURIComponent(`${place.name} ${place.address}`.trim());
 
-  useEffect(() => {
-    let cancelled = false;
+  const ensureDetailedPhotos = useCallback(() => {
+    if (detailsRequestedRef.current) return;
+    detailsRequestedRef.current = true;
     fetchDetailedPhotos(place.placeId).then(extras => {
-      if (cancelled || !extras || extras.length === 0) return;
+      if (!extras || extras.length === 0) return;
       setImages(extras);
       setLoadedSet(new Set());
       setErrorSet(new Set());
       setCurrentIndex(0);
     });
-    return () => {
-      cancelled = true;
-    };
   }, [place.placeId]);
 
   const goTo = (idx: number) => {
@@ -46,6 +49,9 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     swipingRef.current = false;
+    // First touch on the image area = user wants more; start loading the
+    // rest of the gallery now so it's ready before the swipe completes.
+    ensureDetailedPhotos();
   };
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!touchStartRef.current) return;
@@ -132,6 +138,10 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
                 <CachedImage
                   key={src}
                   src={src}
+                  // Stable key per (place, photo-slot) so a new search that
+                  // returns the same place with a rotated photo token still
+                  // hits the cached blob instead of re-billing Places Photo.
+                  cacheKey={`${place.placeId}:${i}`}
                   alt=""
                   className="absolute inset-0 w-full h-full object-cover"
                   style={{

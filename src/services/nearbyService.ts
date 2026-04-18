@@ -17,7 +17,9 @@ import { haversineMeters } from '../utils/geolocation';
 import { NEARBY_ICON_REGISTRY } from './nearbyIconRegistry';
 
 const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
-const MAX_POST_PHOTOS = 6;
+// Cover-only on the first paint. More photos load lazily on first touch of
+// the card so we don't pay Places Photo for images the user never swipes to.
+const MAX_POST_PHOTOS = 1;
 
 export interface NearbyPlace {
   placeId: string;
