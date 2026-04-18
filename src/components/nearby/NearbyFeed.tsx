@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { LocateFixed, Loader2, RefreshCw, Radar, Globe } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { LocateFixed, Loader2, RefreshCw, Radar, Globe, ArrowUp } from 'lucide-react';
 import {
   getCachedLocation,
   getCurrentLocation,
@@ -29,6 +30,9 @@ const NearbyFeed: React.FC = () => {
   const cursorRef = useRef<NearbyFeedCursor | null>(null);
   const fetchingRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const scrollableRef = useRef<HTMLElement | null>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   const loadMore = useCallback(async () => {
     if (fetchingRef.current) return;
@@ -129,8 +133,32 @@ const NearbyFeed: React.FC = () => {
     return () => observer.disconnect();
   }, [status, places.length, exhausted, loadMore]);
 
+  // Track scroll position on the nearest scrollable ancestor so we can
+  // show a back-to-top button once the user has scrolled a meaningful amount.
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    let node: HTMLElement | null = el.parentElement;
+    while (node) {
+      const overflow = getComputedStyle(node).overflowY;
+      if (overflow === 'auto' || overflow === 'scroll') break;
+      node = node.parentElement;
+    }
+    if (!node) return;
+    scrollableRef.current = node;
+    const scroller = node;
+    const onScroll = () => setShowScrollTop(scroller.scrollTop > 600);
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    scrollableRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
-    <section className="page">
+    <section className="page" ref={sectionRef}>
       {/* Page header */}
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -288,6 +316,37 @@ const NearbyFeed: React.FC = () => {
           )}
         </>
       )}
+
+      <AnimatePresence>
+        {showScrollTop && (
+          <motion.button
+            key="scroll-top"
+            onClick={scrollToTop}
+            initial={{ opacity: 0, y: 12, scale: 0.85 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.85 }}
+            transition={{ duration: 0.18 }}
+            aria-label="Scroll to top"
+            className="flex items-center justify-center"
+            style={{
+              position: 'fixed',
+              right: '18px',
+              bottom: '88px',
+              width: '46px',
+              height: '46px',
+              borderRadius: '50%',
+              background: 'var(--accent)',
+              color: 'white',
+              boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
+              zIndex: 40,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <ArrowUp size={20} strokeWidth={2.4} />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </section>
   );
 };

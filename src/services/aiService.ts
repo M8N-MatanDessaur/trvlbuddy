@@ -924,6 +924,71 @@ Return only valid JSON.
   }
 }
 
+export interface LocalEmergencyResponse {
+  countryName: string;
+  countryCode: string;
+  contacts: EmergencyContact[];
+}
+
+/**
+ * Coordinate-driven variant for local mode. Avoids depending on Google
+ * Geocoding API being enabled - asks Gemini (with web search) to resolve
+ * the country from lat/lng and return that country's emergency contacts
+ * in a single round trip.
+ */
+export async function generateEmergencyContactsForCoordinates(
+  lat: number,
+  lng: number,
+): Promise<LocalEmergencyResponse | null> {
+  const prompt = `
+Given these GPS coordinates: ${lat}, ${lng}
+
+1. Identify the COUNTRY these coordinates fall in.
+2. Return the country's standard emergency contacts.
+
+Return ONLY a single JSON object (no markdown, no prose) with this shape:
+{
+  "countryName": "Full country name in English",
+  "countryCode": "ISO 3166-1 alpha-2 code",
+  "contacts": [
+    {
+      "name": "Service name (e.g., Emergency Services, National Police)",
+      "number": "Phone number exactly as dialled locally",
+      "description": "One short sentence about when to call",
+      "type": "emergency|police|medical|fire|tourist"
+    }
+  ]
+}
+
+Include at minimum: general emergency, police, medical/ambulance, fire.
+Add tourist police if one exists in this country.
+If you cannot confidently identify the country, use the nearest recognised country.
+Return only valid JSON.
+`;
+
+  try {
+    const response = await callGeminiAPI(prompt, true);
+    const cleaned = response.replace(/```json\n?|\n?```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const countryName: string = parsed.countryName || 'Unknown';
+    const countryCode: string = parsed.countryCode || 'XX';
+    const rawContacts = Array.isArray(parsed.contacts) ? parsed.contacts : [];
+    const destinationId = `local_${countryCode}`;
+    const contacts: EmergencyContact[] = rawContacts.map((c: any) => ({
+      name: c.name || 'Emergency',
+      number: String(c.number || '').trim(),
+      description: c.description || '',
+      type: c.type || 'emergency',
+      destinationId,
+    }));
+    return { countryName, countryCode, contacts };
+  } catch (error) {
+    console.error('Error generating local emergency contacts:', error);
+    return null;
+  }
+}
+
 export async function generateEmergencyContacts(travelPlan: TravelPlan): Promise<EmergencyContact[]> {
   let allContacts: EmergencyContact[] = [];
 
@@ -1521,6 +1586,92 @@ Keep it concise and personal. Do not use emojis. Return only the journal text, n
 // ---- OpenAI Whisper transcription ----
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
+
+// ---- Local-mode chat (no trip context) ----
+
+export interface LocalChatResponse {
+  content: string;
+  suggestions?: string[];
+  locations?: Array<{
+    name: string;
+    address: string;
+    type: 'restaurant' | 'attraction' | 'hotel' | 'general';
+  }>;
+}
+
+export async function chatWithLocalAssistant(
+  userMessage: string,
+  userLocation: { lat: number; lng: number } | null,
+  localityName: string | null,
+): Promise<LocalChatResponse> {
+  const locationLine = userLocation
+    ? `User GPS: ${userLocation.lat.toFixed(5)}, ${userLocation.lng.toFixed(5)}`
+    : 'User location: unknown';
+  const localityLine = localityName ? `Area: ${localityName}` : 'Area: unknown (use the GPS to infer a locality)';
+
+  const prompt = `
+You are a friendly AI concierge helping a user explore wherever they are RIGHT NOW. No trip is planned. Answer based on their current location.
+
+${locationLine}
+${localityLine}
+
+The user asked: "${userMessage}"
+
+Guidelines:
+- Keep responses tight and practical: 2-4 short paragraphs max.
+- If the user asks for places (food, coffee, bars, parks, museums, etc.), recommend real, currently-operating places near their coordinates. Prefer well-known, open-now spots.
+- Do NOT invent fake places. If you are unsure, say so.
+- Use plain text. No markdown, no emojis, no asterisks.
+- After your main answer, include up to 3 short follow-up suggestion questions the user might ask next, in this exact block format on a new line:
+SUGGESTIONS: ["Short question 1", "Short question 2", "Short question 3"]
+- If you recommend specific venues, include them in this exact block format on a new line:
+LOCATIONS: [{"name":"...","address":"...","type":"restaurant|attraction|hotel|general"}]
+- If there are no specific venues to recommend, omit the LOCATIONS block entirely.
+
+Begin your answer now.
+`;
+
+  try {
+    const raw = await callGeminiAPI(prompt, true);
+    let content = raw.trim();
+    let suggestions: string[] = [];
+    let locations: LocalChatResponse['locations'] = [];
+
+    const locMatch = content.match(/LOCATIONS:\s*(\[[\s\S]*?\])/);
+    if (locMatch) {
+      try {
+        locations = JSON.parse(locMatch[1]);
+        content = content.replace(/LOCATIONS:\s*\[[\s\S]*?\]/, '').trim();
+      } catch {
+        // ignore parse failure
+      }
+    }
+
+    const sugMatch = content.match(/SUGGESTIONS:\s*(\[[\s\S]*?\])/);
+    if (sugMatch) {
+      try {
+        suggestions = JSON.parse(sugMatch[1]);
+        content = content.replace(/SUGGESTIONS:\s*\[[\s\S]*?\]/, '').trim();
+      } catch {
+        // ignore parse failure
+      }
+    }
+
+    content = content
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .trim();
+
+    return {
+      content,
+      suggestions: suggestions.length > 0 ? suggestions : undefined,
+      locations: locations && locations.length > 0 ? locations : undefined,
+    };
+  } catch (error) {
+    console.error('Error in local chat assistant:', error);
+    throw error;
+  }
+}
 
 export async function transcribeAudio(blob: Blob, filename = 'audio.webm'): Promise<string> {
   if (!OPENAI_API_KEY) {
