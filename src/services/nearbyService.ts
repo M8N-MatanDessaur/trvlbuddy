@@ -45,6 +45,16 @@ export interface CategoryDef {
   noTypeSearch?: boolean;
 }
 
+// Minimum persisted state for a NearbyFeedCursor so it can be restored
+// after a remount without replaying the sweep from scratch.
+export interface NearbyCursorSnapshot {
+  categoryIndex: number;
+  radiusIndex: number;
+  seenPlaceIds: string[];
+  exhausted: boolean;
+  v1Disabled: boolean;
+}
+
 // Used as the taxonomy for the sweep loop and for constraining AI chip /
 // prompt interpretation — NOT for rendering card labels. Card labels come
 // straight from Google's primaryTypeDisplayName.
@@ -141,7 +151,7 @@ const PRIMARY_TYPE_ICON_ALIASES: Record<string, string> = {
 // match → primaryType alias → types list (first hit) → suffix heuristics
 // (_restaurant/_store/_shop) → MapPin. No label logic — the card label is
 // always Google's primaryTypeDisplayName.text.
-function iconForPrimaryType(primaryType?: string, types: string[] = []): LucideIcon {
+export function iconForPrimaryType(primaryType?: string, types: string[] = []): LucideIcon {
   const candidates = [primaryType, ...types].filter((c): c is string => Boolean(c));
 
   for (const c of candidates) {
@@ -318,6 +328,25 @@ export class NearbyFeedCursor {
 
   isExhausted() {
     return this.exhausted;
+  }
+
+  snapshot(): NearbyCursorSnapshot {
+    return {
+      categoryIndex: this.categoryIndex,
+      radiusIndex: this.radiusIndex,
+      seenPlaceIds: Array.from(this.seenPlaceIds),
+      exhausted: this.exhausted,
+      v1Disabled: this.v1Disabled,
+    };
+  }
+
+  restore(snap: NearbyCursorSnapshot): void {
+    this.categoryIndex = snap.categoryIndex;
+    this.radiusIndex = snap.radiusIndex;
+    this.seenPlaceIds.clear();
+    for (const id of snap.seenPlaceIds) this.seenPlaceIds.add(id);
+    this.exhausted = snap.exhausted;
+    this.v1Disabled = snap.v1Disabled;
   }
 
   async fetchNextBatch(targetCount: number): Promise<NearbyPlace[]> {

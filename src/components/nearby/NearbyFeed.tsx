@@ -12,6 +12,12 @@ import {
   CATEGORIES,
   TransportMode,
 } from '../../services/nearbyService';
+import {
+  FeedCacheContext,
+  clearFeedCache,
+  readFeedCache,
+  writeFeedCache,
+} from '../../services/nearbyFeedCache';
 import NearbyPost from './NearbyPost';
 import NearbyLiveEvents from './NearbyLiveEvents';
 import NearbyPromptBar, { NearbyPromptBarHandle } from './NearbyPromptBar';
@@ -61,6 +67,17 @@ const NearbyFeed: React.FC = () => {
   const promptBarRef = useRef<NearbyPromptBarHandle | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
+  // Keep the latest cache context + current places list in refs so loadMore
+  // can persist without needing to be recreated on every state change and
+  // without racing React's async setState.
+  const cacheContextRef = useRef<FeedCacheContext | null>(null);
+  const placesRef = useRef<NearbyPlace[]>([]);
+
+  const setPlacesTracked = useCallback((next: NearbyPlace[]) => {
+    placesRef.current = next;
+    setPlaces(next);
+  }, []);
+
   const loadMore = useCallback(async () => {
     if (fetchingRef.current) return;
     const cursor = cursorRef.current;
@@ -71,27 +88,53 @@ const NearbyFeed: React.FC = () => {
     fetchingRef.current = true;
     try {
       const batch = await cursor.fetchNextBatch(BATCH_SIZE);
-      setPlaces(prev => [...prev, ...batch]);
+      const nextPlaces = [...placesRef.current, ...batch];
+      setPlacesTracked(nextPlaces);
       if (cursor.isExhausted()) setExhausted(true);
+      // Persist after every fetch so a remount of the tab rehydrates with
+      // everything the user has already loaded — no repeat Places API calls.
+      const ctx = cacheContextRef.current;
+      if (ctx) writeFeedCache(ctx, nextPlaces, cursor.snapshot());
     } catch (err) {
       console.error('NearbyFeed loadMore error', err);
       setErrorMessage('Could not load nearby places.');
     } finally {
       fetchingRef.current = false;
     }
-  }, []);
+  }, [setPlacesTracked]);
 
   const bootstrap = useCallback(
     async (loc: UserLocation, types: string[], mode: TransportMode, keyword?: string) => {
-      setStatus('loading');
       setErrorMessage(null);
+      const ctx: FeedCacheContext = {
+        location: loc,
+        transportMode: mode,
+        selectedTypes: types,
+        aiKeyword: keyword,
+      };
+      cacheContextRef.current = ctx;
+
+      // Cache hit — same context, user hasn't moved past the mode's
+      // tolerance, within TTL. Rehydrate without hitting Places API.
+      const cached = readFeedCache(ctx);
+      if (cached) {
+        const cursor = new NearbyFeedCursor(loc, types, mode, keyword);
+        cursor.restore(cached.cursor);
+        cursorRef.current = cursor;
+        setPlacesTracked(cached.places);
+        setExhausted(cursor.isExhausted());
+        setStatus('ready');
+        return;
+      }
+
+      setStatus('loading');
       cursorRef.current = new NearbyFeedCursor(loc, types, mode, keyword);
-      setPlaces([]);
+      setPlacesTracked([]);
       setExhausted(false);
       await loadMore();
       setStatus('ready');
     },
-    [loadMore],
+    [loadMore, setPlacesTracked],
   );
 
   const requestLocation = useCallback(async () => {
@@ -100,6 +143,14 @@ const NearbyFeed: React.FC = () => {
     try {
       const loc = await getCurrentLocation();
       setUserLocation(loc);
+      // Explicit refresh — user tapped the button or we just re-acquired GPS,
+      // so bypass the cache for this context and refetch from Places.
+      clearFeedCache({
+        location: loc,
+        transportMode,
+        selectedTypes,
+        aiKeyword,
+      });
       await bootstrap(loc, selectedTypes, transportMode, aiKeyword);
     } catch (err: unknown) {
       const code = (err as GeolocationPositionError | undefined)?.code;
