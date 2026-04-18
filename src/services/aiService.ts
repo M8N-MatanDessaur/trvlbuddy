@@ -924,6 +924,71 @@ Return only valid JSON.
   }
 }
 
+export interface LocalEmergencyResponse {
+  countryName: string;
+  countryCode: string;
+  contacts: EmergencyContact[];
+}
+
+/**
+ * Coordinate-driven variant for local mode. Avoids depending on Google
+ * Geocoding API being enabled - asks Gemini (with web search) to resolve
+ * the country from lat/lng and return that country's emergency contacts
+ * in a single round trip.
+ */
+export async function generateEmergencyContactsForCoordinates(
+  lat: number,
+  lng: number,
+): Promise<LocalEmergencyResponse | null> {
+  const prompt = `
+Given these GPS coordinates: ${lat}, ${lng}
+
+1. Identify the COUNTRY these coordinates fall in.
+2. Return the country's standard emergency contacts.
+
+Return ONLY a single JSON object (no markdown, no prose) with this shape:
+{
+  "countryName": "Full country name in English",
+  "countryCode": "ISO 3166-1 alpha-2 code",
+  "contacts": [
+    {
+      "name": "Service name (e.g., Emergency Services, National Police)",
+      "number": "Phone number exactly as dialled locally",
+      "description": "One short sentence about when to call",
+      "type": "emergency|police|medical|fire|tourist"
+    }
+  ]
+}
+
+Include at minimum: general emergency, police, medical/ambulance, fire.
+Add tourist police if one exists in this country.
+If you cannot confidently identify the country, use the nearest recognised country.
+Return only valid JSON.
+`;
+
+  try {
+    const response = await callGeminiAPI(prompt, true);
+    const cleaned = response.replace(/```json\n?|\n?```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const countryName: string = parsed.countryName || 'Unknown';
+    const countryCode: string = parsed.countryCode || 'XX';
+    const rawContacts = Array.isArray(parsed.contacts) ? parsed.contacts : [];
+    const destinationId = `local_${countryCode}`;
+    const contacts: EmergencyContact[] = rawContacts.map((c: any) => ({
+      name: c.name || 'Emergency',
+      number: String(c.number || '').trim(),
+      description: c.description || '',
+      type: c.type || 'emergency',
+      destinationId,
+    }));
+    return { countryName, countryCode, contacts };
+  } catch (error) {
+    console.error('Error generating local emergency contacts:', error);
+    return null;
+  }
+}
+
 export async function generateEmergencyContacts(travelPlan: TravelPlan): Promise<EmergencyContact[]> {
   let allContacts: EmergencyContact[] = [];
 
