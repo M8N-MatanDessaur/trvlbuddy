@@ -24,7 +24,7 @@ const PageIndicator: React.FC<Props> = ({ pages, currentIndex, onPageSelect }) =
 
   return (
     <motion.div
-      className="flex items-center justify-center gap-2 py-3 px-4 select-none"
+      className="flex items-center justify-center gap-0.5 py-3 px-2 select-none"
       style={{
         borderTop: '0.33px solid var(--outline)',
         background: 'var(--bg-primary)',
@@ -44,29 +44,35 @@ const PageIndicator: React.FC<Props> = ({ pages, currentIndex, onPageSelect }) =
           <button
             key={page.path}
             onClick={() => onPageSelect(i)}
-            className="flex items-center justify-center gap-1.5 transition-all"
-            style={{
-              color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
-              padding: isActive ? '6px 14px' : '6px',
-              background: isActive ? 'var(--accent-container)' : 'transparent',
-              borderRadius: '20px',
-              minHeight: '32px',
-            }}
+            style={{ display: 'contents' }}
+            aria-label={page.label}
           >
-            <Icon size={isActive ? 16 : 14} strokeWidth={isActive ? 2.2 : 1.6} />
-            <AnimatePresence mode="wait">
-              {isActive && (
-                <motion.span
-                  initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: 'auto', opacity: 1 }}
-                  exit={{ width: 0, opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="text-[11px] font-bold overflow-hidden whitespace-nowrap"
-                >
-                  {page.label}
-                </motion.span>
-              )}
-            </AnimatePresence>
+            <div
+              className="flex items-center justify-center gap-1.5 transition-all"
+              style={{
+                color: isActive ? 'var(--accent)' : 'var(--text-tertiary)',
+                padding: isActive ? '6px 14px' : '6px 4px',
+                background: isActive ? 'var(--accent-container)' : 'transparent',
+                borderRadius: '20px',
+                minHeight: '32px',
+                cursor: 'pointer',
+              }}
+            >
+              <Icon size={isActive ? 16 : 14} strokeWidth={isActive ? 2.2 : 1.6} />
+              <AnimatePresence mode="wait">
+                {isActive && (
+                  <motion.span
+                    initial={{ width: 0, opacity: 0 }}
+                    animate={{ width: 'auto', opacity: 1 }}
+                    exit={{ width: 0, opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="text-[11px] font-bold overflow-hidden whitespace-nowrap"
+                  >
+                    {page.label}
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
           </button>
         );
       })}
