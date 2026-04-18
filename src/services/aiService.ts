@@ -567,56 +567,57 @@ Return only valid JSON, no additional text.
   }
 }
 
-export async function generateActivitiesForLocation(
-  destination: Destination, 
-  city: City | undefined,
-  interests: string[], 
-  budget: string, 
-  travelers: number
-): Promise<GeneratedActivity[]> {
-  // ONLY generate activities if we have a city - no country-level activities
-  if (!city) {
-    return [];
-  }
+const ACTIVITY_CATEGORIES: Array<{ name: string; definition: string }> = [
+  { name: 'History', definition: 'Historical sites, monuments, ancient ruins, castles, heritage sites' },
+  { name: 'Nature', definition: 'Parks, gardens, hiking, outdoor activities, wildlife, scenic views' },
+  { name: 'Food', definition: 'Restaurants, food tours, markets, cooking classes, local cuisine' },
+  { name: 'Museums', definition: 'Art galleries, museums, exhibitions, cultural centers' },
+  { name: 'Beach', definition: 'Beach activities, water sports, coastal experiences' },
+  { name: 'Shopping', definition: 'Markets, boutiques, shopping districts, souvenirs' },
+  { name: 'Nightlife', definition: 'Bars, clubs, evening entertainment, live music' },
+  { name: 'Culture', definition: 'Festivals, traditions, local experiences, performances' },
+  { name: 'Wellness', definition: 'Spas, thermal baths, relaxation, health activities' },
+  { name: 'City', definition: 'Urban exploration, architecture, city tours, neighborhoods' },
+];
 
+const MIN_PER_CATEGORY = 10;
+const REQUEST_PER_CATEGORY = 12; // ask for a buffer to account for validation drops
+
+async function generateCategoryActivities(
+  destination: Destination,
+  city: City,
+  category: { name: string; definition: string },
+  interests: string[],
+  budget: string,
+  travelers: number,
+  count: number,
+): Promise<GeneratedActivity[]> {
   const locationName = `${city.name}, ${destination.country}`;
-  const locationContext = `the city of ${city.name}`;
-  
+  const currency = destination.currency || 'local currency';
+
   const prompt = `
-Generate 25-35 diverse activities for ${locationName} based on:
+Generate ${count} authentic "${category.name}" activities for ${locationName}.
+Category definition: ${category.definition}
+
+Traveler profile:
 - Interests: ${interests.join(', ')}
 - Budget: ${budget}
 - Travelers: ${travelers}
-- Focus SPECIFICALLY on activities within ${city.name} city limits and immediate surroundings
+- Focus SPECIFICALLY on activities within ${city.name} city limits and immediate surroundings.
 
-IMPORTANT: Use ONLY these simplified single-word categories (choose the most appropriate one):
-History, Nature, Food, Museums, Beach, Shopping, Nightlife, Culture, Wellness, City
-
-Category Guidelines:
-- History: Historical sites, monuments, ancient ruins, castles, heritage sites
-- Nature: Parks, gardens, hiking, outdoor activities, wildlife, scenic views
-- Food: Restaurants, food tours, markets, cooking classes, local cuisine
-- Museums: Art galleries, museums, exhibitions, cultural centers
-- Beach: Beach activities, water sports, coastal experiences
-- Shopping: Markets, boutiques, shopping districts, souvenirs
-- Nightlife: Bars, clubs, evening entertainment, live music
-- Culture: Festivals, traditions, local experiences, performances
-- Wellness: Spas, thermal baths, relaxation, health activities
-- City: Urban exploration, architecture, city tours, neighborhoods
-
-CRITICAL PRICING FORMAT: All prices MUST be in ${destination.currency || 'the local currency'} for ${destination.country}. NEVER use EUR, USD, or any other currency. Examples for ${destination.currency || 'local currency'}:
+CRITICAL PRICING FORMAT: All prices MUST be in ${currency} for ${destination.country}. NEVER use EUR, USD, or any other foreign currency. Examples:
 - "Free"
-- "${destination.currency || 'LOCAL'} 5,000-15,000" (for currencies like KRW, VND, PHP)
-- "${destination.currency || 'LOCAL'} 50-150" (for currencies like THB)
+- "${destination.currency || 'LOCAL'} 5,000-15,000" (for KRW, VND, PHP, etc.)
+- "${destination.currency || 'LOCAL'} 50-150" (for THB, etc.)
 Always prefix with the currency code "${destination.currency}". NO symbols like $ or EUR.
 
-Return a JSON array of activities with this structure:
+Return a JSON array of exactly ${count} activities with this structure:
 [
   {
     "name": "Activity name",
-    "category": "ONE SINGLE WORD from: History, Nature, Food, Museums, Beach, Shopping, Nightlife, Culture, Wellness, City",
-    "description": "Detailed description (100-150 words)",
-    "estimatedCost": "SIMPLE price range in ${destination.currency || 'local currency'} ONLY (e.g., Free, KRW 5,000-15,000)",
+    "category": "${category.name}",
+    "description": "Detailed description (80-120 words)",
+    "estimatedCost": "SIMPLE price range in ${currency} ONLY (e.g., Free, KRW 5,000-15,000)",
     "duration": "Time needed (e.g., 2-3 hours, Half day, Full day)",
     "bestTime": "Best time to visit",
     "location": "Specific location/address in ${city.name}",
@@ -627,34 +628,61 @@ Return a JSON array of activities with this structure:
   }
 ]
 
-CRITICAL: Each activity must have exactly ONE category word from this list:
-History, Nature, Food, Museums, Beach, Shopping, Nightlife, Culture, Wellness, City
+CRITICAL: Every activity MUST have category exactly "${category.name}".
+CRITICAL: estimatedCost must be ONLY the price range with NO additional text.
 
-CRITICAL: estimatedCost must be ONLY the price range with NO additional text!
-
-Focus on authentic, local experiences specific to ${city.name}. Include mix of free and paid activities. Return only valid JSON.
+If ${city.name} genuinely does not have ${count} authentic "${category.name}" experiences (e.g. Beach in a landlocked city, or Wellness in a small village), return as many real ones as exist, but do NOT invent fake places. Return only valid JSON.
 `;
 
   try {
-    const response = await callGeminiAPI(prompt, true); // Enable grounding for activity generation
+    const response = await callGeminiAPI(prompt, true);
     const cleanResponse = response.replace(/```json\n?|\n?```/g, '').trim();
-    const activities = JSON.parse(cleanResponse);
-    
-    // Filter and validate activities before returning
-    const validActivities = Array.isArray(activities) 
-      ? activities.filter(isValidActivity).map((activity: any) => ({
-          ...activity,
-          destinationId: destination.id,
-          cityId: city.id
-        }))
-      : [];
-    
-    return validActivities;
+    const parsed = JSON.parse(cleanResponse);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isValidActivity).map((activity: any) => ({
+      ...activity,
+      category: category.name, // enforce category tag
+      destinationId: destination.id,
+      cityId: city.id,
+    }));
   } catch (error) {
-    console.error('Error generating activities:', error);
+    console.error(`Error generating ${category.name} activities:`, error);
     return [];
   }
 }
+
+export async function generateActivitiesForLocation(
+  destination: Destination,
+  city: City | undefined,
+  interests: string[],
+  budget: string,
+  travelers: number,
+): Promise<GeneratedActivity[]> {
+  // ONLY generate activities if we have a city - no country-level activities
+  if (!city) return [];
+
+  // Fan out: one Gemini call per category, run in parallel.
+  // Each requests REQUEST_PER_CATEGORY activities so the post-validation
+  // result reliably clears the MIN_PER_CATEGORY floor.
+  const results = await Promise.allSettled(
+    ACTIVITY_CATEGORIES.map(category =>
+      generateCategoryActivities(destination, city, category, interests, budget, travelers, REQUEST_PER_CATEGORY),
+    ),
+  );
+
+  const activities: GeneratedActivity[] = [];
+  for (let i = 0; i < results.length; i += 1) {
+    const r = results[i];
+    if (r.status === 'fulfilled') {
+      activities.push(...r.value);
+    } else {
+      console.error(`Category ${ACTIVITY_CATEGORIES[i].name} failed:`, r.reason);
+    }
+  }
+  return activities;
+}
+
+export { MIN_PER_CATEGORY };
 
 export async function generateDayTripsForLocation(
   destination: Destination,
