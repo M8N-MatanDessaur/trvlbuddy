@@ -3,6 +3,10 @@ const STORE_NAME = 'blobs';
 const DB_VERSION = 1;
 const MAX_AGE = 14 * 24 * 60 * 60 * 1000; // 14 days
 
+// The `url` field on the cache entry is actually the logical cache key —
+// either the full image URL, or a stable identifier like `${placeId}:${i}`.
+// Keying by place-id-plus-index lets us reuse the same blob even when
+// Google rotates the photo_reference / photoName token between searches.
 interface CacheEntry {
   url: string;
   blob: Blob;
@@ -28,13 +32,13 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 /** Get a cached blob URL, or null if not cached */
-export async function getCachedImage(url: string): Promise<string | null> {
+export async function getCachedImage(key: string): Promise<string | null> {
   try {
     const db = await openDB();
     return new Promise((resolve) => {
       const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
-      const request = store.get(url);
+      const request = store.get(key);
       request.onsuccess = () => {
         const entry = request.result as CacheEntry | undefined;
         if (entry && Date.now() - entry.timestamp < MAX_AGE) {
@@ -50,8 +54,8 @@ export async function getCachedImage(url: string): Promise<string | null> {
   }
 }
 
-/** Fetch an image, cache the blob in IndexedDB, return a blob URL */
-export async function cacheImage(url: string): Promise<string | null> {
+/** Fetch an image from `url`, cache the blob under `key`, return a blob URL. */
+export async function cacheImage(url: string, key: string = url): Promise<string | null> {
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
@@ -60,7 +64,7 @@ export async function cacheImage(url: string): Promise<string | null> {
     const db = await openDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-    store.put({ url, blob, timestamp: Date.now() } as CacheEntry);
+    store.put({ url: key, blob, timestamp: Date.now() } as CacheEntry);
 
     return URL.createObjectURL(blob);
   } catch {
@@ -68,12 +72,19 @@ export async function cacheImage(url: string): Promise<string | null> {
   }
 }
 
-/** Get from cache or fetch and cache. Returns blob URL or original URL as fallback. */
-export async function getOrCacheImage(url: string): Promise<string> {
-  const cached = await getCachedImage(url);
+/**
+ * Get from cache or fetch and cache. Returns blob URL or original URL as fallback.
+ *
+ * Pass `cacheKey` to use a stable identifier (e.g. `${placeId}:${index}`) that
+ * survives Google rotating the photo token in the URL. Without `cacheKey` the
+ * full URL is the key (back-compat behaviour).
+ */
+export async function getOrCacheImage(url: string, cacheKey?: string): Promise<string> {
+  const key = cacheKey || url;
+  const cached = await getCachedImage(key);
   if (cached) return cached;
 
-  const blobUrl = await cacheImage(url);
+  const blobUrl = await cacheImage(url, key);
   return blobUrl || url;
 }
 
