@@ -33,7 +33,7 @@ const CHIP_SCAN_RADIUS_BY_MODE: Record<TransportMode, number> = {
 
 type Status = 'idle' | 'locating' | 'loading' | 'ready' | 'denied' | 'error';
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 5;
 const PREFETCH_AHEAD = 3;
 const TRANSPORT_STORAGE_KEY = 'nearby-transport-mode';
 
