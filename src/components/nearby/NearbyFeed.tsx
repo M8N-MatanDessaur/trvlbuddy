@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LocateFixed, Loader2, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car } from 'lucide-react';
+import { LocateFixed, Loader2, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car, Search, X } from 'lucide-react';
 import {
   getCachedLocation,
   getCurrentLocation,
@@ -35,6 +35,8 @@ const NearbyFeed: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [transportMode, setTransportMode] = useState<TransportMode>(readStoredTransportMode);
+  const [searchInput, setSearchInput] = useState('');
+  const [activeQuery, setActiveQuery] = useState('');
 
   const cursorRef = useRef<NearbyFeedCursor | null>(null);
   const fetchingRef = useRef(false);
@@ -64,10 +66,10 @@ const NearbyFeed: React.FC = () => {
   }, []);
 
   const bootstrap = useCallback(
-    async (loc: UserLocation, types: string[], mode: TransportMode) => {
+    async (loc: UserLocation, types: string[], mode: TransportMode, query: string) => {
       setStatus('loading');
       setErrorMessage(null);
-      cursorRef.current = new NearbyFeedCursor(loc, types, mode);
+      cursorRef.current = new NearbyFeedCursor(loc, types, mode, query);
       setPlaces([]);
       setExhausted(false);
       await loadMore();
@@ -82,7 +84,7 @@ const NearbyFeed: React.FC = () => {
     try {
       const loc = await getCurrentLocation();
       setUserLocation(loc);
-      await bootstrap(loc, selectedTypes, transportMode);
+      await bootstrap(loc, selectedTypes, transportMode, activeQuery);
     } catch (err: unknown) {
       const code = (err as GeolocationPositionError | undefined)?.code;
       if (code === 1) {
@@ -92,20 +94,20 @@ const NearbyFeed: React.FC = () => {
         setErrorMessage('Could not get your location. Check permissions and try again.');
       }
     }
-  }, [bootstrap, selectedTypes, transportMode]);
+  }, [bootstrap, selectedTypes, transportMode, activeQuery]);
 
   useEffect(() => {
     const cached = getCachedLocation();
     if (cached) {
       setUserLocation(cached);
-      bootstrap(cached, selectedTypes, transportMode);
+      bootstrap(cached, selectedTypes, transportMode, activeQuery);
     } else {
       requestLocation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload feed when filter or transport mode changes (after initial load)
+  // Reload feed when filter, transport mode, or active search query changes (after initial load)
   const didInitRef = useRef(false);
   useEffect(() => {
     if (!didInitRef.current) {
@@ -113,9 +115,9 @@ const NearbyFeed: React.FC = () => {
       return;
     }
     if (!userLocation) return;
-    bootstrap(userLocation, selectedTypes, transportMode);
+    bootstrap(userLocation, selectedTypes, transportMode, activeQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTypes, transportMode]);
+  }, [selectedTypes, transportMode, activeQuery]);
 
   const toggleType = (type: string) => {
     setSelectedTypes(prev =>
@@ -131,6 +133,17 @@ const NearbyFeed: React.FC = () => {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(TRANSPORT_STORAGE_KEY, mode);
     }
+  };
+
+  const submitSearch = () => {
+    const trimmed = searchInput.trim();
+    if (trimmed === activeQuery) return;
+    setActiveQuery(trimmed);
+  };
+
+  const clearSearch = () => {
+    setSearchInput('');
+    if (activeQuery) setActiveQuery('');
   };
 
   useEffect(() => {
@@ -246,8 +259,41 @@ const NearbyFeed: React.FC = () => {
         <NearbyLiveEvents userLocation={userLocation} />
       )}
 
-      {/* Category filter chips */}
+      {/* Smart search input */}
       {(status === 'ready' || (status === 'loading' && places.length > 0)) && userLocation && (
+        <div
+          className="flex items-center gap-2 mb-3 px-3 rounded-xl"
+          style={{ background: 'var(--surface-container)', height: '40px' }}
+        >
+          <Search size={15} style={{ color: 'var(--text-secondary)' }} />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') submitSearch();
+              if (e.key === 'Escape') clearSearch();
+            }}
+            placeholder="Search anything — e.g. outdoor food markets"
+            className="flex-1 bg-transparent text-[13px] outline-none"
+            style={{ color: 'var(--text-primary)' }}
+            aria-label="Search nearby places"
+          />
+          {(searchInput || activeQuery) && (
+            <button
+              onClick={clearSearch}
+              className="flex items-center justify-center rounded-full"
+              style={{ width: '22px', height: '22px', color: 'var(--text-secondary)' }}
+              aria-label="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Category filter chips (hidden while a free-text search is active) */}
+      {!activeQuery && (status === 'ready' || (status === 'loading' && places.length > 0)) && userLocation && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 mb-4" style={{ scrollbarWidth: 'none' }}>
           <button
             onClick={clearTypes}

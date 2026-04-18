@@ -9,6 +9,8 @@ import {
   Image as ImageIcon,
   Moon,
   ShoppingBag,
+  Store,
+  Search,
   type LucideIcon,
 } from 'lucide-react';
 import { UserLocation } from '../utils/geolocation';
@@ -38,6 +40,9 @@ export interface CategoryDef {
   label: string;
   icon: LucideIcon;
   keyword?: string;
+  // When set, uses Google Places Text Search (semantic) instead of Nearby Search.
+  // Text Search understands natural phrases ("food market") the same way Google Maps does.
+  textQuery?: string;
 }
 
 export const CATEGORIES: CategoryDef[] = [
@@ -50,8 +55,11 @@ export const CATEGORIES: CategoryDef[] = [
   { type: 'bakery', label: 'Bakery', icon: Croissant },
   { type: 'art_gallery', label: 'Gallery', icon: ImageIcon },
   { type: 'night_club', label: 'Nightlife', icon: Moon },
+  { type: 'markets', label: 'Markets', icon: Store, textQuery: 'public market farmers market food market' },
   { type: 'shopping_mall', label: 'Shopping', icon: ShoppingBag },
 ];
+
+export const SEARCH_ICON = Search;
 
 export type TransportMode = 'foot' | 'car';
 
@@ -81,15 +89,34 @@ export class NearbyFeedCursor {
   private readonly userLocation: UserLocation;
   private readonly categories: CategoryDef[];
   private readonly radiusSteps: number[];
+  private readonly freeTextQuery: string | null;
   private categoryIndex = 0;
   private radiusIndex = 0;
   private readonly seenPlaceIds = new Set<string>();
   private exhausted = false;
 
-  constructor(userLocation: UserLocation, allowedTypes?: string[], transportMode: TransportMode = 'foot') {
+  constructor(
+    userLocation: UserLocation,
+    allowedTypes?: string[],
+    transportMode: TransportMode = 'foot',
+    freeTextQuery?: string,
+  ) {
     this.userLocation = userLocation;
     this.radiusSteps = RADIUS_STEPS_BY_MODE[transportMode];
-    if (allowedTypes && allowedTypes.length > 0) {
+    const trimmed = freeTextQuery?.trim();
+    this.freeTextQuery = trimmed && trimmed.length > 0 ? trimmed : null;
+
+    if (this.freeTextQuery) {
+      // Free-text mode: a single synthetic category that uses Text Search.
+      this.categories = [
+        {
+          type: 'search',
+          label: this.freeTextQuery,
+          icon: SEARCH_ICON,
+          textQuery: this.freeTextQuery,
+        },
+      ];
+    } else if (allowedTypes && allowedTypes.length > 0) {
       const allowed = new Set(allowedTypes);
       const filtered = CATEGORIES.filter(c => allowed.has(c.type));
       this.categories = filtered.length > 0 ? filtered : CATEGORIES;
@@ -136,28 +163,42 @@ export class NearbyFeedCursor {
   private async fetchCategory(cat: CategoryDef, radius: number): Promise<NearbyPlace[]> {
     if (!GOOGLE_PLACES_API_KEY) return [];
     try {
+      const useTextSearch = Boolean(cat.textQuery);
+      const endpoint = useTextSearch ? 'textsearch' : 'nearbysearch';
+
       const params = new URLSearchParams({
         location: `${this.userLocation.lat},${this.userLocation.lng}`,
         radius: String(radius),
-        type: cat.type,
         opennow: 'true',
         key: GOOGLE_PLACES_API_KEY,
       });
-      if (cat.keyword) params.set('keyword', cat.keyword);
+      if (useTextSearch) {
+        params.set('query', cat.textQuery!);
+      } else {
+        params.set('type', cat.type);
+        if (cat.keyword) params.set('keyword', cat.keyword);
+      }
 
-      const res = await fetch(`/api/places/nearbysearch/json?${params.toString()}`);
+      const res = await fetch(`/api/places/${endpoint}/json?${params.toString()}`);
       const data = await res.json();
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        console.warn('Nearby search non-OK status:', data.status, data.error_message);
+        console.warn('Places search non-OK status:', endpoint, data.status, data.error_message);
         return [];
       }
       const raw: NearbyApiResult[] = data.results || [];
       return raw
         .filter(r => r.place_id && r.geometry?.location)
         .filter(r => r.opening_hours?.open_now !== false) // drop explicitly-closed; keep unknown + open
+        .filter(r => {
+          // Text Search ignores radius, so enforce it client-side.
+          if (!useTextSearch) return true;
+          const loc = r.geometry?.location;
+          if (!loc) return false;
+          return haversineMeters(this.userLocation, loc) <= radius;
+        })
         .map(r => this.toPlace(r, cat));
     } catch (err) {
-      console.error('Nearby fetch failed', err);
+      console.error('Places fetch failed', err);
       return [];
     }
   }
