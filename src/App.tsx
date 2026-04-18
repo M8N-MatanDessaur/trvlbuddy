@@ -11,10 +11,11 @@ import SwipeNavigator from './components/SwipeNavigator';
 import type { PageDef } from './components/SwipeNavigator';
 import ConversationalOnboarding from './components/ConversationalOnboarding';
 import LoadingScreen from './components/LoadingScreen';
-import { MessageCircle, Home, Compass, Languages, Wrench, Phone } from 'lucide-react';
+import { MessageCircle, Home, Compass, Languages, Wrench, Phone, Radar } from 'lucide-react';
 
 const ChatPage = lazy(() => import('./components/ChatPage'));
 const TripPage = lazy(() => import('./components/DynamicDashboard'));
+const NearbyPage = lazy(() => import('./components/nearby/NearbyFeed'));
 const ExplorePage = lazy(() => import('./components/DynamicActivitiesPage'));
 const LanguagePage = lazy(() => import('./components/DynamicTranslatorPage'));
 const UtilitiesPage = lazy(() => import('./components/DynamicUtilitiesPage'));
@@ -23,6 +24,7 @@ const EmergencyPage = lazy(() => import('./components/EmergencyPage'));
 const pages: PageDef[] = [
   { path: '/chat', component: ChatPage, icon: MessageCircle, label: 'AI' },
   { path: '/', component: TripPage, icon: Home, label: 'Trip' },
+  { path: '/nearby', component: NearbyPage, icon: Radar, label: 'Nearby' },
   { path: '/explore', component: ExplorePage, icon: Compass, label: 'Explore' },
   { path: '/language', component: LanguagePage, icon: Languages, label: 'Language' },
   { path: '/emergency', component: EmergencyPage, icon: Phone, label: 'SOS' },

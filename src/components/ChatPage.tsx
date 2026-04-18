@@ -1,19 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Navigation, Loader2, LocateFixed } from 'lucide-react';
+import { Send, MapPin, Navigation, Loader2, LocateFixed, Mic, Square } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { useChat, ChatMessage } from '../contexts/ChatContext';
-import { chatWithTripAssistant } from '../services/aiService';
+import { chatWithTripAssistant, transcribeAudio } from '../services/aiService';
+import { useToast } from '../contexts/ToastContext';
 import { getCurrentLocation, getCachedLocation, startWatchingLocation, UserLocation } from '../utils/geolocation';
 
 const ChatPage: React.FC = () => {
   const { currentPlan, activities } = useTravel();
   const { messages, addMessage, setMessages } = useChat();
+  const { toast } = useToast();
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(getCachedLocation());
   const [locationLoading, setLocationLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
 
   // Welcome message on first mount (only if no messages yet)
   useEffect(() => {
@@ -82,6 +89,90 @@ const ChatPage: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  const pickSupportedMimeType = (): string => {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'];
+    for (const c of candidates) {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c)) return c;
+    }
+    return '';
+  };
+
+  const stopMediaStream = () => {
+    mediaStreamRef.current?.getTracks().forEach(t => t.stop());
+    mediaStreamRef.current = null;
+  };
+
+  const startRecording = async () => {
+    if (isRecording || isTranscribing || isLoading) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      toast('Voice input is not supported in this browser.', 'error');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const mimeType = pickSupportedMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = e => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stopMediaStream();
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        audioChunksRef.current = [];
+        if (blob.size === 0) {
+          setIsRecording(false);
+          return;
+        }
+        setIsRecording(false);
+        setIsTranscribing(true);
+        try {
+          const ext = (recorder.mimeType || '').includes('mp4') ? 'mp4' : 'webm';
+          const text = await transcribeAudio(blob, `voice.${ext}`);
+          if (text) {
+            await sendMessage(text);
+          } else {
+            toast('Could not hear anything. Try again.', 'info');
+          }
+        } catch (err) {
+          console.error('Transcription failed', err);
+          toast('Transcription failed. Check your OpenAI API key.', 'error');
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Mic access failed', err);
+      stopMediaStream();
+      toast('Microphone permission denied.', 'error');
+    }
+  };
+
+  const stopRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) stopRecording();
+    else startRecording();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      stopMediaStream();
+    };
+  }, []);
 
   if (!currentPlan) {
     return (
@@ -199,14 +290,27 @@ const ChatPage: React.FC = () => {
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-            placeholder={userLocation ? 'Ask about things near you...' : 'Ask me anything...'}
+            placeholder={isRecording ? 'Listening...' : isTranscribing ? 'Transcribing...' : userLocation ? 'Ask about things near you...' : 'Ask me anything...'}
             className="flex-1 px-4 py-3 rounded-2xl text-[14px] border-none outline-none"
             style={{ background: 'var(--surface-container)', color: 'var(--text-primary)' }}
-            disabled={isLoading}
+            disabled={isLoading || isRecording || isTranscribing}
           />
           <button
+            onClick={toggleRecording}
+            disabled={isLoading || isTranscribing}
+            className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:opacity-30"
+            style={{
+              background: isRecording ? '#ef4444' : 'var(--surface-container)',
+              color: isRecording ? 'white' : 'var(--text-secondary)',
+              animation: isRecording ? 'mic-pulse 1.2s ease-in-out infinite' : undefined,
+            }}
+            aria-label={isRecording ? 'Stop recording' : 'Start voice input'}
+          >
+            {isTranscribing ? <Loader2 size={18} className="animate-spin" /> : isRecording ? <Square size={16} fill="currentColor" /> : <Mic size={18} />}
+          </button>
+          <button
             onClick={() => sendMessage()}
-            disabled={isLoading || !inputValue.trim()}
+            disabled={isLoading || isRecording || isTranscribing || !inputValue.trim()}
             className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:opacity-30"
             style={{ background: 'var(--accent)', color: 'white' }}
           >
