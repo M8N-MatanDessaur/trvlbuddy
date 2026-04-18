@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { TravelPlan, GeneratedActivity, Translation, EmergencyContact, JournalEntry } from '../types/TravelData';
 
+export type AppMode = 'trip' | 'local' | null;
+
 interface TravelContextType {
   currentPlan: TravelPlan | null;
   setCurrentPlan: (plan: TravelPlan | null) => void;
@@ -18,6 +20,8 @@ interface TravelContextType {
   setIsLoading: (loading: boolean) => void;
   hasCompletedOnboarding: boolean;
   setHasCompletedOnboarding: (completed: boolean) => void;
+  appMode: AppMode;
+  setAppMode: (mode: AppMode) => void;
 }
 
 const TravelContext = createContext<TravelContextType | undefined>(undefined);
@@ -96,6 +100,11 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return localStorage.getItem('hasCompletedOnboarding') === 'true';
   });
 
+  const [appMode, setAppMode] = useState<AppMode>(() => {
+    const saved = localStorage.getItem('appMode');
+    return saved === 'trip' || saved === 'local' ? saved : null;
+  });
+
   // Wrapper for setActivities to validate activities before setting
   const setValidatedActivities = (newActivities: GeneratedActivity[]) => {
     const validActivities = Array.isArray(newActivities) ? newActivities.filter(isValidActivity) : [];
@@ -128,6 +137,11 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [hasCompletedOnboarding]);
 
   useEffect(() => {
+    if (appMode) localStorage.setItem('appMode', appMode);
+    else localStorage.removeItem('appMode');
+  }, [appMode]);
+
+  useEffect(() => {
     localStorage.setItem('savedActivities', JSON.stringify(savedActivities));
   }, [savedActivities]);
 
@@ -152,7 +166,9 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       isLoading,
       setIsLoading,
       hasCompletedOnboarding,
-      setHasCompletedOnboarding
+      setHasCompletedOnboarding,
+      appMode,
+      setAppMode,
     }}>
       {children}
     </TravelContext.Provider>

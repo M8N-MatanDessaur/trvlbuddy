@@ -3,8 +3,7 @@ import { Calendar, MapPin, ExternalLink, PartyPopper, ShoppingBag, Palette, Musi
 import type { LucideIcon } from 'lucide-react';
 import { fetchLiveEvents, type LocalEvent } from '../../services/liveEventsService';
 import { UserLocation } from '../../utils/geolocation';
-
-const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
+import { reverseGeocodeLocality } from '../../utils/geocoding';
 
 const typeIcons: Record<LocalEvent['type'], LucideIcon> = {
   festival: PartyPopper,
@@ -17,39 +16,6 @@ const typeIcons: Record<LocalEvent['type'], LucideIcon> = {
 
 interface Props {
   userLocation: UserLocation;
-}
-
-interface GeocodeResult {
-  address_components?: Array<{ long_name: string; short_name: string; types: string[] }>;
-}
-
-async function reverseGeocodeLocality(lat: number, lng: number): Promise<string | null> {
-  if (!GOOGLE_PLACES_API_KEY) return null;
-  try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_PLACES_API_KEY}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.status !== 'OK' || !data.results?.length) return null;
-    const results: GeocodeResult[] = data.results;
-    // Prefer the first result that has a locality component
-    for (const r of results) {
-      const comps = r.address_components || [];
-      const locality = comps.find(c => c.types.includes('locality'));
-      const admin = comps.find(c => c.types.includes('administrative_area_level_1'));
-      const country = comps.find(c => c.types.includes('country'));
-      if (locality) {
-        return [locality.long_name, admin?.short_name || country?.long_name].filter(Boolean).join(', ');
-      }
-    }
-    // Fallback: first result's admin area + country
-    const first = results[0];
-    const comps = first.address_components || [];
-    const admin = comps.find(c => c.types.includes('administrative_area_level_1'));
-    const country = comps.find(c => c.types.includes('country'));
-    return [admin?.long_name, country?.long_name].filter(Boolean).join(', ') || null;
-  } catch {
-    return null;
-  }
 }
 
 const NearbyLiveEvents: React.FC<Props> = ({ userLocation }) => {
