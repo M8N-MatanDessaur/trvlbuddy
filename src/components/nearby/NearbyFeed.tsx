@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LocateFixed, Loader2, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car } from 'lucide-react';
+import { LocateFixed, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car, Calendar } from 'lucide-react';
 import {
   getCachedLocation,
   getCurrentLocation,
@@ -14,6 +14,9 @@ import {
 } from '../../services/nearbyService';
 import NearbyPost from './NearbyPost';
 import NearbyLiveEvents from './NearbyLiveEvents';
+import NearbyPromptBar from './NearbyPromptBar';
+import { interpretNearbyPrompt } from '../../services/aiService';
+import { useToast } from '../../contexts/ToastContext';
 
 type Status = 'idle' | 'locating' | 'loading' | 'ready' | 'denied' | 'error';
 
@@ -35,6 +38,10 @@ const NearbyFeed: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [transportMode, setTransportMode] = useState<TransportMode>(readStoredTransportMode);
+  const [aiPrompt, setAiPrompt] = useState<string | null>(null);
+  const [aiKeyword, setAiKeyword] = useState<string | undefined>(undefined);
+  const [aiLoading, setAiLoading] = useState(false);
+  const { toast } = useToast();
 
   const cursorRef = useRef<NearbyFeedCursor | null>(null);
   const fetchingRef = useRef(false);
@@ -64,10 +71,10 @@ const NearbyFeed: React.FC = () => {
   }, []);
 
   const bootstrap = useCallback(
-    async (loc: UserLocation, types: string[], mode: TransportMode) => {
+    async (loc: UserLocation, types: string[], mode: TransportMode, keyword?: string) => {
       setStatus('loading');
       setErrorMessage(null);
-      cursorRef.current = new NearbyFeedCursor(loc, types, mode);
+      cursorRef.current = new NearbyFeedCursor(loc, types, mode, keyword);
       setPlaces([]);
       setExhausted(false);
       await loadMore();
@@ -82,7 +89,7 @@ const NearbyFeed: React.FC = () => {
     try {
       const loc = await getCurrentLocation();
       setUserLocation(loc);
-      await bootstrap(loc, selectedTypes, transportMode);
+      await bootstrap(loc, selectedTypes, transportMode, aiKeyword);
     } catch (err: unknown) {
       const code = (err as GeolocationPositionError | undefined)?.code;
       if (code === 1) {
@@ -92,13 +99,13 @@ const NearbyFeed: React.FC = () => {
         setErrorMessage('Could not get your location. Check permissions and try again.');
       }
     }
-  }, [bootstrap, selectedTypes, transportMode]);
+  }, [bootstrap, selectedTypes, transportMode, aiKeyword]);
 
   useEffect(() => {
     const cached = getCachedLocation();
     if (cached) {
       setUserLocation(cached);
-      bootstrap(cached, selectedTypes, transportMode);
+      bootstrap(cached, selectedTypes, transportMode, aiKeyword);
     } else {
       requestLocation();
     }
@@ -113,9 +120,39 @@ const NearbyFeed: React.FC = () => {
       return;
     }
     if (!userLocation) return;
-    bootstrap(userLocation, selectedTypes, transportMode);
+    bootstrap(userLocation, selectedTypes, transportMode, aiKeyword);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTypes, transportMode]);
+  }, [selectedTypes, transportMode, aiKeyword]);
+
+  const handleAiSubmit = useCallback(
+    async (prompt: string) => {
+      if (!userLocation) return;
+      setAiLoading(true);
+      try {
+        const allowed = CATEGORIES.map(c => ({ type: c.type, label: c.label }));
+        const result = await interpretNearbyPrompt(prompt, allowed);
+        if (result.types.length === 0 && !result.keyword) {
+          toast("Couldn't match that to anything nearby. Try something else.", 'error');
+          return;
+        }
+        setAiPrompt(prompt);
+        setAiKeyword(result.keyword);
+        setSelectedTypes(result.types);
+      } catch (err) {
+        console.error('AI interpret error', err);
+        toast('Something went wrong interpreting that prompt.', 'error');
+      } finally {
+        setAiLoading(false);
+      }
+    },
+    [userLocation, toast],
+  );
+
+  const handleAiClear = useCallback(() => {
+    setAiPrompt(null);
+    setAiKeyword(undefined);
+    setSelectedTypes([]);
+  }, []);
 
   const toggleType = (type: string) => {
     setSelectedTypes(prev =>
@@ -190,64 +227,142 @@ const NearbyFeed: React.FC = () => {
         {status === 'ready' && userLocation && (
           <div className="flex items-center gap-2">
             <div
-              className="flex items-center rounded-full p-0.5"
+              className="inline-flex items-center gap-1 p-1 rounded-full"
               style={{ background: 'var(--surface-container)' }}
               role="group"
               aria-label="Search radius by transport mode"
             >
               <button
                 onClick={() => selectTransportMode('foot')}
-                className="flex items-center justify-center rounded-full transition-all"
+                className="flex items-center justify-center transition-all"
                 style={{
-                  width: '32px',
-                  height: '32px',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '9999px',
                   background: transportMode === 'foot' ? 'var(--accent)' : 'transparent',
                   color: transportMode === 'foot' ? 'white' : 'var(--text-secondary)',
                 }}
                 aria-label="Walking distance"
                 aria-pressed={transportMode === 'foot'}
               >
-                <Footprints size={15} />
+                <Footprints size={16} />
               </button>
               <button
                 onClick={() => selectTransportMode('car')}
-                className="flex items-center justify-center rounded-full transition-all"
+                className="flex items-center justify-center transition-all"
                 style={{
-                  width: '32px',
-                  height: '32px',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '9999px',
                   background: transportMode === 'car' ? 'var(--accent)' : 'transparent',
                   color: transportMode === 'car' ? 'white' : 'var(--text-secondary)',
                 }}
                 aria-label="Driving distance"
                 aria-pressed={transportMode === 'car'}
               >
-                <Car size={15} />
+                <Car size={16} />
               </button>
             </div>
             <button
               onClick={() => requestLocation()}
-              className="flex items-center justify-center rounded-full"
+              className="flex items-center justify-center"
               style={{
-                width: '36px',
-                height: '36px',
+                width: '42px',
+                height: '42px',
+                borderRadius: '9999px',
                 background: 'var(--surface-container)',
                 color: 'var(--text-secondary)',
+                flexShrink: 0,
               }}
               aria-label="Refresh"
             >
-              <RefreshCw size={15} />
+              <RefreshCw size={16} />
             </button>
           </div>
         )}
       </div>
 
-      {/* Live events (above chips) */}
-      {userLocation && (status === 'ready' || (status === 'loading' && places.length > 0)) && (
-        <NearbyLiveEvents userLocation={userLocation} />
+      {/* Free-form AI prompt bar */}
+      {userLocation && (status === 'ready' || (status === 'loading' && places.length > 0)) ? (
+        <NearbyPromptBar
+          activePrompt={aiPrompt}
+          loading={aiLoading}
+          onSubmit={handleAiSubmit}
+          onClear={handleAiClear}
+        />
+      ) : (
+        (status === 'locating' || (status === 'loading' && places.length === 0)) && (
+          <div
+            className="mb-3 h-[44px] rounded-full activity-card-shimmer"
+            style={{ background: 'var(--surface-container)' }}
+            aria-hidden="true"
+          />
+        )
       )}
 
-      {/* Category filter chips */}
-      {(status === 'ready' || (status === 'loading' && places.length > 0)) && userLocation && (
+      {/* Live events (above chips) */}
+      {userLocation && (status === 'ready' || (status === 'loading' && places.length > 0)) ? (
+        <NearbyLiveEvents userLocation={userLocation} focus={aiPrompt} />
+      ) : (
+        (status === 'locating' || (status === 'loading' && places.length === 0)) && (
+          <div className="space-y-2.5 mb-5" aria-hidden="true">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calendar size={14} style={{ color: 'var(--accent)' }} />
+                <h2 className="text-[14px] font-bold">Happening Now</h2>
+              </div>
+              <div
+                className="h-3 w-20 rounded-full activity-card-shimmer"
+                style={{ background: 'var(--surface-container-high)' }}
+              />
+            </div>
+            <div className="flex gap-3 overflow-x-hidden pb-2 -mx-1 px-1">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex-shrink-0" style={{ width: '250px' }}>
+                  <div
+                    className="h-full rounded-2xl p-3.5 flex flex-col gap-2"
+                    style={{ background: 'var(--surface-container)' }}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <div
+                        className="h-4 rounded-md activity-card-shimmer"
+                        style={{ width: '60px', background: 'var(--surface-container-high)' }}
+                      />
+                      <div
+                        className="h-3 rounded-full activity-card-shimmer"
+                        style={{ width: '40px', background: 'var(--surface-container-high)' }}
+                      />
+                    </div>
+                    <div
+                      className="h-4 rounded activity-card-shimmer"
+                      style={{ background: 'var(--surface-container-high)' }}
+                    />
+                    <div
+                      className="h-4 rounded activity-card-shimmer"
+                      style={{ width: '75%', background: 'var(--surface-container-high)' }}
+                    />
+                    <div
+                      className="h-3 rounded activity-card-shimmer mt-0.5"
+                      style={{ background: 'var(--surface-container-high)' }}
+                    />
+                    <div
+                      className="h-3 rounded activity-card-shimmer"
+                      style={{ width: '85%', background: 'var(--surface-container-high)' }}
+                    />
+                    <div
+                      className="h-3 rounded activity-card-shimmer mt-auto"
+                      style={{ width: '55%', background: 'var(--surface-container-high)' }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      )}
+
+      {/* Category filter chips (hidden while an AI prompt is active) */}
+      {!aiPrompt && (status === 'ready' || (status === 'loading' && places.length > 0)) && userLocation && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 mb-4" style={{ scrollbarWidth: 'none' }}>
           <button
             onClick={clearTypes}
@@ -281,13 +396,24 @@ const NearbyFeed: React.FC = () => {
         </div>
       )}
 
-      {/* States */}
-      {status === 'locating' && (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent)' }} />
-          <p className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>Getting your location...</p>
+      {/* Skeleton filter chips during initial load */}
+      {!aiPrompt && (status === 'locating' || (status === 'loading' && places.length === 0)) && (
+        <div
+          className="flex gap-2 overflow-x-hidden pb-1 -mx-1 px-1 mb-4"
+          style={{ scrollbarWidth: 'none' }}
+          aria-hidden="true"
+        >
+          {[60, 92, 78, 70, 88, 64, 80, 74].map((w, i) => (
+            <div
+              key={i}
+              className="rounded-xl flex-shrink-0 activity-card-shimmer"
+              style={{ width: `${w}px`, height: '36px', background: 'var(--surface-container-high)' }}
+            />
+          ))}
         </div>
       )}
+
+      {/* States */}
 
       {status === 'denied' && (
         <div className="flex flex-col items-center justify-center py-16 text-center gap-3 px-6">
@@ -325,9 +451,9 @@ const NearbyFeed: React.FC = () => {
         </div>
       )}
 
-      {(status === 'loading' || status === 'ready') && (
+      {(status === 'locating' || status === 'loading' || status === 'ready') && (
         <>
-          {places.length === 0 && status === 'loading' && (
+          {places.length === 0 && (status === 'loading' || status === 'locating') && (
             <div className="space-y-8">
               {Array.from({ length: 2 }).map((_, i) => (
                 <div key={i} className="w-full">
@@ -349,8 +475,17 @@ const NearbyFeed: React.FC = () => {
           })}
 
           {fetchingRef.current && places.length > 0 && (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 size={20} className="animate-spin" style={{ color: 'var(--accent)' }} />
+            <div className="space-y-8 py-2" aria-hidden="true">
+              <div className="w-full">
+                <div
+                  className="w-full activity-card-shimmer"
+                  style={{ aspectRatio: '4 / 5', borderRadius: '22px', background: 'var(--surface-container-high)' }}
+                />
+                <div
+                  className="h-4 rounded-full mt-3 activity-card-shimmer"
+                  style={{ width: '60%', background: 'var(--surface-container-high)' }}
+                />
+              </div>
             </div>
           )}
 

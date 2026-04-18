@@ -1693,3 +1693,54 @@ export async function transcribeAudio(blob: Blob, filename = 'audio.webm'): Prom
   const data = await res.json();
   return (data.text || '').trim();
 }
+
+// ---- Nearby free-form prompt interpreter ----
+
+export interface NearbyPromptInterpretation {
+  types: string[];
+  keyword?: string;
+}
+
+export async function interpretNearbyPrompt(
+  userPrompt: string,
+  allowedTypes: { type: string; label: string }[],
+): Promise<NearbyPromptInterpretation> {
+  const trimmed = userPrompt.trim();
+  if (!trimmed) return { types: [] };
+
+  const typeList = allowedTypes.map(t => `"${t.type}" (${t.label})`).join(', ');
+  const prompt = `A user of a nearby-places app typed this free-form request:
+"${trimmed}"
+
+Map it to a strict JSON object that tells the app which Google Places categories and what keyword to use.
+
+Allowed category types (use ONLY these string values): ${typeList}.
+
+Rules:
+- Return between 1 and 4 category types that best match the intent. Do NOT invent new types.
+- "keyword" is a short phrase (1-4 words) that captures any specific flavor of the request (e.g. "viral tiktok", "scenic", "vegan", "hidden gem", "sunset view"). Leave it empty if the request is purely about a category (e.g. "just restaurants").
+- If the request mentions things like "walk", "stroll", "outside", prefer "park" and "tourist_attraction".
+- If it mentions "photo", "pictures", "instagram", "scenic", prefer "tourist_attraction" and "park" with a keyword like "scenic" or "viewpoint".
+- If it mentions "tiktok", "viral", "trendy", keep the requested category but add that as the keyword.
+
+Return ONLY minified JSON of the form: {"types":["restaurant","cafe"],"keyword":"viral tiktok"}. No markdown, no prose.`;
+
+  try {
+    const raw = await callGeminiAPI(prompt, false);
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) return { types: [] };
+    const parsed = JSON.parse(match[0]);
+    const allowedSet = new Set(allowedTypes.map(t => t.type));
+    const types = Array.isArray(parsed.types)
+      ? parsed.types.filter((t: unknown): t is string => typeof t === 'string' && allowedSet.has(t))
+      : [];
+    const keyword =
+      typeof parsed.keyword === 'string' && parsed.keyword.trim().length > 0
+        ? parsed.keyword.trim()
+        : undefined;
+    return { types, keyword };
+  } catch (err) {
+    console.error('interpretNearbyPrompt failed:', err);
+    return { types: [] };
+  }
+}
