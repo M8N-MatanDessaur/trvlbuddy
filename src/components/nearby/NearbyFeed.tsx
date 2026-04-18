@@ -17,6 +17,7 @@ import NearbyLiveEvents from './NearbyLiveEvents';
 import NearbyPromptBar, { NearbyPromptBarHandle } from './NearbyPromptBar';
 import { interpretNearbyPrompt, NearbyChipSuggestion } from '../../services/aiService';
 import { fetchDynamicChips } from '../../services/nearbyChipsService';
+import { iconFor } from '../../services/nearbyIconRegistry';
 import { useToast } from '../../contexts/ToastContext';
 
 const CHIP_SCAN_RADIUS_BY_MODE: Record<TransportMode, number> = {
@@ -196,7 +197,7 @@ const NearbyFeed: React.FC = () => {
   const selectDynamicChip = useCallback((chip: NearbyChipSuggestion) => {
     // Apply the chip's pre-interpreted types/keyword directly — no extra
     // Gemini round-trip needed since suggestNearbyChips already resolved them.
-    setAiPrompt(`${chip.emoji} ${chip.label}`);
+    setAiPrompt(chip.label);
     setAiKeyword(chip.keyword);
     setSelectedTypes(chip.types);
     setActiveChipLabel(chip.label);
@@ -440,6 +441,7 @@ const NearbyFeed: React.FC = () => {
 
           {dynamicChips.map(chip => {
             const isActive = activeChipLabel === chip.label;
+            const ChipIcon = iconFor(chip.iconKey);
             return (
               <button
                 key={chip.label}
@@ -450,7 +452,7 @@ const NearbyFeed: React.FC = () => {
                   color: isActive ? 'white' : 'var(--text-secondary)',
                 }}
               >
-                <span aria-hidden="true">{chip.emoji}</span>
+                <ChipIcon size={14} />
                 {chip.label}
               </button>
             );
