@@ -9,25 +9,12 @@ import {
   Image as ImageIcon,
   Moon,
   ShoppingBag,
-  Store,
-  Fish,
-  PawPrint,
-  BookOpen,
-  Library as LibraryIcon,
-  Clapperboard,
-  Sparkles,
-  Flower,
-  Shirt,
-  Trophy,
-  Church,
-  Dices,
-  FerrisWheel,
-  CircleDot,
   MapPin,
   type LucideIcon,
 } from 'lucide-react';
 import { UserLocation } from '../utils/geolocation';
 import { haversineMeters } from '../utils/geolocation';
+import { NEARBY_ICON_REGISTRY } from './nearbyIconRegistry';
 
 const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
 const MAX_POST_PHOTOS = 6;
@@ -35,8 +22,8 @@ const MAX_POST_PHOTOS = 6;
 export interface NearbyPlace {
   placeId: string;
   name: string;
-  category: string;          // the Places type used (e.g. "restaurant")
-  categoryLabel: string;     // human-readable label
+  category: string;          // Google primaryType (e.g. "market", "sushi_restaurant")
+  categoryLabel: string;     // Google primaryTypeDisplayName.text ("Fresh food market")
   categoryIcon: LucideIcon;
   address: string;
   location: { lat: number; lng: number };
@@ -45,7 +32,7 @@ export interface NearbyPlace {
   userRatingsTotal?: number;
   priceLevel?: number;
   openNow?: boolean;
-  imageUrls: string[];       // initial photo urls from nearbysearch response
+  imageUrls: string[];       // initial photo urls from search response
 }
 
 export interface CategoryDef {
@@ -58,6 +45,9 @@ export interface CategoryDef {
   noTypeSearch?: boolean;
 }
 
+// Used as the taxonomy for the sweep loop and for constraining AI chip /
+// prompt interpretation — NOT for rendering card labels. Card labels come
+// straight from Google's primaryTypeDisplayName.
 export const CATEGORIES: CategoryDef[] = [
   { type: 'restaurant', label: 'Restaurant', icon: UtensilsCrossed },
   { type: 'tourist_attraction', label: 'Attraction', icon: Landmark },
@@ -112,107 +102,129 @@ const EXCLUDED_PLACE_TYPES = new Set<string>([
   'roofing_contractor',
 ]);
 
-function buildPhotoUrl(photoReference: string, maxWidth = 1200): string {
-  return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photoreference=${photoReference}&key=${GOOGLE_PLACES_API_KEY}`;
-}
+// Icon fallbacks keyed by Google primaryType values that don't match the
+// NEARBY_ICON_REGISTRY keys 1:1. Purely for icon selection — labels come
+// from primaryTypeDisplayName so we never need a label table.
+const PRIMARY_TYPE_ICON_ALIASES: Record<string, string> = {
+  grocery_store: 'market',
+  grocery_or_supermarket: 'market',
+  supermarket: 'market',
+  farmers_market: 'market',
+  food_store: 'market',
+  food: 'restaurant',
+  art_gallery: 'gallery',
+  movie_theater: 'cinema',
+  book_store: 'bookstore',
+  night_club: 'nightlife',
+  shopping_mall: 'shopping',
+  department_store: 'shopping',
+  amusement_park: 'amusement',
+  ice_cream_shop: 'dessert',
+  pizza_restaurant: 'pizza',
+  meal_takeaway: 'restaurant',
+  meal_delivery: 'restaurant',
+  tourist_attraction: 'attraction',
+  clothing_store: 'clothing',
+  shoe_store: 'clothing',
+  jewelry_store: 'clothing',
+  hindu_temple: 'church',
+  mosque: 'church',
+  synagogue: 'church',
+  bowling_alley: 'bowling',
+  concert_hall: 'music',
+  performing_arts_theater: 'music',
+  fitness_center: 'gym',
+  sports_complex: 'sports',
+};
 
-// Priority-ordered label resolver. Specific types win first; name hints
-// (regex against the place name) are a fallback for places Google tags
-// with only generic types like `tourist_attraction` / `food` — that's how
-// a place like "Jean-Talon Market" correctly shows as "Market" instead of
-// "Attraction" or "Restaurant".
-interface LabelRule {
-  label: string;
-  icon: LucideIcon;
-  // One or more Google Places types that trigger this rule.
-  types?: string[];
-  // Regex against the lowercased place name; used as fallback when types
-  // are generic.
-  nameHint?: RegExp;
-}
+// Resolves an icon from the dynamic API data. Preference: primaryType exact
+// match → primaryType alias → types list (first hit) → suffix heuristics
+// (_restaurant/_store/_shop) → MapPin. No label logic — the card label is
+// always Google's primaryTypeDisplayName.text.
+function iconForPrimaryType(primaryType?: string, types: string[] = []): LucideIcon {
+  const candidates = [primaryType, ...types].filter((c): c is string => Boolean(c));
 
-// Order matters — earlier rules win on type match. Generic types
-// (tourist_attraction) live at the end so specific signals take priority.
-const LABEL_RULES: LabelRule[] = [
-  { label: 'Market',     icon: Store,           types: ['market', 'grocery_or_supermarket'],      nameHint: /\b(market|marché|marketplace|bazaar|farmers)\b/i },
-  { label: 'Bakery',     icon: Croissant,       types: ['bakery'],                                 nameHint: /\b(bakery|boulangerie|patisserie|pâtisserie)\b/i },
-  { label: 'Cafe',       icon: Coffee,          types: ['cafe'],                                   nameHint: /\b(coffee|café|espresso|roaster|roastery)\b/i },
-  { label: 'Nightlife',  icon: Moon,            types: ['night_club'] },
-  { label: 'Bar',        icon: Beer,            types: ['bar'],                                    nameHint: /\b(pub|tavern|brewery|taproom)\b/i },
-  { label: 'Restaurant', icon: UtensilsCrossed, types: ['restaurant', 'meal_takeaway', 'meal_delivery'] },
-  { label: 'Gallery',    icon: ImageIcon,       types: ['art_gallery'],                            nameHint: /\b(gallery|galerie)\b/i },
-  { label: 'Museum',     icon: Palette,         types: ['museum'] },
-  { label: 'Aquarium',   icon: Fish,            types: ['aquarium'] },
-  { label: 'Zoo',        icon: PawPrint,        types: ['zoo'] },
-  { label: 'Amusement',  icon: FerrisWheel,     types: ['amusement_park'] },
-  { label: 'Park',       icon: TreePine,        types: ['park'] },
-  { label: 'Cinema',     icon: Clapperboard,    types: ['movie_theater'] },
-  { label: 'Bookstore',  icon: BookOpen,        types: ['book_store'],                             nameHint: /\b(bookstore|books)\b/i },
-  { label: 'Library',    icon: LibraryIcon,     types: ['library'] },
-  { label: 'Spa',        icon: Sparkles,        types: ['spa'] },
-  { label: 'Bowling',    icon: CircleDot,       types: ['bowling_alley'] },
-  { label: 'Stadium',    icon: Trophy,          types: ['stadium'] },
-  { label: 'Casino',     icon: Dices,           types: ['casino'] },
-  { label: 'Church',     icon: Church,          types: ['church'] },
-  { label: 'Temple',     icon: Landmark,        types: ['hindu_temple', 'mosque', 'synagogue'] },
-  { label: 'Florist',    icon: Flower,          types: ['florist'] },
-  { label: 'Shop',       icon: Shirt,           types: ['clothing_store', 'shoe_store', 'jewelry_store'] },
-  { label: 'Shopping',   icon: ShoppingBag,     types: ['shopping_mall', 'department_store'] },
-  // Generic fallback — only wins if nothing more specific matched, and only
-  // after name hints had a chance above.
-  { label: 'Attraction', icon: Landmark,        types: ['tourist_attraction'] },
-];
-
-export interface ResolvedLabel {
-  label: string;
-  icon: LucideIcon;
-  type: string;
-}
-
-export function resolvePlaceLabel(name: string, rawTypes: string[] = []): ResolvedLabel {
-  const typeSet = new Set(rawTypes);
-  const lowerName = (name || '').toLowerCase();
-
-  // 1. Specific type match — walk the rules in order and return on first hit,
-  //    except the generic `tourist_attraction` rule which we defer so name
-  //    hints can override it.
-  for (const rule of LABEL_RULES) {
-    const isGeneric = rule.types?.length === 1 && rule.types[0] === 'tourist_attraction';
-    if (isGeneric) continue;
-    if (rule.types?.some(t => typeSet.has(t))) {
-      return { label: rule.label, icon: rule.icon, type: rule.types[0] };
-    }
+  for (const c of candidates) {
+    const direct = NEARBY_ICON_REGISTRY[c];
+    if (direct) return direct;
+    const alias = PRIMARY_TYPE_ICON_ALIASES[c];
+    if (alias && NEARBY_ICON_REGISTRY[alias]) return NEARBY_ICON_REGISTRY[alias];
   }
 
-  // 2. Name-hint match for places Google tagged only generically (e.g.
-  //    Jean-Talon Market whose types are just tourist_attraction/food).
-  for (const rule of LABEL_RULES) {
-    if (rule.nameHint && rule.nameHint.test(lowerName)) {
-      const fallbackType = rule.types?.[0] ?? rule.label.toLowerCase();
-      return { label: rule.label, icon: rule.icon, type: fallbackType };
-    }
+  for (const c of candidates) {
+    if (/_restaurant$/.test(c)) return NEARBY_ICON_REGISTRY.restaurant;
+    if (/_store$/.test(c) || /_shop$/.test(c)) return NEARBY_ICON_REGISTRY.shopping;
   }
 
-  // 3. Generic `tourist_attraction` fallback.
-  if (typeSet.has('tourist_attraction')) {
-    return { label: 'Attraction', icon: Landmark, type: 'tourist_attraction' };
-  }
-
-  return { label: 'Place', icon: MapPin, type: 'place' };
+  return NEARBY_ICON_REGISTRY.default ?? MapPin;
 }
 
-interface NearbyApiResult {
-  place_id: string;
-  name: string;
-  vicinity?: string;
-  formatted_address?: string;
-  geometry?: { location?: { lat: number; lng: number } };
+// Snake_case → Title Case fallback for the rare case where the API omits
+// primaryTypeDisplayName but gives us a primaryType (e.g. "ice_cream_shop"
+// → "Ice Cream Shop"). Still dynamic — no lookup table.
+function titleCaseType(type: string): string {
+  return type
+    .split('_')
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
+const PRICE_LEVEL_MAP: Record<string, number> = {
+  PRICE_LEVEL_FREE: 0,
+  PRICE_LEVEL_INEXPENSIVE: 1,
+  PRICE_LEVEL_MODERATE: 2,
+  PRICE_LEVEL_EXPENSIVE: 3,
+  PRICE_LEVEL_VERY_EXPENSIVE: 4,
+};
+
+interface PlacesV1Photo {
+  name: string; // "places/{id}/photos/{id}"
+}
+
+interface PlacesV1Place {
+  id?: string;
+  displayName?: { text?: string; languageCode?: string };
+  formattedAddress?: string;
+  shortFormattedAddress?: string;
+  location?: { latitude?: number; longitude?: number };
   rating?: number;
-  user_ratings_total?: number;
-  price_level?: number;
-  opening_hours?: { open_now?: boolean };
-  photos?: Array<{ photo_reference: string }>;
+  userRatingCount?: number;
+  priceLevel?: string;
+  currentOpeningHours?: { openNow?: boolean };
+  regularOpeningHours?: { openNow?: boolean };
+  photos?: PlacesV1Photo[];
   types?: string[];
+  primaryType?: string;
+  primaryTypeDisplayName?: { text?: string; languageCode?: string };
+}
+
+interface PlacesV1Response {
+  places?: PlacesV1Place[];
+  error?: { status?: string; message?: string };
+}
+
+const PLACES_V1_FIELD_MASK = [
+  'places.id',
+  'places.displayName',
+  'places.formattedAddress',
+  'places.shortFormattedAddress',
+  'places.location',
+  'places.rating',
+  'places.userRatingCount',
+  'places.priceLevel',
+  'places.currentOpeningHours.openNow',
+  'places.regularOpeningHours.openNow',
+  'places.photos',
+  'places.types',
+  'places.primaryType',
+  'places.primaryTypeDisplayName',
+].join(',');
+
+function buildPhotoUrl(photoName: string, maxWidth = 1200): string {
+  // v1 photo endpoint returns a 302 to the actual image. Browsers follow
+  // redirects on <img> loads so this just works.
+  return `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=${maxWidth}&key=${GOOGLE_PLACES_API_KEY}`;
 }
 
 export class NearbyFeedCursor {
@@ -301,78 +313,120 @@ export class NearbyFeedCursor {
   private async fetchCategory(cat: CategoryDef, radius: number): Promise<NearbyPlace[]> {
     if (!GOOGLE_PLACES_API_KEY) return [];
     try {
-      // For the AI-keyword broad sweep, Google Places Text Search is semantic
-      // (same engine Google Maps uses) and finds places like "Jean-Talon Market"
-      // that keyword-based Nearby Search misses. For structured category sweeps,
-      // stay on Nearby Search which is faster and radius-strict.
       const useTextSearch = Boolean(cat.noTypeSearch && this.globalKeyword);
-      const endpoint = useTextSearch ? 'textsearch' : 'nearbysearch';
+      const endpoint = useTextSearch
+        ? '/api/placesv1/places:searchText'
+        : '/api/placesv1/places:searchNearby';
 
-      const params = new URLSearchParams({
-        location: `${this.userLocation.lat},${this.userLocation.lng}`,
-        radius: String(radius),
-        opennow: 'true',
-        key: GOOGLE_PLACES_API_KEY,
+      const body: Record<string, unknown> = { maxResultCount: 20 };
+      if (useTextSearch) {
+        body.textQuery = this.globalKeyword;
+        body.openNow = true;
+        body.locationBias = {
+          circle: {
+            center: {
+              latitude: this.userLocation.lat,
+              longitude: this.userLocation.lng,
+            },
+            radius,
+          },
+        };
+      } else {
+        body.includedTypes = [cat.type];
+        body.locationRestriction = {
+          circle: {
+            center: {
+              latitude: this.userLocation.lat,
+              longitude: this.userLocation.lng,
+            },
+            radius,
+          },
+        };
+      }
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+          'X-Goog-FieldMask': PLACES_V1_FIELD_MASK,
+        },
+        body: JSON.stringify(body),
       });
 
-      if (useTextSearch) {
-        params.set('query', this.globalKeyword!);
-      } else {
-        if (!cat.noTypeSearch) params.set('type', cat.type);
-        const keyword = [this.globalKeyword, cat.keyword].filter(Boolean).join(' ').trim();
-        if (keyword) params.set('keyword', keyword);
-      }
-
-      const res = await fetch(`/api/places/${endpoint}/json?${params.toString()}`);
-      const data = await res.json();
-      if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        console.warn('Places search non-OK status:', endpoint, data.status, data.error_message);
+      const data: PlacesV1Response = await res.json();
+      if (!res.ok) {
+        console.warn('Places v1 non-OK:', endpoint, data.error?.status, data.error?.message);
         return [];
       }
-      const raw: NearbyApiResult[] = data.results || [];
+
+      const raw: PlacesV1Place[] = data.places || [];
       return raw
-        .filter(r => r.place_id && r.geometry?.location)
-        .filter(r => r.opening_hours?.open_now !== false) // drop explicitly-closed; keep unknown + open
+        .filter(r => r.id && r.location?.latitude != null && r.location?.longitude != null)
+        .filter(r => {
+          // Drop explicitly-closed places; keep unknown + open. Nearby search
+          // doesn't support a server-side openNow filter, so we do it here
+          // for both endpoints for consistency.
+          const openNow =
+            r.currentOpeningHours?.openNow ?? r.regularOpeningHours?.openNow;
+          return openNow !== false;
+        })
         .filter(r => !(r.types || []).some(t => EXCLUDED_PLACE_TYPES.has(t)))
         .filter(r => {
-          // Text Search ignores radius, so enforce it client-side so the
-          // transport-mode (foot vs car) radius is still respected.
+          // Text Search uses locationBias (not restriction), so results outside
+          // the transport-mode radius can come back. Enforce it here.
           if (!useTextSearch) return true;
-          const loc = r.geometry?.location;
-          if (!loc) return false;
-          return haversineMeters(this.userLocation, loc) <= radius;
+          const lat = r.location?.latitude;
+          const lng = r.location?.longitude;
+          if (lat == null || lng == null) return false;
+          return haversineMeters(this.userLocation, { lat, lng }) <= radius;
         })
-        .map(r => this.toPlace(r, cat));
+        .map(r => this.toPlace(r));
     } catch (err) {
-      console.error('Places fetch failed', err);
+      console.error('Places v1 fetch failed', err);
       return [];
     }
   }
 
-  private toPlace(raw: NearbyApiResult, _cat: CategoryDef): NearbyPlace {
-    const loc = raw.geometry!.location!;
+  private toPlace(raw: PlacesV1Place): NearbyPlace {
+    const lat = raw.location!.latitude!;
+    const lng = raw.location!.longitude!;
     const imageUrls = (raw.photos || [])
       .slice(0, MAX_POST_PHOTOS)
-      .map(p => buildPhotoUrl(p.photo_reference));
+      .map(p => buildPhotoUrl(p.name));
 
-    // Per-place smart label — this wins over the search category so a place
-    // like "Jean-Talon Market" that surfaced through a restaurant/attraction
-    // sweep still shows "Market" on its card, not "Restaurant".
-    const resolved = resolvePlaceLabel(raw.name, raw.types || []);
+    const primaryType = raw.primaryType;
+    const types = raw.types || [];
+
+    // Label is 100% dynamic from Google — the exact phrase Google Maps shows
+    // ("Fresh food market"). Only fall back to a title-cased primaryType or
+    // types[0] if the API omits the display name, which is rare.
+    const categoryLabel =
+      raw.primaryTypeDisplayName?.text?.trim() ||
+      (primaryType ? titleCaseType(primaryType) : '') ||
+      (types[0] ? titleCaseType(types[0]) : 'Place');
+
+    const category = primaryType || types[0] || 'place';
+    const categoryIcon = iconForPrimaryType(primaryType, types);
+
+    const priceLevel =
+      raw.priceLevel && raw.priceLevel in PRICE_LEVEL_MAP
+        ? PRICE_LEVEL_MAP[raw.priceLevel]
+        : undefined;
 
     return {
-      placeId: raw.place_id,
-      name: raw.name,
-      category: resolved.type,
-      categoryLabel: resolved.label,
-      categoryIcon: resolved.icon,
-      address: raw.vicinity || raw.formatted_address || '',
-      location: { lat: loc.lat, lng: loc.lng },
-      distance: haversineMeters(this.userLocation, loc),
+      placeId: raw.id!,
+      name: raw.displayName?.text || '',
+      category,
+      categoryLabel,
+      categoryIcon,
+      address: raw.shortFormattedAddress || raw.formattedAddress || '',
+      location: { lat, lng },
+      distance: haversineMeters(this.userLocation, { lat, lng }),
       rating: raw.rating,
-      userRatingsTotal: raw.user_ratings_total,
-      priceLevel: raw.price_level,
-      openNow: raw.opening_hours?.open_now,
+      userRatingsTotal: raw.userRatingCount,
+      priceLevel,
+      openNow: raw.currentOpeningHours?.openNow ?? raw.regularOpeningHours?.openNow,
       imageUrls,
     };
   }
