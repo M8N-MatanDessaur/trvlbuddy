@@ -2,12 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, MapPin, Navigation, Loader2, LocateFixed, Mic, Square } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { useChat, ChatMessage } from '../contexts/ChatContext';
-import { chatWithTripAssistant, transcribeAudio } from '../services/aiService';
+import { chatWithTripAssistant, chatWithLocalAssistant, transcribeAudio } from '../services/aiService';
 import { useToast } from '../contexts/ToastContext';
 import { getCurrentLocation, getCachedLocation, startWatchingLocation, UserLocation } from '../utils/geolocation';
+import { reverseGeocodeLocality } from '../utils/geocoding';
 
 const ChatPage: React.FC = () => {
-  const { currentPlan, activities } = useTravel();
+  const { currentPlan, activities, appMode } = useTravel();
+  const isLocalMode = appMode === 'local';
   const { messages, addMessage, setMessages } = useChat();
   const { toast } = useToast();
   const [inputValue, setInputValue] = useState('');
@@ -16,6 +18,7 @@ const ChatPage: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(getCachedLocation());
   const [locationLoading, setLocationLoading] = useState(false);
+  const [localityName, setLocalityName] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -24,7 +27,22 @@ const ChatPage: React.FC = () => {
 
   // Welcome message on first mount (only if no messages yet)
   useEffect(() => {
-    if (messages.length === 0 && currentPlan) {
+    if (messages.length > 0) return;
+    if (isLocalMode) {
+      setMessages([{
+        id: 'welcome',
+        type: 'assistant',
+        content: "Hey! I'm your on-the-ground AI concierge. Ask me about food, attractions, transit, vibes - anything about where you are right now.",
+        timestamp: new Date(),
+        suggestions: [
+          "What's good to eat nearby?",
+          'Cool spots within walking distance?',
+          'How do I get around here?',
+        ],
+      }]);
+      return;
+    }
+    if (currentPlan) {
       const destinations = currentPlan.destinations || [];
       const destLabel = destinations.length > 1
         ? destinations.map(d => d.name).join(', ')
@@ -41,21 +59,33 @@ const ChatPage: React.FC = () => {
         ],
       }]);
     }
-  }, [currentPlan]);
+  }, [currentPlan, isLocalMode]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
-    // Don't auto-focus input (prevents keyboard from opening on page load)
     // Start watching location in background
     startWatchingLocation(loc => setUserLocation(loc));
   }, []);
 
+  // Lazy reverse-geocode locality once we have coords (local mode needs it for chat context)
+  useEffect(() => {
+    if (!isLocalMode || !userLocation || localityName) return;
+    let cancelled = false;
+    reverseGeocodeLocality(userLocation.lat, userLocation.lng).then(name => {
+      if (!cancelled && name) setLocalityName(name);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLocalMode, userLocation, localityName]);
+
   const sendMessage = async (text?: string) => {
     const msg = text || inputValue.trim();
-    if (!msg || isLoading || !currentPlan) return;
+    if (!msg || isLoading) return;
+    if (!isLocalMode && !currentPlan) return;
     setInputValue('');
 
     const userMsg: ChatMessage = { id: Date.now().toString(), type: 'user', content: msg, timestamp: new Date() };
@@ -63,12 +93,20 @@ const ChatPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Append location context to the message if available
-      let enrichedMsg = msg;
-      if (userLocation) {
-        enrichedMsg += ` [USER_LOCATION: ${userLocation.lat},${userLocation.lng}]`;
+      let response: { content: string; suggestions?: string[]; locations?: ChatMessage['locations'] };
+      if (isLocalMode) {
+        response = await chatWithLocalAssistant(
+          msg,
+          userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null,
+          localityName,
+        );
+      } else {
+        let enrichedMsg = msg;
+        if (userLocation) {
+          enrichedMsg += ` [USER_LOCATION: ${userLocation.lat},${userLocation.lng}]`;
+        }
+        response = await chatWithTripAssistant(enrichedMsg, currentPlan!, activities);
       }
-      const response = await chatWithTripAssistant(enrichedMsg, currentPlan, activities);
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         type: 'assistant',
@@ -174,7 +212,7 @@ const ChatPage: React.FC = () => {
     };
   }, []);
 
-  if (!currentPlan) {
+  if (!isLocalMode && !currentPlan) {
     return (
       <div className="flex items-center justify-center h-full">
         <p style={{ color: 'var(--text-secondary)' }}>Set up your trip first.</p>

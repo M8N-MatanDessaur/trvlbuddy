@@ -1,25 +1,74 @@
-import React, { useState, useMemo } from 'react';
-import { Phone, Shield, Building2, Globe, MapPin } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Phone, Shield, Building2, Globe, Loader2, LocateFixed } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
+import { EmergencyContact } from '../types/TravelData';
+import { getCachedLocation, getCurrentLocation, UserLocation } from '../utils/geolocation';
+import { reverseGeocodeCountry } from '../utils/geocoding';
+import { generateEmergencyContactsForDestination } from '../services/aiService';
 
 interface CountryInfo { id: string; name: string; languages: string[]; }
 
 const EmergencyPage: React.FC = () => {
-  const { currentPlan, emergencyContacts } = useTravel();
+  const { currentPlan, emergencyContacts, appMode } = useTravel();
+  const isLocalMode = appMode === 'local' || !currentPlan;
   const [selectedCountry, setSelectedCountry] = useState('');
 
-  if (!currentPlan) {
-    return (
-      <section className="page">
-        <div className="text-center py-16">
-          <h2 className="mb-3">No Travel Plan</h2>
-          <p className="text-[var(--text-secondary)]">Complete onboarding first.</p>
-        </div>
-      </section>
-    );
-  }
+  // Local mode state: geolocation-derived country + fetched contacts
+  const [localLocation, setLocalLocation] = useState<UserLocation | null>(getCachedLocation());
+  const [localCountry, setLocalCountry] = useState<{ name: string; code: string } | null>(null);
+  const [localContacts, setLocalContacts] = useState<EmergencyContact[] | null>(null);
+  const [localStatus, setLocalStatus] = useState<'idle' | 'locating' | 'fetching' | 'ready' | 'denied' | 'error'>('idle');
+
+  useEffect(() => {
+    if (!isLocalMode) return;
+    let cancelled = false;
+    (async () => {
+      let loc = localLocation;
+      if (!loc) {
+        setLocalStatus('locating');
+        try {
+          loc = await getCurrentLocation();
+          if (cancelled) return;
+          setLocalLocation(loc);
+        } catch (err) {
+          if (cancelled) return;
+          const code = (err as GeolocationPositionError | undefined)?.code;
+          setLocalStatus(code === 1 ? 'denied' : 'error');
+          return;
+        }
+      }
+      setLocalStatus('fetching');
+      const country = await reverseGeocodeCountry(loc.lat, loc.lng);
+      if (cancelled) return;
+      if (!country) {
+        setLocalStatus('error');
+        return;
+      }
+      setLocalCountry(country);
+      const mockDestination = {
+        id: `local_${country.code}`,
+        name: country.name,
+        country: country.name,
+        countryCode: country.code,
+        currency: '',
+        languages: [],
+        emergencyNumber: '',
+        timezone: '',
+        coordinates: { lat: loc.lat, lng: loc.lng },
+      };
+      const contacts = await generateEmergencyContactsForDestination(mockDestination);
+      if (cancelled) return;
+      setLocalContacts(contacts);
+      setLocalStatus('ready');
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocalMode]);
 
   const allCountries = useMemo((): CountryInfo[] => {
+    if (!currentPlan) return [];
     const countries = new Map<string, CountryInfo>();
     if (currentPlan.tripType === 'day-trip') {
       const d = currentPlan.destination || currentPlan.destinations?.[0];
@@ -32,9 +81,70 @@ const EmergencyPage: React.FC = () => {
     return Array.from(countries.values());
   }, [currentPlan]);
 
-  const currentCountryId = selectedCountry || allCountries[0]?.id || '';
-  const currentCountry = allCountries.find(c => c.id === currentCountryId);
-  const filteredContacts = emergencyContacts.filter(c => c.destinationId === currentCountryId && !c.cityId);
+  // Local-mode early returns for loading / error / denied states
+  if (isLocalMode) {
+    if (localStatus === 'locating' || localStatus === 'fetching' || (localStatus === 'ready' && !localContacts)) {
+      return (
+        <section className="page">
+          <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent)' }} />
+            <p className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+              {localStatus === 'locating' ? 'Getting your location...' : 'Loading emergency info...'}
+            </p>
+          </div>
+        </section>
+      );
+    }
+    if (localStatus === 'denied') {
+      return (
+        <section className="page">
+          <div className="flex flex-col items-center justify-center py-16 text-center gap-3 px-6">
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center"
+              style={{ background: 'var(--surface-container-high)', color: 'var(--text-secondary)' }}
+            >
+              <LocateFixed size={22} />
+            </div>
+            <h3 className="text-base font-bold">Location needed</h3>
+            <p className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+              Emergency info is based on your current country. Enable location to see relevant numbers.
+            </p>
+          </div>
+        </section>
+      );
+    }
+    if (localStatus === 'error') {
+      return (
+        <section className="page">
+          <div className="text-center py-16">
+            <h3 className="text-base font-bold mb-1">Couldn't load emergency info</h3>
+            <p className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+              Please try again in a moment.
+            </p>
+          </div>
+        </section>
+      );
+    }
+  } else if (!currentPlan) {
+    return (
+      <section className="page">
+        <div className="text-center py-16">
+          <h2 className="mb-3">No Travel Plan</h2>
+          <p className="text-[var(--text-secondary)]">Complete onboarding first.</p>
+        </div>
+      </section>
+    );
+  }
+
+  const currentCountryId = isLocalMode
+    ? (localCountry ? `local_${localCountry.code}` : '')
+    : selectedCountry || allCountries[0]?.id || '';
+  const currentCountry = isLocalMode
+    ? (localCountry ? { id: currentCountryId, name: localCountry.name, languages: [] } : null)
+    : allCountries.find(c => c.id === currentCountryId) || null;
+  const filteredContacts = isLocalMode
+    ? (localContacts || [])
+    : emergencyContacts.filter(c => c.destinationId === currentCountryId && !c.cityId);
   const mainEmergency = filteredContacts.find(c => c.type === 'emergency') || filteredContacts[0];
   const otherContacts = filteredContacts.filter(c => c !== mainEmergency);
 
