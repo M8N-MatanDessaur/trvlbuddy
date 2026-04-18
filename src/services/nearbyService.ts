@@ -53,7 +53,12 @@ export const CATEGORIES: CategoryDef[] = [
   { type: 'shopping_mall', label: 'Shopping', icon: ShoppingBag },
 ];
 
-const RADIUS_STEPS = [1500, 3000, 6000, 12000];
+export type TransportMode = 'foot' | 'car';
+
+const RADIUS_STEPS_BY_MODE: Record<TransportMode, number[]> = {
+  foot: [500, 1000, 1500, 2000],
+  car: [3000, 6000, 12000, 25000],
+};
 
 function buildPhotoUrl(photoReference: string, maxWidth = 1200): string {
   return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photoreference=${photoReference}&key=${GOOGLE_PLACES_API_KEY}`;
@@ -75,13 +80,15 @@ interface NearbyApiResult {
 export class NearbyFeedCursor {
   private readonly userLocation: UserLocation;
   private readonly categories: CategoryDef[];
+  private readonly radiusSteps: number[];
   private categoryIndex = 0;
   private radiusIndex = 0;
   private readonly seenPlaceIds = new Set<string>();
   private exhausted = false;
 
-  constructor(userLocation: UserLocation, allowedTypes?: string[]) {
+  constructor(userLocation: UserLocation, allowedTypes?: string[], transportMode: TransportMode = 'foot') {
     this.userLocation = userLocation;
+    this.radiusSteps = RADIUS_STEPS_BY_MODE[transportMode];
     if (allowedTypes && allowedTypes.length > 0) {
       const allowed = new Set(allowedTypes);
       const filtered = CATEGORIES.filter(c => allowed.has(c.type));
@@ -98,11 +105,11 @@ export class NearbyFeedCursor {
   async fetchNextBatch(targetCount: number): Promise<NearbyPlace[]> {
     const results: NearbyPlace[] = [];
     let safety = 0;
-    const maxIterations = this.categories.length * RADIUS_STEPS.length + 2;
+    const maxIterations = this.categories.length * this.radiusSteps.length + 2;
     while (results.length < targetCount && !this.exhausted && safety < maxIterations) {
       safety += 1;
       const cat = this.categories[this.categoryIndex];
-      const radius = RADIUS_STEPS[this.radiusIndex];
+      const radius = this.radiusSteps[this.radiusIndex];
       const batch = await this.fetchCategory(cat, radius);
       for (const place of batch) {
         if (this.seenPlaceIds.has(place.placeId)) continue;
@@ -120,7 +127,7 @@ export class NearbyFeedCursor {
     if (this.categoryIndex >= this.categories.length) {
       this.categoryIndex = 0;
       this.radiusIndex += 1;
-      if (this.radiusIndex >= RADIUS_STEPS.length) {
+      if (this.radiusIndex >= this.radiusSteps.length) {
         this.exhausted = true;
       }
     }
