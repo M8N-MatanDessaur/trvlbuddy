@@ -201,22 +201,32 @@ export class NearbyFeedCursor {
   private async fetchCategory(cat: CategoryDef, radius: number): Promise<NearbyPlace[]> {
     if (!GOOGLE_PLACES_API_KEY) return [];
     try {
+      // For the AI-keyword broad sweep, Google Places Text Search is semantic
+      // (same engine Google Maps uses) and finds places like "Jean-Talon Market"
+      // that keyword-based Nearby Search misses. For structured category sweeps,
+      // stay on Nearby Search which is faster and radius-strict.
+      const useTextSearch = Boolean(cat.noTypeSearch && this.globalKeyword);
+      const endpoint = useTextSearch ? 'textsearch' : 'nearbysearch';
+
       const params = new URLSearchParams({
         location: `${this.userLocation.lat},${this.userLocation.lng}`,
         radius: String(radius),
         opennow: 'true',
         key: GOOGLE_PLACES_API_KEY,
       });
-      if (!cat.noTypeSearch) {
-        params.set('type', cat.type);
-      }
-      const keyword = [this.globalKeyword, cat.keyword].filter(Boolean).join(' ').trim();
-      if (keyword) params.set('keyword', keyword);
 
-      const res = await fetch(`/api/places/nearbysearch/json?${params.toString()}`);
+      if (useTextSearch) {
+        params.set('query', this.globalKeyword!);
+      } else {
+        if (!cat.noTypeSearch) params.set('type', cat.type);
+        const keyword = [this.globalKeyword, cat.keyword].filter(Boolean).join(' ').trim();
+        if (keyword) params.set('keyword', keyword);
+      }
+
+      const res = await fetch(`/api/places/${endpoint}/json?${params.toString()}`);
       const data = await res.json();
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-        console.warn('Nearby search non-OK status:', data.status, data.error_message);
+        console.warn('Places search non-OK status:', endpoint, data.status, data.error_message);
         return [];
       }
       const raw: NearbyApiResult[] = data.results || [];
@@ -224,9 +234,17 @@ export class NearbyFeedCursor {
         .filter(r => r.place_id && r.geometry?.location)
         .filter(r => r.opening_hours?.open_now !== false) // drop explicitly-closed; keep unknown + open
         .filter(r => !(r.types || []).some(t => EXCLUDED_PLACE_TYPES.has(t)))
+        .filter(r => {
+          // Text Search ignores radius, so enforce it client-side so the
+          // transport-mode (foot vs car) radius is still respected.
+          if (!useTextSearch) return true;
+          const loc = r.geometry?.location;
+          if (!loc) return false;
+          return haversineMeters(this.userLocation, loc) <= radius;
+        })
         .map(r => this.toPlace(r, cat));
     } catch (err) {
-      console.error('Nearby fetch failed', err);
+      console.error('Places fetch failed', err);
       return [];
     }
   }
