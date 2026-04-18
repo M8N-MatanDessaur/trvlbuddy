@@ -5,6 +5,7 @@ import {
   suggestNearbyChips,
 } from './aiService';
 import { CATEGORIES } from './nearbyService';
+import { iconKeyList } from './nearbyIconRegistry';
 
 const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
 
@@ -12,7 +13,9 @@ const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
 // morning vs afternoon vs evening produce different chips, but within a
 // 30-minute window the suggestions are stable.
 const CACHE_TTL_MS = 30 * 60 * 1000;
-const CACHE_KEY_PREFIX = 'nearby-chips:';
+// v2 — bumped from v1 (emoji-based chips) to invalidate old cached
+// entries when switching to lucide iconKey-based chips.
+const CACHE_KEY_PREFIX = 'nearby-chips-v2:';
 
 interface CacheEntry {
   chips: NearbyChipSuggestion[];
@@ -143,6 +146,7 @@ export async function fetchDynamicChips(
     timeOfDay: timeOfDayLabel(now),
     typeCounts,
     allowedTypes: CATEGORIES.map(c => ({ type: c.type, label: c.label })),
+    allowedIconKeys: iconKeyList(),
   });
 
   if (chips.length > 0) writeCache(key, chips);
