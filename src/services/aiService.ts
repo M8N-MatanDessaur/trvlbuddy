@@ -1489,3 +1489,28 @@ Keep it concise and personal. Do not use emojis. Return only the journal text, n
     return `Day ${dayNumber} in ${destinationName}. Explored the city${placesVisited.length > 0 ? `, visiting ${placesVisited.join(' and ')}` : ''}. Walked about ${distanceKm.toFixed(1)} km.`;
   }
 }
+
+// ---- OpenAI Whisper transcription ----
+
+const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
+
+export async function transcribeAudio(blob: Blob, filename = 'audio.webm'): Promise<string> {
+  if (!OPENAI_API_KEY) {
+    throw new Error('VITE_OPENAI_API_KEY is not set');
+  }
+  const form = new FormData();
+  form.append('file', blob, filename);
+  form.append('model', 'whisper-1');
+
+  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Whisper transcription failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return (data.text || '').trim();
+}
