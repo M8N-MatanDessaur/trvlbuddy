@@ -108,26 +108,49 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
-      // Auto-reload on stale asset errors (happens after a new deploy when
-      // the cached index.html still references old JS chunk filenames)
-      window.addEventListener('error', function(e) {
-        if (e.message && e.message.includes('Failed to fetch dynamically imported module')) {
-          window.location.reload();
+      // Self-heal when a stale service worker served an old index.html that
+      // points at chunk filenames that no longer exist on the server.
+      // Unregister all SWs + clear caches, then reload so the next request
+      // hits the live server and the new network-first SW takes over.
+      var __recovering = false;
+      function recoverFromStaleCache() {
+        if (__recovering) return;
+        __recovering = true;
+        var done = function () { window.location.reload(); };
+        try {
+          var p = Promise.resolve();
+          if ('serviceWorker' in navigator) {
+            p = p.then(function () {
+              return navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(regs.map(function (r) { return r.unregister(); }));
+              });
+            });
+          }
+          if ('caches' in window) {
+            p = p.then(function () {
+              return caches.keys().then(function (keys) {
+                return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+              });
+            });
+          }
+          p.then(done, done);
+        } catch (_) {
+          done();
+        }
+      }
+
+      window.addEventListener('error', function (e) {
+        if (e && e.message && e.message.indexOf('Failed to fetch dynamically imported module') !== -1) {
+          recoverFromStaleCache();
         }
       });
-      window.addEventListener('vite:preloadError', function() {
-        window.location.reload();
-      });
+      window.addEventListener('vite:preloadError', recoverFromStaleCache);
 
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
+        window.addEventListener('load', function () {
           navigator.serviceWorker.register('/sw.js')
-            .then((registration) => {
-              console.log('SW registered: ', registration);
-            })
-            .catch((registrationError) => {
-              console.log('SW registration failed: ', registrationError);
-            });
+            .then(function (registration) { console.log('SW registered: ', registration); })
+            .catch(function (err) { console.log('SW registration failed: ', err); });
         });
       }
     </script>
