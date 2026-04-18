@@ -38,6 +38,9 @@ export interface CategoryDef {
   label: string;
   icon: LucideIcon;
   keyword?: string;
+  // When true the nearbysearch is fired without a `type=` param so the
+  // keyword alone drives the search. Used for AI-prompt broad matches.
+  noTypeSearch?: boolean;
 }
 
 export const CATEGORIES: CategoryDef[] = [
@@ -60,6 +63,40 @@ const RADIUS_STEPS_BY_MODE: Record<TransportMode, number[]> = {
   car: [3000, 6000, 12000, 25000],
 };
 
+// Place types that are not real "things to go do" and should never appear
+// in the feed, even when Google tags a result with e.g. both "restaurant"
+// and "gas_station". Any result that carries one of these types is dropped.
+const EXCLUDED_PLACE_TYPES = new Set<string>([
+  'gas_station',
+  'car_repair',
+  'car_dealer',
+  'car_rental',
+  'car_wash',
+  'convenience_store',
+  'storage',
+  'funeral_home',
+  'parking',
+  'pharmacy',
+  'drugstore',
+  'hospital',
+  'doctor',
+  'dentist',
+  'veterinary_care',
+  'real_estate_agency',
+  'insurance_agency',
+  'lawyer',
+  'accounting',
+  'atm',
+  'bank',
+  'post_office',
+  'laundry',
+  'locksmith',
+  'electrician',
+  'plumber',
+  'moving_company',
+  'roofing_contractor',
+]);
+
 function buildPhotoUrl(photoReference: string, maxWidth = 1200): string {
   return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photoreference=${photoReference}&key=${GOOGLE_PLACES_API_KEY}`;
 }
@@ -75,26 +112,54 @@ interface NearbyApiResult {
   price_level?: number;
   opening_hours?: { open_now?: boolean };
   photos?: Array<{ photo_reference: string }>;
+  types?: string[];
 }
 
 export class NearbyFeedCursor {
   private readonly userLocation: UserLocation;
   private readonly categories: CategoryDef[];
   private readonly radiusSteps: number[];
+  private readonly globalKeyword?: string;
   private categoryIndex = 0;
   private radiusIndex = 0;
   private readonly seenPlaceIds = new Set<string>();
   private exhausted = false;
 
-  constructor(userLocation: UserLocation, allowedTypes?: string[], transportMode: TransportMode = 'foot') {
+  constructor(
+    userLocation: UserLocation,
+    allowedTypes?: string[],
+    transportMode: TransportMode = 'foot',
+    keyword?: string,
+  ) {
     this.userLocation = userLocation;
     this.radiusSteps = RADIUS_STEPS_BY_MODE[transportMode];
+    this.globalKeyword = keyword && keyword.trim().length > 0 ? keyword.trim() : undefined;
+
+    let baseCategories: CategoryDef[];
     if (allowedTypes && allowedTypes.length > 0) {
       const allowed = new Set(allowedTypes);
       const filtered = CATEGORIES.filter(c => allowed.has(c.type));
-      this.categories = filtered.length > 0 ? filtered : CATEGORIES;
+      baseCategories = filtered.length > 0 ? filtered : CATEGORIES;
     } else {
-      this.categories = CATEGORIES;
+      baseCategories = CATEGORIES;
+    }
+
+    // When an AI keyword is active, do a broad keyword-only sweep first so
+    // places that don't fit one of our fixed Places `type` values (e.g. a
+    // public market tagged only as `tourist_attraction`/`point_of_interest`)
+    // still surface. The type-restricted queries still run afterwards for
+    // deeper coverage within the requested categories.
+    if (this.globalKeyword) {
+      const fallback = CATEGORIES.find(c => c.type === 'tourist_attraction') ?? CATEGORIES[0];
+      const broad: CategoryDef = {
+        type: fallback.type,
+        label: fallback.label,
+        icon: fallback.icon,
+        noTypeSearch: true,
+      };
+      this.categories = [broad, ...baseCategories];
+    } else {
+      this.categories = baseCategories;
     }
   }
 
@@ -139,11 +204,14 @@ export class NearbyFeedCursor {
       const params = new URLSearchParams({
         location: `${this.userLocation.lat},${this.userLocation.lng}`,
         radius: String(radius),
-        type: cat.type,
         opennow: 'true',
         key: GOOGLE_PLACES_API_KEY,
       });
-      if (cat.keyword) params.set('keyword', cat.keyword);
+      if (!cat.noTypeSearch) {
+        params.set('type', cat.type);
+      }
+      const keyword = [this.globalKeyword, cat.keyword].filter(Boolean).join(' ').trim();
+      if (keyword) params.set('keyword', keyword);
 
       const res = await fetch(`/api/places/nearbysearch/json?${params.toString()}`);
       const data = await res.json();
@@ -155,6 +223,7 @@ export class NearbyFeedCursor {
       return raw
         .filter(r => r.place_id && r.geometry?.location)
         .filter(r => r.opening_hours?.open_now !== false) // drop explicitly-closed; keep unknown + open
+        .filter(r => !(r.types || []).some(t => EXCLUDED_PLACE_TYPES.has(t)))
         .map(r => this.toPlace(r, cat));
     } catch (err) {
       console.error('Nearby fetch failed', err);
@@ -167,12 +236,23 @@ export class NearbyFeedCursor {
     const imageUrls = (raw.photos || [])
       .slice(0, MAX_POST_PHOTOS)
       .map(p => buildPhotoUrl(p.photo_reference));
+
+    // For the broad keyword-only sweep, the cat we were passed is synthetic
+    // and doesn't reflect what the place actually is. Re-derive category
+    // from the result's own types array.
+    let resolvedCat = cat;
+    if (cat.noTypeSearch) {
+      const resultTypes = raw.types || [];
+      const match = CATEGORIES.find(c => resultTypes.includes(c.type));
+      if (match) resolvedCat = match;
+    }
+
     return {
       placeId: raw.place_id,
       name: raw.name,
-      category: cat.type,
-      categoryLabel: cat.label,
-      categoryIcon: cat.icon,
+      category: resolvedCat.type,
+      categoryLabel: resolvedCat.label,
+      categoryIcon: resolvedCat.icon,
       address: raw.vicinity || raw.formatted_address || '',
       location: { lat: loc.lat, lng: loc.lng },
       distance: haversineMeters(this.userLocation, loc),
