@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trvlbuddy-v3';
+const CACHE_NAME = 'trvlbuddy-v4';
 const urlsToCache = [
   '/',
   '/manifest.json',
@@ -73,35 +73,53 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Skip non-GET and API requests
+  // Skip non-GET and cross-origin requests
   if (event.request.method !== 'GET') return;
   if (url.hostname !== self.location.hostname) return;
 
-  // Never cache hashed asset files (JS/CSS chunks). They have unique names
-  // per build, so serving a stale cached version causes MIME type errors
-  // when the old filename no longer exists on the server.
   const isHashedAsset = url.pathname.startsWith('/assets/');
+  const isNavigation =
+    event.request.mode === 'navigate' ||
+    event.request.destination === 'document';
 
+  // Navigation (HTML document) requests: always go to network first so a
+  // fresh index.html with current chunk hashes is served. Fall back to the
+  // cached root document only when offline.
+  if (isNavigation) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200 && response.type === 'basic') {
+            const toCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('/', toCache));
+          }
+          return response;
+        })
+        .catch(() => caches.match('/').then((r) => r || Response.error())),
+    );
+    return;
+  }
+
+  // Hashed JS/CSS chunks: always from network, never cached (names change
+  // per build so a cached copy would point at a file that no longer exists).
+  if (isHashedAsset) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // Everything else (icons, manifest, fonts, etc.): cache-first.
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      if (cached && !isHashedAsset) return cached;
-
+      if (cached) return cached;
       return fetch(event.request.clone()).then((response) => {
         if (!response || response.status !== 200 || response.type !== 'basic') {
           return response;
         }
-        // Only cache non-hashed assets (icons, manifest, root document)
-        if (!isHashedAsset) {
-          const toCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, toCache));
-        }
+        const toCache = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, toCache));
         return response;
-      }).catch(() => {
-        if (event.request.destination === 'document') {
-          return caches.match('/');
-        }
       });
-    })
+    }),
   );
 });
 
