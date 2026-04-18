@@ -15,7 +15,8 @@ interface Props {
 
 const Header: React.FC<Props> = ({ pages }) => {
   const { theme, toggleTheme } = useTheme();
-  const { currentPlan, activities, translations, emergencyContacts, savedActivities, setCurrentPlan, setActivities, setTranslations, setEmergencyContacts, setHasCompletedOnboarding } = useTravel();
+  const { currentPlan, activities, translations, emergencyContacts, savedActivities, setCurrentPlan, setActivities, setTranslations, setEmergencyContacts, setHasCompletedOnboarding, appMode, setAppMode } = useTravel();
+  const isLocalMode = appMode === 'local';
   const { toast } = useToast();
   const [showResetModal, setShowResetModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -45,6 +46,7 @@ const Header: React.FC<Props> = ({ pages }) => {
     setTranslations([]);
     setEmergencyContacts([]);
     setHasCompletedOnboarding(false);
+    setAppMode(null);
     localStorage.removeItem('currentTravelPlan');
     localStorage.removeItem('generatedActivities');
     localStorage.removeItem('generatedTranslations');
@@ -52,7 +54,14 @@ const Header: React.FC<Props> = ({ pages }) => {
     localStorage.removeItem('hasCompletedOnboarding');
     localStorage.removeItem('savedActivities');
     localStorage.removeItem('theme-manual');
+    localStorage.removeItem('appMode');
     window.location.href = '/';
+  };
+
+  const handleStartTrip = () => {
+    setShowMenu(false);
+    setAppMode('trip');
+    // hasCompletedOnboarding stays false so ConversationalOnboarding takes over
   };
 
   useEffect(() => {
@@ -109,7 +118,7 @@ const Header: React.FC<Props> = ({ pages }) => {
                   {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
                   {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
                 </button>
-                {currentPlan && (
+                {currentPlan && !isLocalMode && (
                   <button
                     onClick={handleShareClick}
                     className="w-full flex items-center gap-3 px-3.5 py-3 text-sm rounded-xl transition-colors"
@@ -117,6 +126,16 @@ const Header: React.FC<Props> = ({ pages }) => {
                   >
                     <Share2 size={15} />
                     Share Trip
+                  </button>
+                )}
+                {isLocalMode && (
+                  <button
+                    onClick={handleStartTrip}
+                    className="w-full flex items-center gap-3 px-3.5 py-3 text-sm rounded-xl transition-colors"
+                    style={{ color: 'var(--accent)' }}
+                  >
+                    <Plane size={15} />
+                    Start a Trip
                   </button>
                 )}
                 <button

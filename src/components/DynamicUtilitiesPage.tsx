@@ -10,7 +10,8 @@ const COMMON_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'KRW', 'CHF
 const QUICK_AMOUNTS = [10, 20, 50, 100];
 
 const DynamicUtilitiesPage: React.FC = () => {
-  const { currentPlan } = useTravel();
+  const { currentPlan, appMode } = useTravel();
+  const isLocalMode = appMode === 'local' || !currentPlan;
   const [selectedCurrency, setSelectedCurrency] = useState('');
   const [localAmount, setLocalAmount] = useState('');
   const [homeAmount, setHomeAmount] = useState('');
@@ -18,24 +19,18 @@ const DynamicUtilitiesPage: React.FC = () => {
   const [exchangeRates, setExchangeRates] = useState<{ [key: string]: number }>({});
   const [ratesLoading, setRatesLoading] = useState(true);
 
-  if (!currentPlan) {
-    return (
-      <section className="page">
-        <div className="text-center py-16">
-          <h2 className="mb-3">No Travel Plan</h2>
-          <p className="text-[var(--text-secondary)]">Complete onboarding first.</p>
-        </div>
-      </section>
-    );
-  }
-
   const getAllCurrencies = (): CurrencyInfo[] => {
+    if (isLocalMode) {
+      return COMMON_CURRENCIES
+        .filter(code => code !== homeCurrency)
+        .map(code => ({ code, rate: getRate(code) }));
+    }
     const codes = new Set<string>();
-    if (currentPlan.tripType === 'day-trip') {
-      const d = currentPlan.destination || currentPlan.destinations?.[0];
+    if (currentPlan!.tripType === 'day-trip') {
+      const d = currentPlan!.destination || currentPlan!.destinations?.[0];
       if (d?.currency) codes.add(d.currency);
     } else {
-      currentPlan.destinations?.forEach((d: any) => { if (d.currency) codes.add(d.currency); });
+      currentPlan!.destinations?.forEach((d: any) => { if (d.currency) codes.add(d.currency); });
     }
     return Array.from(codes).map(code => ({ code, rate: getRate(code) }));
   };
@@ -108,7 +103,9 @@ const DynamicUtilitiesPage: React.FC = () => {
     <section className="page space-y-5">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight mb-1">Tools</h1>
-        <p className="text-[13px] text-[var(--text-secondary)]">Currency, photos, and packing</p>
+        <p className="text-[13px] text-[var(--text-secondary)]">
+          {isLocalMode ? 'Currency and photo translator' : 'Currency, photos, and packing'}
+        </p>
       </div>
 
       {/* Currency converter */}
@@ -157,8 +154,8 @@ const DynamicUtilitiesPage: React.FC = () => {
       {/* Photo Scanner */}
       <PhotoScanner />
 
-      {/* Packing List (pre-trip only) */}
-      <PackingList />
+      {/* Packing List (pre-trip only, not shown in local mode) */}
+      {!isLocalMode && <PackingList />}
 
     </section>
   );
