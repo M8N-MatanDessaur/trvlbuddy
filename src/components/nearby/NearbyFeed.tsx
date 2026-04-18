@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LocateFixed, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car, Calendar } from 'lucide-react';
+import { LocateFixed, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car, Calendar, Plus } from 'lucide-react';
 import {
   getCachedLocation,
   getCurrentLocation,
@@ -14,9 +14,15 @@ import {
 } from '../../services/nearbyService';
 import NearbyPost from './NearbyPost';
 import NearbyLiveEvents from './NearbyLiveEvents';
-import NearbyPromptBar from './NearbyPromptBar';
-import { interpretNearbyPrompt } from '../../services/aiService';
+import NearbyPromptBar, { NearbyPromptBarHandle } from './NearbyPromptBar';
+import { interpretNearbyPrompt, NearbyChipSuggestion } from '../../services/aiService';
+import { fetchDynamicChips } from '../../services/nearbyChipsService';
 import { useToast } from '../../contexts/ToastContext';
+
+const CHIP_SCAN_RADIUS_BY_MODE: Record<TransportMode, number> = {
+  foot: 1500,
+  car: 8000,
+};
 
 type Status = 'idle' | 'locating' | 'loading' | 'ready' | 'denied' | 'error';
 
@@ -41,6 +47,9 @@ const NearbyFeed: React.FC = () => {
   const [aiPrompt, setAiPrompt] = useState<string | null>(null);
   const [aiKeyword, setAiKeyword] = useState<string | undefined>(undefined);
   const [aiLoading, setAiLoading] = useState(false);
+  const [dynamicChips, setDynamicChips] = useState<NearbyChipSuggestion[]>([]);
+  const [chipsLoading, setChipsLoading] = useState(false);
+  const [activeChipLabel, setActiveChipLabel] = useState<string | null>(null);
   const { toast } = useToast();
 
   const cursorRef = useRef<NearbyFeedCursor | null>(null);
@@ -48,6 +57,7 @@ const NearbyFeed: React.FC = () => {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const sectionRef = useRef<HTMLElement | null>(null);
   const scrollableRef = useRef<HTMLElement | null>(null);
+  const promptBarRef = useRef<NearbyPromptBarHandle | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const loadMore = useCallback(async () => {
@@ -152,15 +162,56 @@ const NearbyFeed: React.FC = () => {
     setAiPrompt(null);
     setAiKeyword(undefined);
     setSelectedTypes([]);
+    setActiveChipLabel(null);
   }, []);
 
-  const toggleType = (type: string) => {
-    setSelectedTypes(prev =>
-      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type],
-    );
-  };
+  // Load dynamic, context-aware chips once we have a location. The service
+  // caches per city + hour-of-day in sessionStorage so we don't re-call
+  // Places + Gemini on every refresh.
+  useEffect(() => {
+    if (!userLocation) return;
+    let cancelled = false;
+    setChipsLoading(true);
+    fetchDynamicChips({
+      userLocation,
+      scanRadius: CHIP_SCAN_RADIUS_BY_MODE[transportMode],
+    })
+      .then(chips => {
+        if (cancelled) return;
+        setDynamicChips(chips);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        console.error('fetchDynamicChips failed', err);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setChipsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation, transportMode]);
 
-  const clearTypes = () => setSelectedTypes([]);
+  const selectDynamicChip = useCallback((chip: NearbyChipSuggestion) => {
+    // Apply the chip's pre-interpreted types/keyword directly — no extra
+    // Gemini round-trip needed since suggestNearbyChips already resolved them.
+    setAiPrompt(`${chip.emoji} ${chip.label}`);
+    setAiKeyword(chip.keyword);
+    setSelectedTypes(chip.types);
+    setActiveChipLabel(chip.label);
+  }, []);
+
+  const openPromptBar = useCallback(() => {
+    handleAiClear();
+    // Wait a tick so the prompt bar re-renders in its input (not chip) state.
+    requestAnimationFrame(() => promptBarRef.current?.focus());
+  }, [handleAiClear]);
+
+  const clearTypes = () => {
+    setSelectedTypes([]);
+    setActiveChipLabel(null);
+  };
 
   const selectTransportMode = (mode: TransportMode) => {
     if (mode === transportMode) return;
@@ -285,6 +336,7 @@ const NearbyFeed: React.FC = () => {
       {/* Free-form AI prompt bar */}
       {userLocation && (status === 'ready' || (status === 'loading' && places.length > 0)) ? (
         <NearbyPromptBar
+          ref={promptBarRef}
           activePrompt={aiPrompt}
           loading={aiLoading}
           onSubmit={handleAiSubmit}
@@ -361,38 +413,65 @@ const NearbyFeed: React.FC = () => {
         )
       )}
 
-      {/* Category filter chips (hidden while an AI prompt is active) */}
+      {/* Dynamic AI-suggested chips (hidden while a free-form AI prompt is active) */}
       {!aiPrompt && (status === 'ready' || (status === 'loading' && places.length > 0)) && userLocation && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 mb-4" style={{ scrollbarWidth: 'none' }}>
           <button
             onClick={clearTypes}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
             style={{
-              background: selectedTypes.length === 0 ? 'var(--accent)' : 'var(--surface-container)',
-              color: selectedTypes.length === 0 ? 'white' : 'var(--text-secondary)',
+              background: selectedTypes.length === 0 && !activeChipLabel ? 'var(--accent)' : 'var(--surface-container)',
+              color: selectedTypes.length === 0 && !activeChipLabel ? 'white' : 'var(--text-secondary)',
             }}
           >
             <Globe size={14} />
             All
           </button>
-          {CATEGORIES.map(cat => {
-            const isActive = selectedTypes.includes(cat.type);
-            const Icon = cat.icon;
+
+          {chipsLoading && dynamicChips.length === 0 &&
+            [72, 96, 84, 80, 92, 76].map((w, i) => (
+              <div
+                key={`chip-skel-${i}`}
+                className="rounded-xl flex-shrink-0 activity-card-shimmer"
+                style={{ width: `${w}px`, height: '36px', background: 'var(--surface-container-high)' }}
+                aria-hidden="true"
+              />
+            ))}
+
+          {dynamicChips.map(chip => {
+            const isActive = activeChipLabel === chip.label;
             return (
               <button
-                key={cat.type}
-                onClick={() => toggleType(cat.type)}
+                key={chip.label}
+                onClick={() => selectDynamicChip(chip)}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
                 style={{
                   background: isActive ? 'var(--accent)' : 'var(--surface-container)',
                   color: isActive ? 'white' : 'var(--text-secondary)',
                 }}
               >
-                <Icon size={14} />
-                {cat.label}
+                <span aria-hidden="true">{chip.emoji}</span>
+                {chip.label}
               </button>
             );
           })}
+
+          {/* Escape hatch: if none of the suggested chips match what the user
+              wants, "More" clears the active filter and focuses the prompt bar. */}
+          {!chipsLoading && (
+            <button
+              onClick={openPromptBar}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
+              style={{
+                background: 'var(--surface-container)',
+                color: 'var(--text-secondary)',
+              }}
+              aria-label="Search for something else"
+            >
+              <Plus size={14} />
+              More
+            </button>
+          )}
         </div>
       )}
 
@@ -497,10 +576,27 @@ const NearbyFeed: React.FC = () => {
 
           {exhausted && places.length === 0 && status === 'ready' && (
             <div className="text-center py-16 px-6">
-              <h3 className="text-base font-bold mb-1">Nothing open nearby</h3>
-              <p className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-                We couldn't find anything open around you right now.
+              <h3 className="text-base font-bold mb-1">
+                {activeChipLabel
+                  ? `Nothing open for "${activeChipLabel}" right now`
+                  : aiPrompt
+                  ? 'Nothing matched that'
+                  : 'Nothing open nearby'}
+              </h3>
+              <p className="text-[13px] mb-4" style={{ color: 'var(--text-secondary)' }}>
+                {activeChipLabel || aiPrompt
+                  ? 'Try another chip or search for something specific.'
+                  : "We couldn't find anything open around you right now."}
               </p>
+              {(activeChipLabel || aiPrompt) && (
+                <button
+                  onClick={openPromptBar}
+                  className="px-5 py-3 rounded-2xl text-[13px] font-bold"
+                  style={{ background: 'var(--accent)', color: 'white' }}
+                >
+                  Search instead
+                </button>
+              )}
             </div>
           )}
         </>

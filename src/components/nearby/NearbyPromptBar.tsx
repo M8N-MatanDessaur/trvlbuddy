@@ -1,7 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Mic, Send, Square, Sparkles, Loader2, X } from 'lucide-react';
 import { transcribeAudio } from '../../services/aiService';
 import { useToast } from '../../contexts/ToastContext';
+
+export interface NearbyPromptBarHandle {
+  focus: () => void;
+}
 
 const PLACEHOLDER_SUGGESTIONS = [
   'What do you feel like?',
@@ -40,7 +44,10 @@ interface Props {
   onClear: () => void;
 }
 
-const NearbyPromptBar: React.FC<Props> = ({ activePrompt, loading, onSubmit, onClear }) => {
+const NearbyPromptBar = forwardRef<NearbyPromptBarHandle, Props>(function NearbyPromptBar(
+  { activePrompt, loading, onSubmit, onClear },
+  ref,
+) {
   const [value, setValue] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -48,7 +55,15 @@ const NearbyPromptBar: React.FC<Props> = ({ activePrompt, loading, onSubmit, onC
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const { toast } = useToast();
+
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      inputRef.current?.focus();
+      inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+  }));
 
   useEffect(() => {
     if (value || isRecording || isTranscribing || loading) return;
@@ -194,6 +209,7 @@ const NearbyPromptBar: React.FC<Props> = ({ activePrompt, loading, onSubmit, onC
           style={{ color: 'var(--accent)' }}
         />
         <input
+          ref={inputRef}
           type="text"
           value={value}
           onChange={e => setValue(e.target.value)}
@@ -247,6 +263,6 @@ const NearbyPromptBar: React.FC<Props> = ({ activePrompt, loading, onSubmit, onC
       </div>
     </form>
   );
-};
+});
 
 export default NearbyPromptBar;
