@@ -1744,3 +1744,82 @@ Return ONLY minified JSON of the form: {"types":["restaurant","cafe"],"keyword":
     return { types: [] };
   }
 }
+
+// ---- Dynamic nearby chip suggestions ----
+
+export interface NearbyChipSuggestion {
+  emoji: string;
+  label: string;
+  types: string[];
+  keyword?: string;
+}
+
+export interface NearbyChipContext {
+  city: string | null;
+  dayOfWeek: string;
+  timeOfDay: string;
+  typeCounts: Record<string, number>;
+  allowedTypes: { type: string; label: string }[];
+}
+
+export async function suggestNearbyChips(
+  ctx: NearbyChipContext,
+): Promise<NearbyChipSuggestion[]> {
+  const typeList = ctx.allowedTypes.map(t => `"${t.type}" (${t.label})`).join(', ');
+  const countsLine = Object.entries(ctx.typeCounts)
+    .filter(([, n]) => n > 0)
+    .sort(([, a], [, b]) => b - a)
+    .map(([t, n]) => `${t}:${n}`)
+    .join(', ');
+  const locationLine = ctx.city ? `in ${ctx.city}` : 'at the user\'s current location';
+
+  const prompt = `A nearby-places app wants to show 6 contextual filter chips ${locationLine} on ${ctx.dayOfWeek} at ${ctx.timeOfDay}.
+
+Observed Google Places categories within the user's radius (type:count): ${countsLine || 'unknown'}.
+
+Allowed category types (use ONLY these): ${typeList}.
+
+Rules:
+- Return exactly 6 chips as a JSON array.
+- Each chip: {"emoji":"🍜","label":"Ramen spots","types":["restaurant"],"keyword":"ramen"}.
+- "emoji": a single, relevant emoji.
+- "label": 1-3 words, capitalized naturally, human-friendly.
+- "types": 1-3 of the allowed types that are actually observed nearby. Never pick a type with count 0.
+- "keyword": short phrase (1-3 words) for specific flavor (e.g. "ramen", "brunch", "rooftop", "cherry blossom"). Leave empty if the chip is a pure category.
+- Prefer chips that match the time of day and day of week (breakfast in the morning, bars/live music late night, brunch on weekend mornings, etc).
+- If the city has a well-known local specialty and the types are present, include one chip for it (e.g. poutine in Montreal, ramen in Tokyo, bagels in Montreal/NYC).
+- Avoid generic duplicates — each chip should feel distinct.
+- Do not suggest chips for categories that are 0 nearby.
+
+Return ONLY minified JSON array. No markdown, no prose.`;
+
+  try {
+    const raw = await callGeminiAPI(prompt, false);
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) return [];
+    const parsed = JSON.parse(match[0]);
+    if (!Array.isArray(parsed)) return [];
+    const allowedSet = new Set(ctx.allowedTypes.map(t => t.type));
+    const chips: NearbyChipSuggestion[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== 'object') continue;
+      const emoji = typeof item.emoji === 'string' ? item.emoji.trim() : '';
+      const label = typeof item.label === 'string' ? item.label.trim() : '';
+      const types = Array.isArray(item.types)
+        ? item.types.filter(
+            (t: unknown): t is string => typeof t === 'string' && allowedSet.has(t),
+          )
+        : [];
+      const keyword =
+        typeof item.keyword === 'string' && item.keyword.trim().length > 0
+          ? item.keyword.trim()
+          : undefined;
+      if (!label || types.length === 0) continue;
+      chips.push({ emoji: emoji || '✨', label, types, keyword });
+    }
+    return chips.slice(0, 6);
+  } catch (err) {
+    console.error('suggestNearbyChips failed:', err);
+    return [];
+  }
+}
