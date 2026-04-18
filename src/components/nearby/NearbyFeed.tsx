@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LocateFixed, Loader2, RefreshCw, Radar, Globe, ArrowUp } from 'lucide-react';
+import { LocateFixed, Loader2, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car } from 'lucide-react';
 import {
   getCachedLocation,
   getCurrentLocation,
@@ -10,6 +10,7 @@ import {
   NearbyFeedCursor,
   NearbyPlace,
   CATEGORIES,
+  TransportMode,
 } from '../../services/nearbyService';
 import NearbyPost from './NearbyPost';
 import NearbyLiveEvents from './NearbyLiveEvents';
@@ -18,6 +19,13 @@ type Status = 'idle' | 'locating' | 'loading' | 'ready' | 'denied' | 'error';
 
 const BATCH_SIZE = 10;
 const PREFETCH_AHEAD = 3;
+const TRANSPORT_STORAGE_KEY = 'nearby-transport-mode';
+
+function readStoredTransportMode(): TransportMode {
+  if (typeof window === 'undefined') return 'foot';
+  const stored = window.localStorage.getItem(TRANSPORT_STORAGE_KEY);
+  return stored === 'car' ? 'car' : 'foot';
+}
 
 const NearbyFeed: React.FC = () => {
   const [status, setStatus] = useState<Status>('idle');
@@ -26,6 +34,7 @@ const NearbyFeed: React.FC = () => {
   const [exhausted, setExhausted] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [transportMode, setTransportMode] = useState<TransportMode>(readStoredTransportMode);
 
   const cursorRef = useRef<NearbyFeedCursor | null>(null);
   const fetchingRef = useRef(false);
@@ -55,10 +64,10 @@ const NearbyFeed: React.FC = () => {
   }, []);
 
   const bootstrap = useCallback(
-    async (loc: UserLocation, types: string[]) => {
+    async (loc: UserLocation, types: string[], mode: TransportMode) => {
       setStatus('loading');
       setErrorMessage(null);
-      cursorRef.current = new NearbyFeedCursor(loc, types);
+      cursorRef.current = new NearbyFeedCursor(loc, types, mode);
       setPlaces([]);
       setExhausted(false);
       await loadMore();
@@ -73,7 +82,7 @@ const NearbyFeed: React.FC = () => {
     try {
       const loc = await getCurrentLocation();
       setUserLocation(loc);
-      await bootstrap(loc, selectedTypes);
+      await bootstrap(loc, selectedTypes, transportMode);
     } catch (err: unknown) {
       const code = (err as GeolocationPositionError | undefined)?.code;
       if (code === 1) {
@@ -83,20 +92,20 @@ const NearbyFeed: React.FC = () => {
         setErrorMessage('Could not get your location. Check permissions and try again.');
       }
     }
-  }, [bootstrap, selectedTypes]);
+  }, [bootstrap, selectedTypes, transportMode]);
 
   useEffect(() => {
     const cached = getCachedLocation();
     if (cached) {
       setUserLocation(cached);
-      bootstrap(cached, selectedTypes);
+      bootstrap(cached, selectedTypes, transportMode);
     } else {
       requestLocation();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload feed when filter changes (after initial load)
+  // Reload feed when filter or transport mode changes (after initial load)
   const didInitRef = useRef(false);
   useEffect(() => {
     if (!didInitRef.current) {
@@ -104,9 +113,9 @@ const NearbyFeed: React.FC = () => {
       return;
     }
     if (!userLocation) return;
-    bootstrap(userLocation, selectedTypes);
+    bootstrap(userLocation, selectedTypes, transportMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTypes]);
+  }, [selectedTypes, transportMode]);
 
   const toggleType = (type: string) => {
     setSelectedTypes(prev =>
@@ -115,6 +124,14 @@ const NearbyFeed: React.FC = () => {
   };
 
   const clearTypes = () => setSelectedTypes([]);
+
+  const selectTransportMode = (mode: TransportMode) => {
+    if (mode === transportMode) return;
+    setTransportMode(mode);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(TRANSPORT_STORAGE_KEY, mode);
+    }
+  };
 
   useEffect(() => {
     if (status !== 'ready') return;
@@ -171,19 +188,56 @@ const NearbyFeed: React.FC = () => {
           </p>
         </div>
         {status === 'ready' && userLocation && (
-          <button
-            onClick={() => requestLocation()}
-            className="flex items-center justify-center rounded-full"
-            style={{
-              width: '36px',
-              height: '36px',
-              background: 'var(--surface-container)',
-              color: 'var(--text-secondary)',
-            }}
-            aria-label="Refresh"
-          >
-            <RefreshCw size={15} />
-          </button>
+          <div className="flex items-center gap-2">
+            <div
+              className="flex items-center rounded-full p-0.5"
+              style={{ background: 'var(--surface-container)' }}
+              role="group"
+              aria-label="Search radius by transport mode"
+            >
+              <button
+                onClick={() => selectTransportMode('foot')}
+                className="flex items-center justify-center rounded-full transition-all"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  background: transportMode === 'foot' ? 'var(--accent)' : 'transparent',
+                  color: transportMode === 'foot' ? 'white' : 'var(--text-secondary)',
+                }}
+                aria-label="Walking distance"
+                aria-pressed={transportMode === 'foot'}
+              >
+                <Footprints size={15} />
+              </button>
+              <button
+                onClick={() => selectTransportMode('car')}
+                className="flex items-center justify-center rounded-full transition-all"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  background: transportMode === 'car' ? 'var(--accent)' : 'transparent',
+                  color: transportMode === 'car' ? 'white' : 'var(--text-secondary)',
+                }}
+                aria-label="Driving distance"
+                aria-pressed={transportMode === 'car'}
+              >
+                <Car size={15} />
+              </button>
+            </div>
+            <button
+              onClick={() => requestLocation()}
+              className="flex items-center justify-center rounded-full"
+              style={{
+                width: '36px',
+                height: '36px',
+                background: 'var(--surface-container)',
+                color: 'var(--text-secondary)',
+              }}
+              aria-label="Refresh"
+            >
+              <RefreshCw size={15} />
+            </button>
+          </div>
         )}
       </div>
 
