@@ -1,0 +1,98 @@
+import {
+  UtensilsCrossed,
+  Coffee,
+  Beer,
+  TreePine,
+  Palette,
+  Croissant,
+  Image as ImageIcon,
+  Moon,
+  ShoppingBag,
+  Store,
+  Landmark,
+  Fish,
+  PawPrint,
+  BookOpen,
+  Library as LibraryIcon,
+  Clapperboard,
+  Sparkles,
+  Flower,
+  Shirt,
+  Trophy,
+  Church,
+  Dices,
+  FerrisWheel,
+  Music,
+  Camera,
+  Waves,
+  IceCream,
+  Pizza,
+  Soup,
+  Wine,
+  Mountain,
+  MapPin,
+  Heart,
+  Ticket,
+  Bike,
+  Sailboat,
+  GraduationCap,
+  Dumbbell,
+  CircleDot,
+  type LucideIcon,
+} from 'lucide-react';
+
+// Single source of truth for Nearby icons. Gemini picks a key from this
+// registry when suggesting chips, and per-place smart labelling uses the
+// same keys. If you add a new chip or place label, add it here first so
+// both paths stay in sync.
+export const NEARBY_ICON_REGISTRY: Record<string, LucideIcon> = {
+  restaurant: UtensilsCrossed,
+  cafe: Coffee,
+  bar: Beer,
+  park: TreePine,
+  museum: Palette,
+  bakery: Croissant,
+  gallery: ImageIcon,
+  nightlife: Moon,
+  shopping: ShoppingBag,
+  market: Store,
+  attraction: Landmark,
+  aquarium: Fish,
+  zoo: PawPrint,
+  bookstore: BookOpen,
+  library: LibraryIcon,
+  cinema: Clapperboard,
+  spa: Sparkles,
+  florist: Flower,
+  clothing: Shirt,
+  stadium: Trophy,
+  church: Church,
+  casino: Dices,
+  amusement: FerrisWheel,
+  music: Music,
+  photography: Camera,
+  beach: Waves,
+  dessert: IceCream,
+  pizza: Pizza,
+  soup: Soup,
+  wine: Wine,
+  viewpoint: Mountain,
+  heart: Heart,
+  ticket: Ticket,
+  sports: Bike,
+  gym: Dumbbell,
+  boat: Sailboat,
+  education: GraduationCap,
+  bowling: CircleDot,
+  pin: MapPin,
+  default: Sparkles,
+};
+
+export function iconFor(key: string | undefined | null): LucideIcon {
+  if (!key) return NEARBY_ICON_REGISTRY.default;
+  return NEARBY_ICON_REGISTRY[key] ?? NEARBY_ICON_REGISTRY.default;
+}
+
+export function iconKeyList(): string[] {
+  return Object.keys(NEARBY_ICON_REGISTRY).filter(k => k !== 'default');
+}

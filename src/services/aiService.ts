@@ -1748,7 +1748,7 @@ Return ONLY minified JSON of the form: {"types":["restaurant","cafe"],"keyword":
 // ---- Dynamic nearby chip suggestions ----
 
 export interface NearbyChipSuggestion {
-  emoji: string;
+  iconKey: string;
   label: string;
   types: string[];
   keyword?: string;
@@ -1760,12 +1760,14 @@ export interface NearbyChipContext {
   timeOfDay: string;
   typeCounts: Record<string, number>;
   allowedTypes: { type: string; label: string }[];
+  allowedIconKeys: string[];
 }
 
 export async function suggestNearbyChips(
   ctx: NearbyChipContext,
 ): Promise<NearbyChipSuggestion[]> {
   const typeList = ctx.allowedTypes.map(t => `"${t.type}" (${t.label})`).join(', ');
+  const iconList = ctx.allowedIconKeys.map(k => `"${k}"`).join(', ');
   const countsLine = Object.entries(ctx.typeCounts)
     .filter(([, n]) => n > 0)
     .sort(([, a], [, b]) => b - a)
@@ -1779,10 +1781,12 @@ Observed Google Places categories within the user's radius (type:count): ${count
 
 Allowed category types (use ONLY these): ${typeList}.
 
+Allowed icon keys (use ONLY these strings): ${iconList}.
+
 Rules:
 - Return exactly 6 chips as a JSON array.
-- Each chip: {"emoji":"🍜","label":"Ramen spots","types":["restaurant"],"keyword":"ramen"}.
-- "emoji": a single, relevant emoji.
+- Each chip: {"iconKey":"restaurant","label":"Ramen spots","types":["restaurant"],"keyword":"ramen"}.
+- "iconKey": a single key from the allowed icon list that best fits the chip (e.g. "market" for a markets chip, "wine" for wine bars, "viewpoint" for scenic views).
 - "label": 1-3 words, capitalized naturally, human-friendly.
 - "types": 1-3 of the allowed types that are actually observed nearby. Never pick a type with count 0.
 - "keyword": short phrase (1-3 words) for specific flavor (e.g. "ramen", "brunch", "rooftop", "cherry blossom"). Leave empty if the chip is a pure category.
@@ -1799,15 +1803,17 @@ Return ONLY minified JSON array. No markdown, no prose.`;
     if (!match) return [];
     const parsed = JSON.parse(match[0]);
     if (!Array.isArray(parsed)) return [];
-    const allowedSet = new Set(ctx.allowedTypes.map(t => t.type));
+    const allowedTypeSet = new Set(ctx.allowedTypes.map(t => t.type));
+    const allowedIconSet = new Set(ctx.allowedIconKeys);
     const chips: NearbyChipSuggestion[] = [];
     for (const item of parsed) {
       if (!item || typeof item !== 'object') continue;
-      const emoji = typeof item.emoji === 'string' ? item.emoji.trim() : '';
+      const iconRaw = typeof item.iconKey === 'string' ? item.iconKey.trim() : '';
+      const iconKey = allowedIconSet.has(iconRaw) ? iconRaw : 'default';
       const label = typeof item.label === 'string' ? item.label.trim() : '';
       const types = Array.isArray(item.types)
         ? item.types.filter(
-            (t: unknown): t is string => typeof t === 'string' && allowedSet.has(t),
+            (t: unknown): t is string => typeof t === 'string' && allowedTypeSet.has(t),
           )
         : [];
       const keyword =
@@ -1815,7 +1821,7 @@ Return ONLY minified JSON array. No markdown, no prose.`;
           ? item.keyword.trim()
           : undefined;
       if (!label || types.length === 0) continue;
-      chips.push({ emoji: emoji || '✨', label, types, keyword });
+      chips.push({ iconKey, label, types, keyword });
     }
     return chips.slice(0, 6);
   } catch (err) {
