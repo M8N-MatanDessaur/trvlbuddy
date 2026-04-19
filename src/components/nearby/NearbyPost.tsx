@@ -210,6 +210,8 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
         className="flex items-center gap-1 transition-all active:scale-[0.94]"
         style={{
           height: '100%',
+          minHeight: `${ACTION_SIZE}px`,
+          minWidth: 0,
           padding: '0 14px',
           background: vote.myVote === -1 ? 'var(--accent)' : 'transparent',
           color: vote.myVote === -1 ? 'white' : 'var(--text-primary)',
@@ -233,6 +235,8 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
         className="flex items-center gap-1 transition-all active:scale-[0.94]"
         style={{
           height: '100%',
+          minHeight: `${ACTION_SIZE}px`,
+          minWidth: 0,
           padding: '0 14px',
           background: vote.myVote === 1 ? 'var(--accent)' : 'transparent',
           color: vote.myVote === 1 ? 'white' : 'var(--text-primary)',

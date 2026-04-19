@@ -1,5 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { GeneratedActivity } from '../../types/TravelData';
 import ExploreActivityCard from './ExploreActivityCard';
 
@@ -10,8 +9,10 @@ interface Props {
   onOpenDetails: (activity: GeneratedActivity) => void;
 }
 
-// One card visible per page; user pages through with swipe, dots, or arrows.
-// Distinct from the Nearby feed's infinite vertical scroll.
+// One card visible per page. Swipe-only navigation; a thin progress bar plus
+// a counter shows position. We avoid <button> dots because a global CSS rule
+// (`@media (pointer: coarse) button { min-width: 44px; min-height: 44px }`)
+// inflates any small <button>.
 const ExploreCardCarousel: React.FC<Props> = ({
   activities,
   cityName,
@@ -21,16 +22,6 @@ const ExploreCardCarousel: React.FC<Props> = ({
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [index, setIndex] = useState(0);
 
-  const scrollToIndex = useCallback((next: number) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const target = el.children[next] as HTMLElement | undefined;
-    if (target) {
-      el.scrollTo({ left: target.offsetLeft, behavior: 'smooth' });
-    }
-  }, []);
-
-  // Track which card is most visible based on scroll position.
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
@@ -62,13 +53,11 @@ const ExploreCardCarousel: React.FC<Props> = ({
 
   if (activities.length === 0) return null;
 
-  const goPrev = () => scrollToIndex(Math.max(0, index - 1));
-  const goNext = () => scrollToIndex(Math.min(activities.length - 1, index + 1));
-
-  const showArrows = activities.length > 1;
+  const total = activities.length;
+  const progress = total > 1 ? ((index + 1) / total) * 100 : 100;
 
   return (
-    <div className="relative">
+    <div>
       <div
         ref={scrollerRef}
         className="flex overflow-x-auto snap-x snap-mandatory -mx-1 pb-1"
@@ -90,77 +79,25 @@ const ExploreCardCarousel: React.FC<Props> = ({
         ))}
       </div>
 
-      {showArrows && (
-        <>
-          {index > 0 && (
-            <button
-              onClick={goPrev}
-              className="absolute top-1/2 -translate-y-1/2 left-1 transition-transform active:scale-90"
+      {total > 1 && (
+        <div className="flex items-center gap-2 mt-2 px-1">
+          <div
+            className="flex-1 rounded-full overflow-hidden"
+            style={{ height: '3px', background: 'var(--surface-container-high)' }}
+          >
+            <div
+              className="h-full transition-all duration-200 ease-out"
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'rgba(0,0,0,0.55)',
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
-                color: 'white',
-                border: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                width: `${progress}%`,
+                background: 'var(--accent)',
               }}
-              aria-label="Previous activity"
-            >
-              <ChevronLeft size={18} />
-            </button>
-          )}
-          {index < activities.length - 1 && (
-            <button
-              onClick={goNext}
-              className="absolute top-1/2 -translate-y-1/2 right-1 transition-transform active:scale-90"
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'rgba(0,0,0,0.55)',
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
-                color: 'white',
-                border: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              aria-label="Next activity"
-            >
-              <ChevronRight size={18} />
-            </button>
-          )}
-        </>
-      )}
-
-      {activities.length > 1 && (
-        <div className="flex items-center justify-center gap-1.5 mt-2">
-          {activities.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => scrollToIndex(i)}
-              className="rounded-full transition-all"
-              style={{
-                width: i === index ? '18px' : '6px',
-                height: '6px',
-                background: i === index ? 'var(--accent)' : 'var(--surface-container-high)',
-                border: 'none',
-                padding: 0,
-              }}
-              aria-label={`Go to activity ${i + 1}`}
             />
-          ))}
+          </div>
           <span
-            className="ml-2 text-[10.5px] font-bold"
+            className="text-[10.5px] font-bold tabular-nums"
             style={{ color: 'var(--text-tertiary)' }}
           >
-            {index + 1} / {activities.length}
+            {index + 1} / {total}
           </span>
         </div>
       )}
