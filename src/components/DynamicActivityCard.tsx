@@ -46,6 +46,9 @@ const DynamicActivityCard: React.FC<DynamicActivityCardProps> = ({ activity, onC
           )}
           <CachedImage
             src={activity.imageUrl!}
+            // Stable per-place key so a re-fetch returning a rotated photo
+            // token still hits the cached blob instead of re-billing.
+            cacheKey={activity.placeId ? `${activity.placeId}:0` : undefined}
             alt=""
             className="w-full h-full object-cover"
             style={{ opacity: imageLoaded ? 1 : 0, transition: 'opacity 0.4s ease' }}
