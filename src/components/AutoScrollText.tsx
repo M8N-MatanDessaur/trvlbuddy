@@ -22,8 +22,8 @@ const AutoScrollText: React.FC<Props> = ({
   className,
   style,
   maxHeight = '2.6em',
-  pxPerSecond = 10,
-  pauseMs = 1600,
+  pxPerSecond = 6,
+  pauseMs = 2200,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -70,7 +70,7 @@ const AutoScrollText: React.FC<Props> = ({
       controls.set({ y: 0 });
       return;
     }
-    const travelSec = Math.max(5, overflow / pxPerSecond);
+    const travelSec = Math.max(7, overflow / pxPerSecond);
     const pauseSec = pauseMs / 1000;
     const total = travelSec * 2 + pauseSec * 2;
     const t1 = travelSec / total;
@@ -82,7 +82,7 @@ const AutoScrollText: React.FC<Props> = ({
         duration: total,
         times: [0, t1, t2, t3, 1],
         repeat: Infinity,
-        ease: 'easeInOut',
+        ease: 'linear',
       },
     });
     return () => {
@@ -101,7 +101,16 @@ const AutoScrollText: React.FC<Props> = ({
         ...style,
       }}
     >
-      <motion.div ref={innerRef} animate={controls} initial={{ y: 0 }}>
+      <motion.div
+        ref={innerRef}
+        animate={controls}
+        initial={{ y: 0 }}
+        transformTemplate={(_, generated) => `${generated} translateZ(0)`}
+        style={{
+          backfaceVisibility: 'hidden',
+          willChange: overflow > 2 && inView ? 'transform' : 'auto',
+        }}
+      >
         {children}
       </motion.div>
     </div>
