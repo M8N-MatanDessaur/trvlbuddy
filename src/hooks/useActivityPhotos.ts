@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useTravel } from '../contexts/TravelContext';
 import { fetchPhotosForActivities } from '../services/placePhotoService';
-import { prefetchImages, pruneExpiredCache } from '../services/imageCacheService';
+import { pruneExpiredCache } from '../services/imageCacheService';
 
 export function useActivityPhotos() {
   const { activities, setActivities, currentPlan } = useTravel();
@@ -67,12 +67,10 @@ export function useActivityPhotos() {
         });
         if (batchTimeout) clearTimeout(batchTimeout);
         batchTimeout = setTimeout(flushUpdates, 500);
-
-        // Prefetch all image URLs into IndexedDB in the background
-        const allUrls = result.imageUrls.length > 0 ? result.imageUrls : (result.imageUrl ? [result.imageUrl] : []);
-        if (allUrls.length > 0) {
-          prefetchImages(allUrls, 2);
-        }
+        // No eager prefetch — the cover URL is loaded lazily by <CachedImage>
+        // when its card scrolls into view, and the rest of the carousel only
+        // fetches when the user explicitly opens it. Eager prefetch was the
+        // single biggest line on the Places Photo bill.
       },
       3
     ).then(() => {

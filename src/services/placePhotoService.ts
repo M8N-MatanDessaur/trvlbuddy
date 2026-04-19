@@ -1,7 +1,11 @@
 const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
 const CACHE_KEY = 'activityPhotoCache';
 const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
-const MAX_PHOTOS = 10;
+// Cover only on the initial cross-page fetch. The full carousel is loaded
+// on demand from Place Details when the user taps the ⋯ button on a card
+// or opens the activity modal — same recipe Nearby uses.
+const MAX_PHOTOS = 1;
+const MAX_DETAIL_PHOTOS = 10;
 
 interface PhotoCacheEntry {
   imageUrl: string | null;
@@ -129,7 +133,7 @@ export async function fetchDetailedPhotos(placeId: string): Promise<string[] | n
 
     if (data.status === 'OK' && data.result?.photos?.length > 0) {
       const imageUrls = data.result.photos
-        .slice(0, MAX_PHOTOS)
+        .slice(0, MAX_DETAIL_PHOTOS)
         .map((p: any) => buildPhotoUrl(p.photo_reference));
 
       // Cache the detailed result
