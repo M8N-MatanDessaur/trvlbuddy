@@ -132,16 +132,40 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
     padding: 0,
   });
 
+  const pillBaseStyle: React.CSSProperties = {
+    height: `${ACTION_SIZE}px`,
+    padding: '0 14px',
+    borderRadius: '9999px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '12px',
+    fontWeight: 700,
+    lineHeight: 1,
+  };
+
   const distancePill = (
     <span
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
       style={{
+        ...pillBaseStyle,
         background: 'var(--surface-container-high)',
         color: 'var(--text-primary)',
         border: '0.5px solid var(--outline)',
       }}
     >
       <span style={{ color: 'var(--accent)' }}>{formatDistance(place.distance)}</span>
+    </span>
+  );
+
+  const categoryPill = (
+    <span
+      style={{
+        ...pillBaseStyle,
+        ...glassStyle,
+      }}
+    >
+      <CategoryIcon size={13} />
+      {place.categoryLabel}
     </span>
   );
 
@@ -222,59 +246,75 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
     </div>
   );
 
-  // ---------- No-image variant ----------
+  // ---------- No-image variant (compact) ----------
   if (images.length === 0) {
     return (
       <article
         className="w-full overflow-hidden"
         style={{
-          marginBottom: '1rem',
-          borderRadius: '22px',
+          marginBottom: '0.75rem',
+          borderRadius: '20px',
           background: 'var(--surface-container)',
-          padding: '1rem',
+          padding: '0.875rem 1rem',
           border: '0.5px solid var(--outline)',
         }}
       >
-        {/* Category icon */}
-        <div className="flex items-start mb-3">
-          <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-            style={{
-              background: 'var(--accent)',
-              color: 'white',
-              boxShadow: '0 10px 22px -10px color-mix(in srgb, var(--accent) 70%, transparent)',
-            }}
-          >
-            <CategoryIcon size={22} />
-          </div>
-        </div>
-
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="mb-2">{distancePill}</div>
-            <h2 className="text-[17px] font-extrabold leading-tight tracking-tight">{place.name}</h2>
-            {place.address && (
-              <p
-                className="text-[12px] leading-snug mt-1 truncate"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                {place.address}
-              </p>
-            )}
-            {ratingPriceText}
+        {/* Header row: category + distance left, open-external right */}
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className="rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{
+                width: '34px',
+                height: '34px',
+                background: 'var(--accent-container)',
+                color: 'var(--accent)',
+              }}
+            >
+              <CategoryIcon size={16} />
+            </div>
+            {distancePill}
           </div>
           {openMapsButton}
         </div>
 
-        <div className="flex items-center justify-end gap-2 mt-3">
-          <UploadPhotoButton
-            onFile={upload}
-            uploading={uploading}
-            style={solidCircleStyle(true)}
-            size={16}
-            ariaLabel="Add the first photo"
-          />
-          {votePill}
+        {/* Info */}
+        <h2 className="text-[15.5px] font-extrabold leading-tight tracking-tight">{place.name}</h2>
+        {place.address && (
+          <p
+            className="text-[12px] leading-snug mt-0.5 truncate"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            {place.address}
+          </p>
+        )}
+
+        {/* Bottom row: ratings|price left, plus + vote pill right */}
+        <div className="flex items-center justify-between gap-3 mt-2">
+          <div className="min-w-0 flex-1">
+            {(place.rating != null || price) && (
+              <p className="text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
+                {place.rating != null && (
+                  <>
+                    <span style={{ color: 'var(--accent)', fontWeight: 700 }}>★ {place.rating.toFixed(1)}</span>
+                    {ratingCount && <span style={{ opacity: 0.7 }}> ({ratingCount})</span>}
+                  </>
+                )}
+                {place.rating != null && price && <span style={{ opacity: 0.45 }}> &nbsp;|&nbsp; </span>}
+                {price && <span style={{ fontWeight: 700 }}>{price}</span>}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <UploadPhotoButton
+              onFile={upload}
+              uploading={uploading}
+              style={solidCircleStyle(true)}
+              size={16}
+              ariaLabel="Add the first photo"
+            />
+            {votePill}
+          </div>
         </div>
       </article>
     );
@@ -303,15 +343,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
           />
 
           {/* Top-left: category */}
-          <div className="absolute top-3 left-3 z-10">
-            <span
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
-              style={glassStyle}
-            >
-              <CategoryIcon size={11} />
-              {place.categoryLabel}
-            </span>
-          </div>
+          <div className="absolute top-3 left-3 z-10">{categoryPill}</div>
 
           {/* Top-right: avatar / like / comment */}
           <div className="absolute top-3 right-3 z-10 flex flex-col items-center gap-2">
@@ -365,23 +397,6 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
             </button>
           </div>
 
-          {/* Bottom-left: carousel dots */}
-          {images.length > 1 && (
-            <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5">
-              {images.map((_, i) => (
-                <span
-                  key={i}
-                  className="rounded-full transition-all"
-                  style={{
-                    width: i === activeImageIndex ? '14px' : '5px',
-                    height: '5px',
-                    background: i === activeImageIndex ? 'white' : 'rgba(255,255,255,0.55)',
-                  }}
-                />
-              ))}
-            </div>
-          )}
-
           {/* Bottom-right: plus */}
           <div className="absolute right-3 bottom-3 z-10">
             <UploadPhotoButton
@@ -394,43 +409,42 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
         </div>
 
         {/* Second layer */}
-        <div className="px-4 pt-4 pb-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="mb-2">{distancePill}</div>
-              <h2
-                className="text-[17px] font-extrabold leading-tight tracking-tight"
-                style={{
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                } as React.CSSProperties}
-              >
-                {place.name}
-              </h2>
-              {place.address && (
-                <p
-                  className="text-[12.5px] leading-relaxed mt-1"
-                  style={{
-                    color: 'var(--text-secondary)',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 1,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                  } as React.CSSProperties}
-                >
-                  {place.address}
-                </p>
-              )}
-              {ratingPriceText}
+        <div className="px-4 pt-3 pb-4">
+          {/* Action row: distance pill, vote pill, open-external */}
+          <div className="flex items-center justify-between gap-2 mb-2.5">
+            {distancePill}
+            <div className="flex items-center gap-2">
+              {votePill}
+              {openMapsButton}
             </div>
-            {openMapsButton}
           </div>
 
-          <div className="flex items-center justify-end mt-3">
-            {votePill}
-          </div>
+          <h2
+            className="text-[17px] font-extrabold leading-tight tracking-tight"
+            style={{
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            } as React.CSSProperties}
+          >
+            {place.name}
+          </h2>
+          {place.address && (
+            <p
+              className="text-[12.5px] leading-relaxed mt-1"
+              style={{
+                color: 'var(--text-secondary)',
+                display: '-webkit-box',
+                WebkitLineClamp: 1,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              } as React.CSSProperties}
+            >
+              {place.address}
+            </p>
+          )}
+          {ratingPriceText}
         </div>
       </article>
       <ImageCommentsSheet
