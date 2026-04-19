@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Star, Navigation, Share2, MapPin, MoreHorizontal, Loader2 } from 'lucide-react';
+import { Star, Navigation, Share2, MapPin, MoreHorizontal } from 'lucide-react';
 import CachedImage from '../CachedImage';
 import { NearbyPlace, formatDistance, priceLevelLabel } from '../../services/nearbyService';
 import { fetchDetailedPhotos } from '../../services/placePhotoService';
@@ -161,6 +161,17 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
             {!loadedSet.has(0) && (
               <div className="absolute inset-0 activity-card-shimmer" style={{ background: 'var(--surface-container-high)' }} />
             )}
+
+            {/* Transparent shimmer overlay while the rest of the gallery is
+                fetching — the cover photo stays visible underneath, with a
+                soft sheen sweeping across to signal "more coming". */}
+            {loadingExtras && (
+              <div
+                className="absolute inset-0 activity-card-shimmer pointer-events-none"
+                style={{ background: 'transparent' }}
+                aria-hidden="true"
+              />
+            )}
           </>
         )}
 
@@ -217,14 +228,10 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
               onClick={loadCarousel}
               disabled={loadingExtras}
               className="flex items-center justify-center transition-all active:scale-90"
-              style={{ ...circleButtonStyle(), opacity: loadingExtras ? 0.7 : 1 }}
+              style={{ ...circleButtonStyle(), opacity: loadingExtras ? 0.6 : 1 }}
               aria-label="Load more photos"
             >
-              {loadingExtras ? (
-                <Loader2 size={18} className="animate-spin" />
-              ) : (
-                <MoreHorizontal size={18} />
-              )}
+              <MoreHorizontal size={18} />
             </button>
           )}
           <a
