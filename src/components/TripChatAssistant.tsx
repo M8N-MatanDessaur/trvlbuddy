@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Send, MessageCircle, MapPin, ExternalLink, Navigation, Loader2, UtensilsCrossed, Compass, Target, Clock, Hotel, Lightbulb } from 'lucide-react';
-import { TravelPlan, GeneratedActivity } from '../types/TravelData';
+import { X, SendHorizontal, MessageCircle, MapPin, Navigation, Loader2, UtensilsCrossed, Target, Hotel, Lightbulb } from 'lucide-react';
+import { City, Destination, TravelPlan, GeneratedActivity } from '../types/TravelData';
 import { chatWithTripAssistant } from '../services/aiService';
 
 interface TripChatAssistantProps {
@@ -11,8 +11,8 @@ interface TripChatAssistantProps {
   selectedCity?: {
     id: string;
     name: string;
-    destination: any;
-    city: any;
+    destination: Destination;
+    city: City;
   } | null;
 }
 
@@ -127,7 +127,7 @@ What would you like to know about your trip?`;
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-    } catch (error) {
+    } catch {
       const errorMessage: ChatMessage = {
         id: `error-${Date.now()}`,
         type: 'assistant',
@@ -293,7 +293,7 @@ What would you like to know about your trip?`;
               disabled={!inputValue.trim() || isLoading}
               className="p-3 bg-primary text-on-primary rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send size={16} />
+              <SendHorizontal size={16} />
             </button>
           </div>
           

@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { Mic, Send, Square, Sparkles, Loader2, X } from 'lucide-react';
+import { Mic, SendHorizontal, Square, Sparkles, Loader2, X } from 'lucide-react';
 import { transcribeAudio } from '../../services/aiService';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -258,7 +258,7 @@ const NearbyPromptBar = forwardRef<NearbyPromptBarHandle, Props>(function Nearby
             opacity: sendDisabled ? 0.6 : 1,
           }}
         >
-          {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={17} />}
+          {loading ? <Loader2 size={18} className="animate-spin" /> : <SendHorizontal size={17} />}
         </button>
       </div>
     </form>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Plane, Check, Sparkles, X } from 'lucide-react';
+import { SendHorizontal, Loader2, Plane, Check, Sparkles, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useTravel } from '../contexts/TravelContext';
@@ -341,7 +341,7 @@ const ConversationalOnboarding: React.FC = () => {
             className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:opacity-30"
             style={{ background: 'var(--accent)', color: 'white' }}
           >
-            <Send size={18} />
+            <SendHorizontal size={18} />
           </button>
         </div>
       </div>

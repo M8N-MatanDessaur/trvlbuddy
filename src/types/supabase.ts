@@ -152,22 +152,31 @@ export type Database = {
         Row: {
           body: string
           created_at: string
+          deleted_at: string | null
           id: string
           image_id: string
+          parent_comment_id: string | null
+          updated_at: string | null
           user_id: string
         }
         Insert: {
           body: string
           created_at?: string
+          deleted_at?: string | null
           id?: string
           image_id: string
+          parent_comment_id?: string | null
+          updated_at?: string | null
           user_id: string
         }
         Update: {
           body?: string
           created_at?: string
+          deleted_at?: string | null
           id?: string
           image_id?: string
+          parent_comment_id?: string | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
@@ -183,6 +192,13 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_image_comments_parent_comment_id_fkey"
+            columns: ["parent_comment_id"]
+            isOneToOne: false
+            referencedRelation: "activity_image_comments"
             referencedColumns: ["id"]
           },
         ]
