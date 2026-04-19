@@ -12,9 +12,7 @@ html, body {
   min-height: 100vh;
 }
 .app-frame-backdrop {
-  background:
-    radial-gradient(60% 50% at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 70%),
-    #0a0a0f;
+  background: #0a0a0f;
 }
 .app-frame {
   position: relative;
