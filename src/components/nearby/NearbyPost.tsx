@@ -33,7 +33,15 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
     [place.placeId, place.name, place.address, place.location.lat, place.location.lng]
   );
 
-  const { images, imageUrls, uploading, upload, setImageLiked, addImageComment } = useActivityMedia(activityKey);
+  const {
+    images,
+    imageUrls,
+    uploading,
+    upload,
+    setImageLiked,
+    addImageComment,
+    removeImageComment,
+  } = useActivityMedia(activityKey);
   const activeImage = images[activeImageIndex] || images[0] || null;
 
   const handleLike = async () => {
@@ -374,6 +382,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
         isOpen={commentsOpen}
         onClose={() => setCommentsOpen(false)}
         onAddComment={addImageComment}
+        onDeleteComment={removeImageComment}
       />
     </>
   );

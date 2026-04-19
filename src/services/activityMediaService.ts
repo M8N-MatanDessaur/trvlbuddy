@@ -40,6 +40,9 @@ export interface ActivityImageComment {
   user_id: string;
   body: string;
   created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
+  parent_comment_id: string | null;
 }
 
 export async function ensureActivity(key: ActivityKey, createdBy: string | null): Promise<Activity | null> {
@@ -115,10 +118,11 @@ export async function listActivityImages(
 
     const { data: comments } = await supabase
       .from('activity_image_comments')
-      .select('image_id')
+      .select('image_id, deleted_at')
       .in('image_id', imageIds);
 
     comments?.forEach((comment) => {
+      if (comment.deleted_at) return;
       commentCounts.set(comment.image_id, (commentCounts.get(comment.image_id) || 0) + 1);
     });
   }
@@ -216,7 +220,7 @@ export async function setActivityImageLiked(params: {
 export async function listActivityImageComments(imageId: string): Promise<ActivityImageComment[]> {
   const { data, error } = await supabase
     .from('activity_image_comments')
-    .select('id, image_id, user_id, body, created_at')
+    .select('id, image_id, user_id, body, created_at, updated_at, deleted_at, parent_comment_id')
     .eq('image_id', imageId)
     .order('created_at', { ascending: true });
 
@@ -228,6 +232,7 @@ export async function addActivityImageComment(params: {
   imageId: string;
   userId: string;
   body: string;
+  parentCommentId?: string | null;
 }): Promise<{ comment: ActivityImageComment | null; error: string | null }> {
   const body = params.body.trim();
   if (!body) return { comment: null, error: 'Comment cannot be empty' };
@@ -238,12 +243,53 @@ export async function addActivityImageComment(params: {
       image_id: params.imageId,
       user_id: params.userId,
       body,
+      parent_comment_id: params.parentCommentId ?? null,
     })
-    .select('id, image_id, user_id, body, created_at')
+    .select('id, image_id, user_id, body, created_at, updated_at, deleted_at, parent_comment_id')
     .maybeSingle();
 
   return {
     comment: data ?? null,
     error: error?.message ?? null,
   };
+}
+
+export async function updateActivityImageComment(params: {
+  commentId: string;
+  userId: string;
+  body: string;
+}): Promise<{ comment: ActivityImageComment | null; error: string | null }> {
+  const body = params.body.trim();
+  if (!body) return { comment: null, error: 'Comment cannot be empty' };
+
+  const { data, error } = await supabase
+    .from('activity_image_comments')
+    .update({ body })
+    .eq('id', params.commentId)
+    .eq('user_id', params.userId)
+    .is('deleted_at', null)
+    .select('id, image_id, user_id, body, created_at, updated_at, deleted_at, parent_comment_id')
+    .maybeSingle();
+
+  return {
+    comment: data ?? null,
+    error: error?.message ?? null,
+  };
+}
+
+export async function deleteActivityImageComment(params: {
+  commentId: string;
+  userId: string;
+}): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('activity_image_comments')
+    .update({
+      body: 'This comment was deleted.',
+      deleted_at: new Date().toISOString(),
+    })
+    .eq('id', params.commentId)
+    .eq('user_id', params.userId)
+    .is('deleted_at', null);
+
+  return { error: error?.message ?? null };
 }
