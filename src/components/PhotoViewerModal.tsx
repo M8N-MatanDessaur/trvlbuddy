@@ -1,5 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { ExternalLink, Heart, Loader2, MessageCircle, SendHorizontal, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Heart,
+  Loader2,
+  MessageCircle,
+  SendHorizontal,
+  X,
+} from 'lucide-react';
 import {
   addActivityImageComment,
   isImageLikedByViewer,
@@ -12,7 +21,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 
 interface Props {
-  photo: UserPhoto | null;
+  photos: UserPhoto[];
+  initialIndex: number | null;
   uploaderId: string | null;
   onClose: () => void;
   onLikeChange?: (photoId: string, delta: number, liked: boolean) => void;
@@ -30,7 +40,8 @@ function formatCommentTime(value: string): string {
 }
 
 const PhotoViewerModal: React.FC<Props> = ({
-  photo,
+  photos,
+  initialIndex,
   uploaderId,
   onClose,
   onLikeChange,
@@ -38,6 +49,7 @@ const PhotoViewerModal: React.FC<Props> = ({
 }) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [index, setIndex] = useState<number>(initialIndex ?? 0);
   const [likeCount, setLikeCount] = useState(0);
   const [liked, setLiked] = useState(false);
   const [comments, setComments] = useState<ActivityImageComment[]>([]);
@@ -46,8 +58,17 @@ const PhotoViewerModal: React.FC<Props> = ({
   const [submitting, setSubmitting] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
 
+  const open = initialIndex !== null && photos.length > 0;
+  const photo = open ? photos[Math.max(0, Math.min(index, photos.length - 1))] : null;
+
   const ownPhoto = !!user && !!uploaderId && uploaderId === user.id;
 
+  // Reset internal index whenever the modal opens with a new starting point.
+  useEffect(() => {
+    if (initialIndex !== null) setIndex(initialIndex);
+  }, [initialIndex]);
+
+  // When the visible photo changes, reload its like + comments state.
   useEffect(() => {
     if (!photo) return;
     setLikeCount(photo.likeCount);
@@ -72,9 +93,55 @@ const PhotoViewerModal: React.FC<Props> = ({
     };
   }, [photo?.id, user?.id]);
 
+  // Keyboard navigation.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') goPrev();
+      else if (e.key === 'ArrowRight') goNext();
+      else if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, photos.length, index]);
+
+  // Touch-swipe handling for the image area.
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const swiping = useRef(false);
+
+  const goPrev = () => setIndex((i) => Math.max(0, i - 1));
+  const goNext = () => setIndex((i) => Math.min(photos.length - 1, i + 1));
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    swiping.current = false;
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!touchStart.current) return;
+    const dx = e.touches[0].clientX - touchStart.current.x;
+    const dy = e.touches[0].clientY - touchStart.current.y;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) swiping.current = true;
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart.current || !swiping.current) {
+      touchStart.current = null;
+      return;
+    }
+    const dx = e.changedTouches[0].clientX - touchStart.current.x;
+    if (Math.abs(dx) > 40) {
+      if (dx < 0) goNext();
+      else goPrev();
+    }
+    touchStart.current = null;
+    swiping.current = false;
+  };
+
   if (!photo) return null;
 
   const visibleComments = comments.filter((c) => !c.deleted_at);
+  const hasPrev = index > 0;
+  const hasNext = index < photos.length - 1;
 
   const handleLike = async () => {
     if (!user) {
@@ -127,6 +194,21 @@ const PhotoViewerModal: React.FC<Props> = ({
   const mapsUrl = photo.google_maps_url
     || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${photo.activity_name} ${photo.activity_address || ''}`.trim())}`;
 
+  const navButtonStyle: React.CSSProperties = {
+    width: '36px',
+    height: '36px',
+    borderRadius: '50%',
+    background: 'rgba(0,0,0,0.55)',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    color: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: 'none',
+    padding: 0,
+  };
+
   return (
     <div
       className="fixed inset-0 z-[80] flex flex-col"
@@ -160,11 +242,13 @@ const PhotoViewerModal: React.FC<Props> = ({
             <div className="text-[14px] font-extrabold tracking-tight truncate">
               {photo.activity_name}
             </div>
-            {photo.activity_address && (
-              <div className="text-[11px] truncate" style={{ color: 'var(--text-secondary)' }}>
-                {photo.activity_address}
-              </div>
-            )}
+            <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+              <span className="truncate">{photo.activity_address || 'Activity'}</span>
+              <span style={{ opacity: 0.4 }}>·</span>
+              <span className="flex-shrink-0 font-bold" style={{ color: 'var(--text-tertiary)' }}>
+                {index + 1} / {photos.length}
+              </span>
+            </div>
           </div>
           <a
             href={mapsUrl}
@@ -178,24 +262,64 @@ const PhotoViewerModal: React.FC<Props> = ({
           </a>
         </header>
 
-        {/* Square image */}
+        {/* Square image with swipe + chevrons */}
         <div
-          className="w-full flex items-center justify-center"
+          className="relative w-full flex items-center justify-center select-none"
           style={{
             aspectRatio: '1 / 1',
             background: 'black',
             flexShrink: 0,
           }}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
         >
           <img
+            key={photo.id}
             src={photo.url}
             alt={photo.activity_name}
+            draggable={false}
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'contain',
             }}
           />
+          {hasPrev && (
+            <button
+              onClick={goPrev}
+              className="absolute left-2 top-1/2 -translate-y-1/2 transition-transform active:scale-90"
+              style={navButtonStyle}
+              aria-label="Previous photo"
+            >
+              <ChevronLeft size={20} />
+            </button>
+          )}
+          {hasNext && (
+            <button
+              onClick={goNext}
+              className="absolute right-2 top-1/2 -translate-y-1/2 transition-transform active:scale-90"
+              style={navButtonStyle}
+              aria-label="Next photo"
+            >
+              <ChevronRight size={20} />
+            </button>
+          )}
+          {photos.length > 1 && (
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
+              {photos.map((_, i) => (
+                <span
+                  key={i}
+                  className="rounded-full transition-all"
+                  style={{
+                    width: i === index ? '14px' : '5px',
+                    height: '5px',
+                    background: i === index ? 'white' : 'rgba(255,255,255,0.55)',
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Action row */}
@@ -277,28 +401,35 @@ const PhotoViewerModal: React.FC<Props> = ({
         {/* Comment input */}
         <div className="px-4 py-3" style={{ borderTop: '0.33px solid var(--outline)', flexShrink: 0 }}>
           <div
-            className="flex items-end gap-2 rounded-lg p-2"
+            className="flex items-center gap-2 rounded-full pl-4 pr-2"
             style={{
               background: 'var(--bg-primary)',
               border: '1px solid var(--outline)',
+              height: '44px',
             }}
           >
-            <textarea
+            <input
+              type="text"
               value={body}
               onChange={(e) => setBody(e.target.value.slice(0, 500))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  submitComment();
+                }
+              }}
               placeholder="Add a comment..."
-              className="flex-1 resize-none bg-transparent px-1 py-1.5 text-[14px] outline-none"
-              rows={1}
+              className="flex-1 bg-transparent text-[14px] outline-none"
               style={{ color: 'var(--text-primary)' }}
             />
             <button
               onClick={submitComment}
               disabled={submitting || !body.trim()}
-              className="w-10 h-10 rounded-lg flex items-center justify-center disabled:opacity-50"
+              className="w-9 h-9 rounded-full flex items-center justify-center disabled:opacity-50 flex-shrink-0"
               style={{ background: 'var(--accent)', color: 'white' }}
               aria-label="Post comment"
             >
-              {submitting ? <Loader2 size={17} className="animate-spin" /> : <SendHorizontal size={18} />}
+              {submitting ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={16} />}
             </button>
           </div>
         </div>
