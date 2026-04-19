@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
-import type { Profile } from '../lib/supabase';
+
+export interface AvatarProfile {
+  display_name?: string | null;
+  email?: string | null;
+  avatar_url?: string | null;
+}
 
 interface Props {
-  profile: Profile | null | undefined;
+  profile: AvatarProfile | null | undefined;
   size?: number;
   className?: string;
   style?: React.CSSProperties;
 }
 
-function initialOf(profile: Profile | null | undefined): string {
+function initialOf(profile: AvatarProfile | null | undefined): string {
   const name = profile?.display_name || profile?.email || '';
   const trimmed = name.trim();
   if (!trimmed) return '?';

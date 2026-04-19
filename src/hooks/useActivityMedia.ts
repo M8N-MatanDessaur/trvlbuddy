@@ -6,8 +6,12 @@ import {
   listActivityImages,
   setActivityImageLiked,
   uploadActivityImage,
+  getActivityVoteState,
+  setActivityVote,
+  ZERO_VOTE_STATE,
   type ActivityKey,
   type ActivityImageMedia,
+  type ActivityVoteState,
 } from '../services/activityMediaService';
 
 interface State {
@@ -17,6 +21,7 @@ interface State {
   activityId: string | null;
   error: string | null;
   uploading: boolean;
+  vote: ActivityVoteState;
 }
 
 interface UseActivityMediaResult extends State {
@@ -24,6 +29,7 @@ interface UseActivityMediaResult extends State {
   setImageLiked: (image: ActivityImageMedia, liked: boolean) => Promise<{ ok: boolean; error?: string | null; ignored?: boolean }>;
   addImageComment: (image: ActivityImageMedia, body: string, parentCommentId?: string | null) => Promise<{ ok: boolean; error?: string | null }>;
   removeImageComment: (image: ActivityImageMedia) => void;
+  setVote: (next: 0 | 1 | -1) => Promise<{ ok: boolean; error?: string | null }>;
   refresh: () => Promise<void>;
 }
 
@@ -36,6 +42,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     activityId: null,
     error: null,
     uploading: false,
+    vote: ZERO_VOTE_STATE,
   });
   const resolvedKeyRef = useRef<string>('');
 
@@ -48,13 +55,16 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     try {
       const activity = await ensureActivity(k, user?.id ?? null);
       if (!activity) {
-        setState({ loading: false, images: [], imageUrls: [], activityId: null, error: 'Could not ensure activity', uploading: false });
+        setState({ loading: false, images: [], imageUrls: [], activityId: null, error: 'Could not ensure activity', uploading: false, vote: ZERO_VOTE_STATE });
         return;
       }
-      const images = await listActivityImages(activity.id, user?.id ?? null);
-      setState({ loading: false, images, imageUrls: images.map((image) => image.url), activityId: activity.id, error: null, uploading: false });
+      const [images, vote] = await Promise.all([
+        listActivityImages(activity.id, user?.id ?? null),
+        getActivityVoteState(activity.id, user?.id ?? null),
+      ]);
+      setState({ loading: false, images, imageUrls: images.map((image) => image.url), activityId: activity.id, error: null, uploading: false, vote });
     } catch (err: unknown) {
-      setState({ loading: false, images: [], imageUrls: [], activityId: null, error: err instanceof Error ? err.message : String(err), uploading: false });
+      setState({ loading: false, images: [], imageUrls: [], activityId: null, error: err instanceof Error ? err.message : String(err), uploading: false, vote: ZERO_VOTE_STATE });
     }
   }, [user?.id]);
 
@@ -177,11 +187,49 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     [],
   );
 
+  const setVote = useCallback<UseActivityMediaResult['setVote']>(
+    async (next) => {
+      if (!user) return { ok: false, error: 'Sign in required' };
+      if (!state.activityId) return { ok: false, error: 'Activity not ready yet' };
+
+      const previous = state.vote;
+      const optimistic = computeOptimisticVote(previous, next);
+      setState((s) => ({ ...s, vote: optimistic }));
+
+      const { error } = await setActivityVote({
+        activityId: state.activityId,
+        userId: user.id,
+        value: next,
+      });
+
+      if (error) {
+        setState((s) => ({ ...s, vote: previous, error }));
+        return { ok: false, error };
+      }
+      return { ok: true };
+    },
+    [user, state.activityId, state.vote],
+  );
+
   const refresh = useCallback(async () => {
     if (!state.activityId) return;
-    const images = await listActivityImages(state.activityId, user?.id ?? null);
-    setState((s) => ({ ...s, images, imageUrls: images.map((image) => image.url) }));
+    const [images, vote] = await Promise.all([
+      listActivityImages(state.activityId, user?.id ?? null),
+      getActivityVoteState(state.activityId, user?.id ?? null),
+    ]);
+    setState((s) => ({ ...s, images, imageUrls: images.map((image) => image.url), vote }));
   }, [state.activityId, user?.id]);
 
-  return { ...state, upload, setImageLiked, addImageComment, removeImageComment, refresh };
+  return { ...state, upload, setImageLiked, addImageComment, removeImageComment, setVote, refresh };
+}
+
+function computeOptimisticVote(prev: ActivityVoteState, next: 0 | 1 | -1): ActivityVoteState {
+  const upDelta = (next === 1 ? 1 : 0) - (prev.myVote === 1 ? 1 : 0);
+  const downDelta = (next === -1 ? 1 : 0) - (prev.myVote === -1 ? 1 : 0);
+  return {
+    score: prev.score - prev.myVote + next,
+    upvotes: Math.max(0, prev.upvotes + upDelta),
+    downvotes: Math.max(0, prev.downvotes + downDelta),
+    myVote: next,
+  };
 }
