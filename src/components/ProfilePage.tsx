@@ -147,7 +147,8 @@ const ProfilePage: React.FC = () => {
     setOpenPhotoId(photo.id);
   };
 
-  const openPhoto = openPhotoId ? photos.find((p) => p.id === openPhotoId) ?? null : null;
+  const openIndex = openPhotoId ? photos.findIndex((p) => p.id === openPhotoId) : -1;
+  const initialIndex = openIndex >= 0 ? openIndex : null;
 
   const displayName = profile?.display_name || profile?.email || (isOwn ? 'Traveler' : 'Traveler');
   const influence = profile?.influence ?? 0;
@@ -420,7 +421,8 @@ const ProfilePage: React.FC = () => {
       </main>
 
       <PhotoViewerModal
-        photo={openPhoto}
+        photos={photos}
+        initialIndex={initialIndex}
         uploaderId={targetId}
         onClose={() => setOpenPhotoId(null)}
         onLikeChange={(photoId, delta) => {
