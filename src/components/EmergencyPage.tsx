@@ -4,6 +4,11 @@ import { useTravel } from '../contexts/TravelContext';
 import { EmergencyContact } from '../types/TravelData';
 import { getCachedLocation, getCurrentLocation, UserLocation } from '../utils/geolocation';
 import { generateEmergencyContactsForCoordinates } from '../services/aiService';
+import {
+  canReuseCache,
+  readEmergencyCache,
+  writeEmergencyCache,
+} from '../services/emergencyCache';
 
 interface CountryInfo { id: string; name: string; languages: string[]; }
 
@@ -12,11 +17,21 @@ const EmergencyPage: React.FC = () => {
   const isLocalMode = appMode === 'local' || !currentPlan;
   const [selectedCountry, setSelectedCountry] = useState('');
 
-  // Local mode state: geolocation-derived country + fetched contacts
+  // Local mode state: geolocation-derived country + fetched contacts.
+  // Emergency info is country-scoped and static, so we prime from localStorage
+  // immediately and only re-fetch when the user has moved far enough to have
+  // plausibly crossed into a different country (see emergencyCache).
+  const initialCache = readEmergencyCache();
   const [localLocation, setLocalLocation] = useState<UserLocation | null>(getCachedLocation());
-  const [localCountry, setLocalCountry] = useState<{ name: string; code: string } | null>(null);
-  const [localContacts, setLocalContacts] = useState<EmergencyContact[] | null>(null);
-  const [localStatus, setLocalStatus] = useState<'idle' | 'locating' | 'fetching' | 'ready' | 'denied' | 'error'>('idle');
+  const [localCountry, setLocalCountry] = useState<{ name: string; code: string } | null>(
+    initialCache ? { name: initialCache.countryName, code: initialCache.countryCode } : null,
+  );
+  const [localContacts, setLocalContacts] = useState<EmergencyContact[] | null>(
+    initialCache ? initialCache.contacts : null,
+  );
+  const [localStatus, setLocalStatus] = useState<'idle' | 'locating' | 'fetching' | 'ready' | 'denied' | 'error'>(
+    initialCache ? 'ready' : 'idle',
+  );
 
   useEffect(() => {
     if (!isLocalMode) return;
@@ -24,27 +39,57 @@ const EmergencyPage: React.FC = () => {
     (async () => {
       let loc = localLocation;
       if (!loc) {
-        setLocalStatus('locating');
+        // If we already have cached contacts, surface them while we try to
+        // get a fresh location in the background -- don't flash "locating...".
+        if (!initialCache) setLocalStatus('locating');
         try {
           loc = await getCurrentLocation();
           if (cancelled) return;
           setLocalLocation(loc);
         } catch (err) {
           if (cancelled) return;
+          // If geolocation fails but we already have cached contacts, stay on
+          // those. Only surface the denied/error state when we have nothing.
+          if (initialCache) return;
           const code = (err as GeolocationPositionError | undefined)?.code;
           setLocalStatus(code === 1 ? 'denied' : 'error');
           return;
         }
       }
-      setLocalStatus('fetching');
+
+      const cached = readEmergencyCache();
+      if (cached && canReuseCache(cached, loc)) {
+        setLocalCountry({ name: cached.countryName, code: cached.countryCode });
+        setLocalContacts(cached.contacts);
+        setLocalStatus('ready');
+        return;
+      }
+
+      if (!initialCache) setLocalStatus('fetching');
       const result = await generateEmergencyContactsForCoordinates(loc.lat, loc.lng);
       if (cancelled) return;
       if (!result || result.contacts.length === 0) {
-        setLocalStatus('error');
+        // Fetch failed -- if we have any prior cache at all, keep showing it
+        // rather than rendering an error for a static, country-level payload.
+        if (cached) {
+          setLocalCountry({ name: cached.countryName, code: cached.countryCode });
+          setLocalContacts(cached.contacts);
+          setLocalStatus('ready');
+        } else {
+          setLocalStatus('error');
+        }
         return;
       }
       setLocalCountry({ name: result.countryName, code: result.countryCode });
       setLocalContacts(result.contacts);
+      writeEmergencyCache({
+        countryCode: result.countryCode,
+        countryName: result.countryName,
+        contacts: result.contacts,
+        lat: loc.lat,
+        lng: loc.lng,
+        fetchedAt: Date.now(),
+      });
       setLocalStatus('ready');
     })();
     return () => {

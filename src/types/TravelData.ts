@@ -83,9 +83,10 @@ export interface GeneratedActivity {
   difficulty?: 'easy' | 'moderate' | 'challenging';
   destinationId?: string; // Which destination this activity belongs to
   cityId?: string; // Which city this activity belongs to (for multi-city countries)
-  imageUrl?: string; // Google Places photo URL (primary, used on cards)
-  imageUrls?: string[]; // All available Google Places photos (used in modal carousel)
-  placeId?: string; // Google Place ID for photo lookups
+  imageUrl?: string; // First Supabase-hosted photo (primary, used on cards)
+  imageUrls?: string[]; // All Supabase-hosted photos (used in carousel)
+  placeId?: string; // Google Place ID (used for directions / metadata lookups)
+  dbActivityId?: string; // Supabase activities.id once the row has been ensured
 }
 
 export interface EmergencyContact {

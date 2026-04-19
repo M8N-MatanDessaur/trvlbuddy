@@ -23,7 +23,6 @@ const ImageCard: React.FC<{ activity: GeneratedActivity }> = ({ activity }) => {
       )}
       <CachedImage
         src={activity.imageUrl}
-        cacheKey={activity.placeId ? `${activity.placeId}:0` : undefined}
         alt=""
         className="w-full h-full object-cover"
         style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.4s ease' }}

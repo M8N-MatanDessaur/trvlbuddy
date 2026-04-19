@@ -17,9 +17,8 @@ import { haversineMeters } from '../utils/geolocation';
 import { NEARBY_ICON_REGISTRY } from './nearbyIconRegistry';
 
 const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
-// Cover-only on the first paint. More photos load lazily on first touch of
-// the card so we don't pay Places Photo for images the user never swipes to.
-const MAX_POST_PHOTOS = 1;
+// Photos come exclusively from user uploads in Supabase -- never from
+// Places Photo (the single biggest cost item pre-pivot).
 
 export interface NearbyPlace {
   placeId: string;
@@ -227,21 +226,10 @@ const PLACES_V1_FIELD_MASK = [
   'places.priceLevel',
   'places.currentOpeningHours.openNow',
   'places.regularOpeningHours.openNow',
-  'places.photos',
   'places.types',
   'places.primaryType',
   'places.primaryTypeDisplayName',
 ].join(',');
-
-function buildPhotoUrl(photoName: string, maxWidth = 1200): string {
-  // v1 photo endpoint returns a 302 to the actual image. Browsers follow
-  // redirects on <img> loads so this just works.
-  return `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=${maxWidth}&key=${GOOGLE_PLACES_API_KEY}`;
-}
-
-function buildLegacyPhotoUrl(photoReference: string, maxWidth = 1200): string {
-  return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photoreference=${photoReference}&key=${GOOGLE_PLACES_API_KEY}`;
-}
 
 // Google's legacy `types` list usually leads with the most specific type,
 // followed by very generic ones. We skip the generic end of the list when
@@ -525,9 +513,7 @@ export class NearbyFeedCursor {
   private toLegacyPlace(raw: LegacyApiResult): NearbyPlace {
     const loc = raw.geometry!.location!;
     const types = raw.types || [];
-    const imageUrls = (raw.photos || [])
-      .slice(0, MAX_POST_PHOTOS)
-      .map(p => buildLegacyPhotoUrl(p.photo_reference));
+    const imageUrls: string[] = [];
     return {
       placeId: raw.place_id!,
       name: raw.name || '',
@@ -548,9 +534,7 @@ export class NearbyFeedCursor {
   private toPlace(raw: PlacesV1Place): NearbyPlace {
     const lat = raw.location!.latitude!;
     const lng = raw.location!.longitude!;
-    const imageUrls = (raw.photos || [])
-      .slice(0, MAX_POST_PHOTOS)
-      .map(p => buildPhotoUrl(p.name));
+    const imageUrls: string[] = [];
 
     const primaryType = raw.primaryType;
     const types = raw.types || [];

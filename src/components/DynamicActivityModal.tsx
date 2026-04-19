@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, MapPin, Lightbulb, Navigation, ExternalLink, MoreHorizontal } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { X, MapPin, Lightbulb, Navigation, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GeneratedActivity } from '../types/TravelData';
 import { getCategoryIcon } from '../utils/categoryIcons';
-import CachedImage from './CachedImage';
-import { fetchDetailedPhotos } from '../services/placePhotoService';
+import ImageCarousel from './ImageCarousel';
+import UploadPhotoButton from './UploadPhotoButton';
+import { useActivityMedia } from '../hooks/useActivityMedia';
 
 interface Props {
   activity: GeneratedActivity | null;
@@ -12,165 +13,27 @@ interface Props {
   onClose: () => void;
 }
 
-/** Swipeable image carousel for the modal hero */
-const ImageCarousel: React.FC<{ images: string[]; placeId?: string; loading?: boolean }> = ({ images, placeId, loading }) => {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [loadedSet, setLoadedSet] = useState<Set<number>>(new Set());
-  const [errorSet, setErrorSet] = useState<Set<number>>(new Set());
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const swipingRef = useRef(false);
-
-  const validImages = images.filter((_, i) => !errorSet.has(i));
-  const validCount = validImages.length;
-
-  useEffect(() => {
-    setCurrentIndex(0);
-    setLoadedSet(new Set());
-    setErrorSet(new Set());
-  }, [images]);
-
-  const goTo = (idx: number) => {
-    if (idx < 0) idx = validCount - 1;
-    if (idx >= validCount) idx = 0;
-    setCurrentIndex(idx);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    swipingRef.current = false;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
-    const dx = e.touches[0].clientX - touchStartRef.current.x;
-    const dy = e.touches[0].clientY - touchStartRef.current.y;
-    // If horizontal movement is dominant, prevent vertical scroll
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
-      swipingRef.current = true;
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStartRef.current || !swipingRef.current) {
-      touchStartRef.current = null;
-      return;
-    }
-    const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
-    if (Math.abs(dx) > 40) {
-      if (dx < 0) goTo(currentIndex + 1);
-      else goTo(currentIndex - 1);
-    }
-    touchStartRef.current = null;
-    swipingRef.current = false;
-  };
-
-  if (validCount === 0) return null;
-
-  return (
-    <div
-      className="relative w-full h-full overflow-hidden"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
-      {images.map((src, i) => {
-        if (errorSet.has(i)) return null;
-        const validIdx = validImages.indexOf(src);
-        const isActive = validIdx === currentIndex;
-        return (
-          <CachedImage
-            key={i}
-            src={src}
-            cacheKey={placeId ? `${placeId}:${i}` : undefined}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{
-              opacity: isActive && loadedSet.has(i) ? 1 : 0,
-              transition: 'opacity 0.5s ease',
-            }}
-            onLoad={() => setLoadedSet(prev => new Set(prev).add(i))}
-            onError={() => setErrorSet(prev => new Set(prev).add(i))}
-            loading={i < 3 ? 'eager' : 'lazy'}
-          />
-        );
-      })}
-
-      {/* Shimmer while first image loads */}
-      {!loadedSet.has(0) && (
-        <div className="absolute inset-0 activity-card-shimmer" style={{ background: 'var(--surface-container-high)' }} />
-      )}
-
-      {/* Transparent shimmer overlay while detailed photos are fetching —
-          cover image stays visible underneath, with a soft sheen passing
-          across to signal the rest of the gallery is on its way. */}
-      {loading && (
-        <div
-          className="absolute inset-0 activity-card-shimmer pointer-events-none"
-          style={{ background: 'transparent' }}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Dot indicators - bottom right */}
-      {validCount > 1 && (
-        <div className="absolute bottom-3 right-4 flex items-center gap-1.5 z-10">
-          {validImages.map((_, i) => (
-            <div
-              key={i}
-              className="rounded-full transition-all duration-300"
-              style={{
-                width: i === currentIndex ? '14px' : '5px',
-                height: '5px',
-                background: i === currentIndex ? 'white' : 'rgba(255,255,255,0.5)',
-              }}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
 const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) => {
-  // Modal opens with the cover photo only. The full carousel is loaded on
-  // explicit ⋯ tap, so opening a modal costs nothing beyond the cover that
-  // was already on the card. Same recipe as NearbyPost.
-  const [detailedPhotos, setDetailedPhotos] = useState<string[] | null>(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const requestedRef = useRef<string | null>(null);
+  const activityKey = useMemo(
+    () =>
+      activity
+        ? {
+            name: activity.name,
+            city: activity.location || null,
+            address: null,
+            googlePlaceId: activity.placeId || null,
+          }
+        : null,
+    [activity?.name, activity?.location, activity?.placeId]
+  );
 
-  useEffect(() => {
-    if (!isOpen) {
-      setDetailedPhotos(null);
-      setLoadingDetails(false);
-      requestedRef.current = null;
-    }
-  }, [isOpen]);
-
-  const loadCarousel = useCallback(() => {
-    if (!activity?.placeId) return;
-    if (requestedRef.current === activity.placeId) return;
-    requestedRef.current = activity.placeId;
-    setLoadingDetails(true);
-    fetchDetailedPhotos(activity.placeId)
-      .then(photos => {
-        if (photos && photos.length > 1) setDetailedPhotos(photos);
-      })
-      .finally(() => setLoadingDetails(false));
-  }, [activity?.placeId]);
+  const { images, uploading, upload } = useActivityMedia(isOpen ? activityKey : null);
 
   if (!activity) return null;
 
   const CategoryIcon = getCategoryIcon(activity.category);
   const locationQuery = encodeURIComponent(activity.location);
-
-  // Cover-only by default. detailedPhotos only populates after the user
-  // taps ⋯ (or if upstream already provided multiple imageUrls).
-  const carouselImages = detailedPhotos
-    || (activity.imageUrls?.length ? activity.imageUrls : (activity.imageUrl ? [activity.imageUrl] : []));
-  const hasImages = carouselImages.length > 0;
-  const hasDetailedPhotos = (detailedPhotos?.length ?? 0) > 1 || (activity.imageUrls?.length ?? 0) > 1;
-  const showLoadCarouselButton = hasImages && !hasDetailedPhotos && Boolean(activity.placeId);
+  const hasImages = images.length > 0;
 
   return (
     <AnimatePresence>
@@ -193,21 +56,18 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
             style={{ background: 'var(--surface-container)', borderRadius: '24px 24px 0 0', maxHeight: hasImages ? '92vh' : '88vh' }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Hero carousel or plain header */}
             {hasImages ? (
               <div className="relative" style={{ height: '220px' }}>
-                <ImageCarousel images={carouselImages} placeId={activity.placeId} loading={loadingDetails} />
+                <ImageCarousel images={images} className="absolute inset-0" eagerCount={2} />
                 <div
                   className="absolute inset-0 pointer-events-none"
                   style={{ background: 'linear-gradient(to top, var(--surface-container) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)' }}
                 />
 
-                {/* Handle bar */}
                 <div className="absolute top-2.5 left-0 right-0 flex justify-center z-10">
                   <div className="w-8 h-1 rounded-full" style={{ background: 'rgba(255,255,255,0.5)' }} />
                 </div>
 
-                {/* Close button */}
                 <button
                   onClick={onClose}
                   className="absolute top-3 right-4 flex items-center justify-center z-10"
@@ -224,30 +84,21 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                   <X size={18} />
                 </button>
 
-                {/* ⋯ button to load the rest of the gallery on demand. Hides
-                    itself once detailed photos are in or while loading. */}
-                {showLoadCarouselButton && (
-                  <button
-                    onClick={loadCarousel}
-                    disabled={loadingDetails}
-                    className="absolute top-3 left-4 flex items-center justify-center z-10 transition-all active:scale-90"
-                    style={{
-                      background: 'rgba(0,0,0,0.3)',
-                      backdropFilter: 'blur(8px)',
-                      WebkitBackdropFilter: 'blur(8px)',
-                      color: 'white',
-                      height: '36px',
-                      aspectRatio: '1',
-                      borderRadius: '50%',
-                      opacity: loadingDetails ? 0.6 : 1,
-                    }}
-                    aria-label="Load more photos"
-                  >
-                    <MoreHorizontal size={18} />
-                  </button>
-                )}
+                <UploadPhotoButton
+                  onFile={upload}
+                  uploading={uploading}
+                  className="absolute top-3 left-4 z-10 transition-all active:scale-90 flex items-center justify-center"
+                  style={{
+                    background: 'rgba(0,0,0,0.3)',
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    color: 'white',
+                    height: '36px',
+                    aspectRatio: '1',
+                    borderRadius: '50%',
+                  }}
+                />
 
-                {/* Category badge */}
                 <div className="absolute bottom-7 left-5 flex items-center gap-3 z-10">
                   <span
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold"
@@ -284,6 +135,13 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                       )}
                     </div>
                   </div>
+                  <UploadPhotoButton
+                    onFile={upload}
+                    uploading={uploading}
+                    className="flex items-center justify-center flex-shrink-0"
+                    style={{ background: 'var(--surface-container-high)', color: 'var(--accent)', height: '36px', aspectRatio: '1', borderRadius: '50%' }}
+                    ariaLabel="Add a photo"
+                  />
                   <button
                     onClick={onClose}
                     className="flex items-center justify-center flex-shrink-0"
@@ -295,18 +153,14 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
               </>
             )}
 
-            {/* Title (image variant) */}
             {hasImages && (
               <div className="px-5 pt-2 pb-3">
                 <h2 className="text-[20px] font-extrabold leading-tight tracking-tight">{activity.name}</h2>
               </div>
             )}
 
-            {/* Content */}
             <div className="overflow-y-auto px-5 pb-6" style={{ maxHeight: hasImages ? 'calc(92vh - 300px)' : 'calc(88vh - 140px)' }}>
               <div className="space-y-4">
-
-                {/* Key info grid */}
                 <div className="grid grid-cols-3 gap-2.5">
                   <div className="p-3.5 rounded-xl" style={{ background: 'var(--surface-container-high)' }}>
                     <div className="text-[11px] font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>Duration</div>
@@ -322,12 +176,10 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                   </div>
                 </div>
 
-                {/* Description */}
                 <p className="text-[14px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                   {activity.description}
                 </p>
 
-                {/* Location */}
                 <a
                   href={`https://www.google.com/maps/search/?api=1&query=${locationQuery}`}
                   target="_blank"
@@ -342,7 +194,6 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                   </div>
                 </a>
 
-                {/* Tips */}
                 {activity.tips && (
                   <div className="flex items-start gap-3 p-3.5 rounded-xl" style={{ background: 'var(--accent-container)' }}>
                     <Lightbulb size={16} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--accent)' }} />
@@ -350,7 +201,6 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                   </div>
                 )}
 
-                {/* Action buttons */}
                 <div className="flex gap-2 pt-1">
                   <a
                     href={`https://www.google.com/maps/dir/?api=1&destination=${locationQuery}`}

@@ -2,6 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Desktop phone-sized frame (Pixel 7: 412 x 915). On screens smaller than
+   the frame, the app fills the viewport like a normal mobile web app. */
+html, body {
+  height: 100%;
+  background: #0a0a0f;
+}
+#root {
+  min-height: 100vh;
+}
+.app-frame-backdrop {
+  background:
+    radial-gradient(60% 50% at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 70%),
+    #0a0a0f;
+}
+.app-frame {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  background: var(--bg-primary);
+  overflow: hidden;
+  /* Make this the containing block for `position: fixed` descendants so the
+     Header and other fixed elements stay inside the frame on desktop. */
+  transform: translateZ(0);
+}
+@media (min-width: 760px) {
+  .app-frame {
+    width: 412px;
+    height: 915px;
+    min-height: 915px;
+    max-height: 915px;
+    border-radius: 34px;
+    box-shadow:
+      0 40px 80px -30px rgba(0, 0, 0, 0.55),
+      0 20px 40px -20px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+  /* Inside the frame, any `min-h-screen` block should fill the frame height,
+     not the desktop viewport height. */
+  .app-frame .min-h-screen {
+    min-height: 100% !important;
+    height: 100%;
+  }
+}
+
 :root {
   --bg-primary: #F5F5F5;
   --bg-secondary: #EBEBEB;
