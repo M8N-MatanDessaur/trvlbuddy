@@ -3,6 +3,7 @@ import { Plane, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { supabase } from '../lib/supabase';
+import { getAuthRedirectUrl } from '../lib/authRedirect';
 
 const GoogleGlyph: React.FC<{ size?: number }> = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
@@ -51,7 +52,7 @@ const SignInScreen: React.FC = () => {
     }
     setBusy(true);
     const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: getAuthRedirectUrl(),
     });
     setBusy(false);
     if (err) setError(err.message);
@@ -60,7 +61,7 @@ const SignInScreen: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen w-full flex items-center justify-center px-5 py-10"
+      className="auth-screen w-full flex items-center justify-center overflow-hidden px-4 py-3 sm:px-5 sm:py-6"
       style={{ background: 'var(--bg-primary)' }}
     >
       <div
@@ -93,18 +94,18 @@ const SignInScreen: React.FC = () => {
           aria-hidden="true"
         />
 
-        <div className="relative px-6 pt-9 pb-7">
+        <div className="relative px-5 pt-6 pb-5 sm:px-6 sm:pt-9 sm:pb-7">
           {/* Brand badge */}
-          <div className="flex justify-center mb-5">
+          <div className="flex justify-center mb-3 sm:mb-5">
             <div
-              className="w-16 h-16 rounded-full flex items-center justify-center"
+              className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center"
               style={{
                 background: 'var(--accent)',
                 color: 'white',
                 boxShadow: '0 10px 24px -8px color-mix(in srgb, var(--accent) 70%, transparent)',
               }}
             >
-              <Plane size={26} />
+              <Plane className="w-[22px] h-[22px] sm:w-[26px] sm:h-[26px]" />
             </div>
           </div>
 
@@ -121,12 +122,12 @@ const SignInScreen: React.FC = () => {
           </p>
 
           {/* Social providers */}
-          <div className="grid grid-cols-1 gap-2.5 mt-6">
+          <div className="grid grid-cols-1 gap-2.5 mt-4 sm:mt-6">
             <button
               type="button"
               onClick={onGoogle}
               disabled={busy}
-              className="flex items-center justify-center gap-3 py-3.5 rounded-2xl transition active:scale-[0.985] disabled:opacity-60"
+              className="flex items-center justify-center gap-3 py-3 sm:py-3.5 rounded-2xl transition active:scale-[0.985] disabled:opacity-60"
               style={{
                 background: 'var(--surface-container-high)',
                 border: '1px solid var(--outline)',
@@ -139,7 +140,7 @@ const SignInScreen: React.FC = () => {
           </div>
 
           {/* OR divider */}
-          <div className="flex items-center gap-3 my-5">
+          <div className="flex items-center gap-3 my-3 sm:my-5">
             <div className="flex-1 h-px" style={{ background: 'var(--outline)' }} />
             <span
               className="text-[10.5px] font-semibold tracking-[0.18em]"
@@ -150,12 +151,12 @@ const SignInScreen: React.FC = () => {
             <div className="flex-1 h-px" style={{ background: 'var(--outline)' }} />
           </div>
 
-          <form onSubmit={onSubmit} className="flex flex-col gap-4">
+          <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:gap-4">
             {mode === 'signup' && (
               <div>
                 <label
                   htmlFor="displayName"
-                  className="block text-[12.5px] font-bold mb-1.5"
+                  className="block text-[12.5px] font-bold mb-1 sm:mb-1.5"
                   style={{ color: 'var(--text-primary)' }}
                 >
                   Display Name
@@ -166,7 +167,7 @@ const SignInScreen: React.FC = () => {
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="How should we call you?"
                   autoComplete="name"
-                  className="w-full rounded-2xl px-4 py-3 text-[14px] outline-none transition-colors"
+                  className="w-full rounded-2xl px-4 py-2.5 sm:py-3 text-[14px] outline-none transition-colors"
                   style={{
                     background: 'var(--bg-primary)',
                     border: '1px solid var(--outline)',
@@ -179,7 +180,7 @@ const SignInScreen: React.FC = () => {
             <div>
               <label
                 htmlFor="email"
-                className="block text-[12.5px] font-bold mb-1.5"
+                className="block text-[12.5px] font-bold mb-1 sm:mb-1.5"
                 style={{ color: 'var(--text-primary)' }}
               >
                 E-Mail Address
@@ -192,7 +193,7 @@ const SignInScreen: React.FC = () => {
                 placeholder="Enter your email..."
                 required
                 autoComplete="email"
-                className="w-full rounded-2xl px-4 py-3 text-[14px] outline-none transition-colors"
+                className="w-full rounded-2xl px-4 py-2.5 sm:py-3 text-[14px] outline-none transition-colors"
                 style={{
                   background: 'var(--bg-primary)',
                   border: '1px solid var(--outline)',
@@ -204,7 +205,7 @@ const SignInScreen: React.FC = () => {
             <div>
               <label
                 htmlFor="password"
-                className="block text-[12.5px] font-bold mb-1.5"
+                className="block text-[12.5px] font-bold mb-1 sm:mb-1.5"
                 style={{ color: 'var(--text-primary)' }}
               >
                 Password
@@ -225,7 +226,7 @@ const SignInScreen: React.FC = () => {
                   required
                   minLength={6}
                   autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                  className="flex-1 bg-transparent outline-none px-4 py-3 text-[14px]"
+                  className="flex-1 bg-transparent outline-none px-4 py-2.5 sm:py-3 text-[14px]"
                   style={{ color: 'var(--text-primary)' }}
                 />
                 <button
@@ -277,7 +278,7 @@ const SignInScreen: React.FC = () => {
             <button
               type="submit"
               disabled={busy}
-              className="w-full py-3.5 rounded-2xl text-[14.5px] font-bold transition active:scale-[0.985] disabled:opacity-60 mt-1"
+              className="w-full py-3 sm:py-3.5 rounded-2xl text-[14.5px] font-bold transition active:scale-[0.985] disabled:opacity-60 mt-1"
               style={{
                 background: 'var(--text-primary)',
                 color: 'var(--bg-primary)',
@@ -288,7 +289,7 @@ const SignInScreen: React.FC = () => {
           </form>
 
           <p
-            className="text-center text-[13px] mt-5"
+            className="text-center text-[13px] mt-3 sm:mt-5"
             style={{ color: 'var(--text-secondary)' }}
           >
             {mode === 'signin' ? "Don't have an account yet? " : 'Already have an account? '}

@@ -26,6 +26,16 @@ html, body {
      Header and other fixed elements stay inside the frame on desktop. */
   transform: translateZ(0);
 }
+.auth-screen {
+  height: 100dvh;
+  min-height: 100dvh;
+}
+@supports not (height: 100dvh) {
+  .auth-screen {
+    height: 100vh;
+    min-height: 100vh;
+  }
+}
 @media (min-width: 760px) {
   .app-frame {
     width: 412px;
@@ -43,6 +53,10 @@ html, body {
   .app-frame .min-h-screen {
     min-height: 100% !important;
     height: 100%;
+  }
+  .app-frame .auth-screen {
+    height: 100%;
+    min-height: 100%;
   }
 }
 
