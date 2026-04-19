@@ -22,7 +22,8 @@ interface State {
 interface UseActivityMediaResult extends State {
   upload: (file: File) => Promise<{ ok: boolean; error?: string | null }>;
   setImageLiked: (image: ActivityImageMedia, liked: boolean) => Promise<{ ok: boolean; error?: string | null; ignored?: boolean }>;
-  addImageComment: (image: ActivityImageMedia, body: string) => Promise<{ ok: boolean; error?: string | null }>;
+  addImageComment: (image: ActivityImageMedia, body: string, parentCommentId?: string | null) => Promise<{ ok: boolean; error?: string | null }>;
+  removeImageComment: (image: ActivityImageMedia) => void;
   refresh: () => Promise<void>;
 }
 
@@ -136,13 +137,14 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
   );
 
   const addImageComment = useCallback<UseActivityMediaResult['addImageComment']>(
-    async (image, body) => {
+    async (image, body, parentCommentId) => {
       if (!user) return { ok: false, error: 'Sign in required' };
 
       const { comment, error } = await addActivityImageComment({
         imageId: image.id,
         userId: user.id,
         body,
+        parentCommentId,
       });
 
       if (error || !comment) return { ok: false, error };
@@ -161,11 +163,25 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     [user],
   );
 
+  const removeImageComment = useCallback<UseActivityMediaResult['removeImageComment']>(
+    (image) => {
+      setState((s) => ({
+        ...s,
+        images: s.images.map((item) => (
+          item.id === image.id
+            ? { ...item, commentCount: Math.max(0, item.commentCount - 1) }
+            : item
+        )),
+      }));
+    },
+    [],
+  );
+
   const refresh = useCallback(async () => {
     if (!state.activityId) return;
     const images = await listActivityImages(state.activityId, user?.id ?? null);
     setState((s) => ({ ...s, images, imageUrls: images.map((image) => image.url) }));
   }, [state.activityId, user?.id]);
 
-  return { ...state, upload, setImageLiked, addImageComment, refresh };
+  return { ...state, upload, setImageLiked, addImageComment, removeImageComment, refresh };
 }
