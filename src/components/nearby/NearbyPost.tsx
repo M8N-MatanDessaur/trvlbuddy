@@ -1,6 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart, MessageCircle, Star, Navigation, ChevronUp, ChevronDown } from 'lucide-react';
+import {
+  Heart,
+  MessageCircle,
+  ChevronUp,
+  ChevronDown,
+  ExternalLink,
+} from 'lucide-react';
 import { NearbyPlace, formatDistance, priceLevelLabel } from '../../services/nearbyService';
 import { useActivityMedia } from '../../hooks/useActivityMedia';
 import { useAuth } from '../../contexts/AuthContext';
@@ -13,6 +19,8 @@ import ImageCommentsSheet from './ImageCommentsSheet';
 interface Props {
   place: NearbyPlace;
 }
+
+const ACTION_SIZE = 38;
 
 const NearbyPost: React.FC<Props> = ({ place }) => {
   const { toast } = useToast();
@@ -35,7 +43,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
       lng: place.location.lng,
       googlePlaceId: place.placeId,
     }),
-    [place.placeId, place.name, place.address, place.location.lat, place.location.lng]
+    [place.placeId, place.name, place.address, place.location.lat, place.location.lng],
   );
 
   const {
@@ -92,10 +100,12 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
   };
 
   const overlayCircleStyle = (primary?: boolean, active?: boolean): React.CSSProperties => ({
-    width: '40px',
-    height: '40px',
+    width: `${ACTION_SIZE}px`,
+    height: `${ACTION_SIZE}px`,
+    minWidth: `${ACTION_SIZE}px`,
+    minHeight: `${ACTION_SIZE}px`,
     borderRadius: '50%',
-    background: active ? 'var(--accent)' : primary ? 'var(--accent)' : 'rgba(0,0,0,0.5)',
+    background: active || primary ? 'var(--accent)' : 'rgba(0,0,0,0.5)',
     backdropFilter: active || primary ? undefined : 'blur(10px)',
     WebkitBackdropFilter: active || primary ? undefined : 'blur(10px)',
     color: 'white',
@@ -106,116 +116,114 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
     padding: 0,
   });
 
-  const smallOverlayCircleStyle = (active?: boolean): React.CSSProperties => ({
-    width: '34px',
-    height: '34px',
+  const solidCircleStyle = (primary?: boolean): React.CSSProperties => ({
+    width: `${ACTION_SIZE}px`,
+    height: `${ACTION_SIZE}px`,
+    minWidth: `${ACTION_SIZE}px`,
+    minHeight: `${ACTION_SIZE}px`,
     borderRadius: '50%',
-    background: active ? 'var(--accent)' : 'rgba(0,0,0,0.5)',
-    backdropFilter: active ? undefined : 'blur(10px)',
-    WebkitBackdropFilter: active ? undefined : 'blur(10px)',
-    color: 'white',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: 'none',
-    padding: 0,
-  });
-
-  const plainButtonStyle = (primary?: boolean): React.CSSProperties => ({
-    width: '40px',
-    height: '40px',
-    minWidth: '40px',
-    minHeight: '40px',
-    borderRadius: '9999px',
     background: primary ? 'var(--accent)' : 'var(--surface-container-high)',
     color: primary ? 'white' : 'var(--text-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    border: 'none',
     padding: 0,
   });
 
-  const ratingPill = (place.rating != null || price) && (
+  const distancePill = (
     <span
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold self-start"
-      style={glassStyle}
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
+      style={{
+        background: 'var(--surface-container-high)',
+        color: 'var(--text-primary)',
+        border: '0.5px solid var(--outline)',
+      }}
     >
-      {place.rating != null && (
-        <>
-          <Star size={10} fill="currentColor" style={{ color: 'var(--accent)' }} />
-          <span>{place.rating.toFixed(1)}</span>
-          {ratingCount && (
-            <span style={{ opacity: 0.75, fontWeight: 500 }}>({ratingCount})</span>
-          )}
-        </>
-      )}
-      {price && (
-        <>
-          {place.rating != null && <span style={{ opacity: 0.45 }}>|</span>}
-          <span>{price}</span>
-        </>
-      )}
+      <span style={{ color: 'var(--accent)' }}>{formatDistance(place.distance)}</span>
     </span>
   );
 
-  const upvoteButton = (
-    <button
-      onClick={() => handleVote(1)}
-      className="transition-all active:scale-90"
-      style={{
-        ...smallOverlayCircleStyle(vote.myVote === 1),
-        flexDirection: 'column',
-        gap: '0px',
-      }}
-      aria-label={vote.myVote === 1 ? 'Remove upvote' : 'Upvote'}
-    >
-      <ChevronUp size={16} strokeWidth={2.6} />
-      <span className="text-[9px] font-extrabold leading-none">{vote.upvotes}</span>
-    </button>
+  const ratingPriceText = (place.rating != null || price) && (
+    <p className="text-[12.5px] mt-2" style={{ color: 'var(--text-secondary)' }}>
+      {place.rating != null && (
+        <>
+          <span style={{ color: 'var(--accent)', fontWeight: 700 }}>★ {place.rating.toFixed(1)}</span>
+          {ratingCount && <span style={{ opacity: 0.7 }}> ({ratingCount})</span>}
+        </>
+      )}
+      {place.rating != null && price && <span style={{ opacity: 0.45 }}> &nbsp;|&nbsp; </span>}
+      {price && <span style={{ fontWeight: 700 }}>{price}</span>}
+    </p>
   );
 
-  const downvoteButton = (
-    <button
-      onClick={() => handleVote(-1)}
-      className="transition-all active:scale-90"
-      style={{
-        ...smallOverlayCircleStyle(vote.myVote === -1),
-        flexDirection: 'column',
-        gap: '0px',
-      }}
-      aria-label={vote.myVote === -1 ? 'Remove downvote' : 'Downvote'}
+  const openMapsButton = (
+    <a
+      href={locationUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="no-underline transition-all active:scale-90"
+      style={solidCircleStyle()}
+      aria-label="Open in maps"
     >
-      <ChevronDown size={16} strokeWidth={2.6} />
-      <span className="text-[9px] font-extrabold leading-none">{vote.downvotes}</span>
-    </button>
+      <ExternalLink size={16} />
+    </a>
   );
 
-  // ---------- No-image variant: compact text-first card ----------
+  const votePill = (
+    <div
+      className="flex items-center"
+      style={{
+        height: `${ACTION_SIZE}px`,
+        borderRadius: '9999px',
+        background: 'var(--surface-container-high)',
+        overflow: 'hidden',
+      }}
+    >
+      <button
+        onClick={() => handleVote(-1)}
+        className="flex items-center gap-1 transition-all active:scale-[0.94]"
+        style={{
+          height: '100%',
+          padding: '0 14px',
+          background: vote.myVote === -1 ? 'var(--accent)' : 'transparent',
+          color: vote.myVote === -1 ? 'white' : 'var(--text-primary)',
+          border: 'none',
+        }}
+        aria-label={vote.myVote === -1 ? 'Remove downvote' : 'Downvote'}
+      >
+        <ChevronDown size={16} strokeWidth={2.6} />
+        <span className="text-[12px] font-extrabold leading-none">{vote.downvotes}</span>
+      </button>
+      <span
+        aria-hidden="true"
+        style={{
+          width: '1px',
+          height: '60%',
+          background: 'var(--outline)',
+        }}
+      />
+      <button
+        onClick={() => handleVote(1)}
+        className="flex items-center gap-1 transition-all active:scale-[0.94]"
+        style={{
+          height: '100%',
+          padding: '0 14px',
+          background: vote.myVote === 1 ? 'var(--accent)' : 'transparent',
+          color: vote.myVote === 1 ? 'white' : 'var(--text-primary)',
+          border: 'none',
+        }}
+        aria-label={vote.myVote === 1 ? 'Remove upvote' : 'Upvote'}
+      >
+        <ChevronUp size={16} strokeWidth={2.6} />
+        <span className="text-[12px] font-extrabold leading-none">{vote.upvotes}</span>
+      </button>
+    </div>
+  );
+
+  // ---------- No-image variant ----------
   if (images.length === 0) {
-    const noImgRatingCount = place.userRatingsTotal
-      ? place.userRatingsTotal > 999
-        ? `${(place.userRatingsTotal / 1000).toFixed(1)}k`
-        : `${place.userRatingsTotal}`
-      : null;
-
-    const tinyPlainButtonStyle = (active?: boolean): React.CSSProperties => ({
-      width: '36px',
-      height: '36px',
-      minWidth: '36px',
-      minHeight: '36px',
-      borderRadius: '9999px',
-      background: active ? 'var(--accent)' : 'var(--surface-container-high)',
-      color: active ? 'white' : 'var(--text-primary)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexDirection: 'column',
-      flexShrink: 0,
-      padding: 0,
-      border: 'none',
-    });
-
     return (
       <article
         className="w-full overflow-hidden"
@@ -227,8 +235,8 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
           border: '0.5px solid var(--outline)',
         }}
       >
-        {/* Top row: icon (left) + distance pill (right) */}
-        <div className="flex items-start justify-between gap-3 mb-4">
+        {/* Category icon */}
+        <div className="flex items-start mb-3">
           <div
             className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
             style={{
@@ -239,115 +247,40 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
           >
             <CategoryIcon size={22} />
           </div>
-          <span
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold flex-shrink-0"
-            style={{
-              background: 'var(--surface-container-high)',
-              color: 'var(--text-primary)',
-              border: '0.5px solid var(--outline)',
-            }}
-          >
-            <Navigation size={11} style={{ color: 'var(--accent)' }} />
-            {formatDistance(place.distance)}
-          </span>
         </div>
 
-        {/* Info block */}
-        <div className="mb-4">
-          <p
-            className="text-[10px] font-extrabold uppercase tracking-[0.14em] mb-1.5"
-            style={{ color: 'var(--accent)' }}
-          >
-            {place.categoryLabel}
-          </p>
-          <h2 className="text-[17px] font-extrabold leading-tight tracking-tight truncate">
-            {place.name}
-          </h2>
-          {place.address && (
-            <p
-              className="text-[12px] leading-snug mt-1 truncate"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              {place.address}
-            </p>
-          )}
-          {(place.rating != null || price) && (
-            <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-              {place.rating != null && (
-                <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px]"
-                  style={{
-                    background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  <Star size={11} fill="currentColor" style={{ color: 'var(--accent)' }} />
-                  <span className="font-bold">{place.rating.toFixed(1)}</span>
-                  {noImgRatingCount && (
-                    <span className="font-semibold" style={{ opacity: 0.6 }}>
-                      ({noImgRatingCount})
-                    </span>
-                  )}
-                </span>
-              )}
-              {price && (
-                <span
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-bold"
-                  style={{
-                    background: 'var(--accent-container)',
-                    color: 'var(--accent)',
-                  }}
-                >
-                  {price}
-                </span>
-              )}
-            </div>
-          )}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="mb-2">{distancePill}</div>
+            <h2 className="text-[17px] font-extrabold leading-tight tracking-tight">{place.name}</h2>
+            {place.address && (
+              <p
+                className="text-[12px] leading-snug mt-1 truncate"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                {place.address}
+              </p>
+            )}
+            {ratingPriceText}
+          </div>
+          {openMapsButton}
         </div>
 
-        {/* Action row: upvote, downvote, plus, maps */}
-        <div className="flex items-center justify-end gap-2">
-          <button
-            onClick={() => handleVote(1)}
-            className="transition-all active:scale-90"
-            style={tinyPlainButtonStyle(vote.myVote === 1)}
-            aria-label={vote.myVote === 1 ? 'Remove upvote' : 'Upvote'}
-          >
-            <ChevronUp size={15} strokeWidth={2.6} />
-            <span className="text-[9px] font-extrabold leading-none">{vote.upvotes}</span>
-          </button>
-          <button
-            onClick={() => handleVote(-1)}
-            className="transition-all active:scale-90"
-            style={tinyPlainButtonStyle(vote.myVote === -1)}
-            aria-label={vote.myVote === -1 ? 'Remove downvote' : 'Downvote'}
-          >
-            <ChevronDown size={15} strokeWidth={2.6} />
-            <span className="text-[9px] font-extrabold leading-none">{vote.downvotes}</span>
-          </button>
+        <div className="flex items-center justify-end gap-2 mt-3">
           <UploadPhotoButton
             onFile={upload}
             uploading={uploading}
-            style={plainButtonStyle()}
-            size={17}
+            style={solidCircleStyle(true)}
+            size={16}
             ariaLabel="Add the first photo"
           />
-          <a
-            href={locationUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="no-underline transition-all active:scale-90"
-            style={plainButtonStyle(true)}
-            aria-label="Open location"
-          >
-            <Navigation size={17} />
-          </a>
+          {votePill}
         </div>
       </article>
     );
   }
 
-  // ---------- Image variant: hero carousel ----------
+  // ---------- Image variant ----------
   return (
     <>
       <article
@@ -369,64 +302,47 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
             onIndexChange={setActiveImageIndex}
           />
 
-          {/* Top-left column: category, distance, ratings+price */}
-          <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 max-w-[60%]">
+          {/* Top-left: category */}
+          <div className="absolute top-3 left-3 z-10">
             <span
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold self-start"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
               style={glassStyle}
             >
               <CategoryIcon size={11} />
               {place.categoryLabel}
             </span>
-            <span
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold self-start"
-              style={glassStyle}
-            >
-              <Navigation size={10} />
-              {formatDistance(place.distance)}
-            </span>
-            {ratingPill}
           </div>
 
-          {/* Top-right column: poster avatar, like, comment */}
+          {/* Top-right: avatar / like / comment */}
           <div className="absolute top-3 right-3 z-10 flex flex-col items-center gap-2">
             {poster ? (
               <button
                 onClick={openPosterProfile}
                 className="transition-transform active:scale-90"
                 style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  padding: 0,
-                  border: '2px solid rgba(255,255,255,0.85)',
-                  background: 'rgba(0,0,0,0.5)',
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  ...overlayCircleStyle(true),
+                  border: '1.5px solid rgba(255,255,255,0.85)',
                   overflow: 'hidden',
                 }}
                 aria-label={`Open ${poster.display_name || 'traveler'} profile`}
               >
-                <Avatar profile={poster} size={36} />
+                <Avatar profile={poster} size={ACTION_SIZE - 4} />
               </button>
             ) : (
-              <div style={{ width: '40px', height: '40px' }} aria-hidden="true" />
+              <div style={{ width: `${ACTION_SIZE}px`, height: `${ACTION_SIZE}px` }} aria-hidden="true" />
             )}
             <button
               onClick={handleLike}
               className="transition-all active:scale-90 disabled:opacity-50"
               style={{
-                ...overlayCircleStyle(activeImage?.likedByViewer),
+                ...overlayCircleStyle(false, activeImage?.likedByViewer),
                 flexDirection: 'column',
                 gap: '1px',
               }}
               aria-label={activeImage?.likedByViewer ? 'Unlike photo' : 'Like photo'}
               disabled={!activeImage}
             >
-              <Heart size={16} fill={activeImage?.likedByViewer ? 'currentColor' : 'none'} />
+              <Heart size={15} fill={activeImage?.likedByViewer ? 'currentColor' : 'none'} />
               <span className="text-[10px] font-extrabold leading-none">
                 {activeImage?.likeCount ?? 0}
               </span>
@@ -442,64 +358,79 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
               aria-label="Open photo comments"
               disabled={!activeImage}
             >
-              <MessageCircle size={16} />
+              <MessageCircle size={15} />
               <span className="text-[10px] font-extrabold leading-none">
                 {activeImage?.commentCount ?? 0}
               </span>
             </button>
           </div>
 
-          {/* Bottom-right cluster: plus on top, then upvote/downvote/maps row */}
-          <div className="absolute right-3 bottom-3 z-10 flex flex-col items-end gap-2">
+          {/* Bottom-left: carousel dots */}
+          {images.length > 1 && (
+            <div className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5">
+              {images.map((_, i) => (
+                <span
+                  key={i}
+                  className="rounded-full transition-all"
+                  style={{
+                    width: i === activeImageIndex ? '14px' : '5px',
+                    height: '5px',
+                    background: i === activeImageIndex ? 'white' : 'rgba(255,255,255,0.55)',
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Bottom-right: plus */}
+          <div className="absolute right-3 bottom-3 z-10">
             <UploadPhotoButton
               onFile={upload}
               uploading={uploading}
-              style={overlayCircleStyle(true)}
-              size={17}
+              style={overlayCircleStyle()}
+              size={16}
             />
-            <div className="flex items-center gap-2">
-              {upvoteButton}
-              {downvoteButton}
-              <a
-                href={locationUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="no-underline transition-all active:scale-90"
-                style={smallOverlayCircleStyle()}
-                aria-label="Open location"
-              >
-                <Navigation size={15} />
-              </a>
-            </div>
           </div>
         </div>
 
-        <div className="px-4 py-3.5">
-          <h2
-            className="text-[17px] font-extrabold leading-tight tracking-tight mb-1"
-            style={{
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-            } as React.CSSProperties}
-          >
-            {place.name}
-          </h2>
-          {place.address && (
-            <p
-              className="text-[12.5px] leading-relaxed"
-              style={{
-                color: 'var(--text-secondary)',
-                display: '-webkit-box',
-                WebkitLineClamp: 1,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              } as React.CSSProperties}
-            >
-              {place.address}
-            </p>
-          )}
+        {/* Second layer */}
+        <div className="px-4 pt-4 pb-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="mb-2">{distancePill}</div>
+              <h2
+                className="text-[17px] font-extrabold leading-tight tracking-tight"
+                style={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                } as React.CSSProperties}
+              >
+                {place.name}
+              </h2>
+              {place.address && (
+                <p
+                  className="text-[12.5px] leading-relaxed mt-1"
+                  style={{
+                    color: 'var(--text-secondary)',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 1,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                  } as React.CSSProperties}
+                >
+                  {place.address}
+                </p>
+              )}
+              {ratingPriceText}
+            </div>
+            {openMapsButton}
+          </div>
+
+          <div className="flex items-center justify-end mt-3">
+            {votePill}
+          </div>
         </div>
       </article>
       <ImageCommentsSheet

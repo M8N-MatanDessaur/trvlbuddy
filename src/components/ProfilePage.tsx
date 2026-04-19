@@ -23,6 +23,7 @@ import {
 } from '../services/activityMediaService';
 import { listMyTrips, loadTrip } from '../services/tripsService';
 import Avatar from './Avatar';
+import PhotoViewerModal from './PhotoViewerModal';
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -50,6 +51,7 @@ const ProfilePage: React.FC = () => {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [tripsLoading, setTripsLoading] = useState(isOwn);
   const [loadingTripId, setLoadingTripId] = useState<string | null>(null);
+  const [openPhotoId, setOpenPhotoId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOwn) setProfile(ownProfile);
@@ -142,10 +144,10 @@ const ProfilePage: React.FC = () => {
   };
 
   const handlePhotoTap = (photo: UserPhoto) => {
-    const url = photo.google_maps_url
-      || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${photo.activity_name} ${photo.activity_address || ''}`.trim())}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    setOpenPhotoId(photo.id);
   };
+
+  const openPhoto = openPhotoId ? photos.find((p) => p.id === openPhotoId) ?? null : null;
 
   const displayName = profile?.display_name || profile?.email || (isOwn ? 'Traveler' : 'Traveler');
   const influence = profile?.influence ?? 0;
@@ -416,6 +418,28 @@ const ProfilePage: React.FC = () => {
           )}
         </div>
       </main>
+
+      <PhotoViewerModal
+        photo={openPhoto}
+        uploaderId={targetId}
+        onClose={() => setOpenPhotoId(null)}
+        onLikeChange={(photoId, delta) => {
+          setPhotos((rows) =>
+            rows.map((row) =>
+              row.id === photoId ? { ...row, likeCount: Math.max(0, row.likeCount + delta) } : row,
+            ),
+          );
+          setStats((s) => ({ ...s, likesReceived: Math.max(0, s.likesReceived + delta) }));
+        }}
+        onCommentAdded={(photoId) => {
+          setPhotos((rows) =>
+            rows.map((row) =>
+              row.id === photoId ? { ...row, commentCount: row.commentCount + 1 } : row,
+            ),
+          );
+          setStats((s) => ({ ...s, commentsReceived: s.commentsReceived + 1 }));
+        }}
+      />
     </div>
   );
 };
