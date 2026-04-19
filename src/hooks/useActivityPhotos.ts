@@ -1,88 +1,69 @@
 import { useEffect, useRef } from 'react';
 import { useTravel } from '../contexts/TravelContext';
-import { fetchPhotosForActivities } from '../services/placePhotoService';
-import { pruneExpiredCache } from '../services/imageCacheService';
+import { useAuth } from '../contexts/AuthContext';
+import { ensureActivity, listActivityImageUrls } from '../services/activityMediaService';
 
 export function useActivityPhotos() {
   const { activities, setActivities, currentPlan } = useTravel();
-  const fetchingRef = useRef(false);
+  const { user } = useAuth();
+  const runningRef = useRef(false);
   const activitiesRef = useRef(activities);
-
   activitiesRef.current = activities;
 
   useEffect(() => {
     if (!currentPlan || activities.length === 0) return;
-    if (fetchingRef.current) return;
+    if (runningRef.current) return;
 
     const seg = currentPlan.segments?.[0];
     const dest = currentPlan.destination || currentPlan.destinations?.[0];
     const cityName = seg?.city?.name || dest?.name || '';
+    const country = seg?.destination?.country || dest?.country || null;
     if (!cityName) return;
 
-    const needsPhotos = activities
-      .map((a, i) => ({ name: a.name, cityName, index: i }))
-      .filter((_, i) => !activities[i].imageUrl);
+    const needs = activities
+      .map((a, i) => ({ activity: a, index: i }))
+      .filter(({ activity }) => !activity.imageUrls || activity.imageUrls.length === 0);
 
-    if (needsPhotos.length === 0) return;
+    if (needs.length === 0) return;
 
-    fetchingRef.current = true;
+    runningRef.current = true;
+    const createdBy = user?.id ?? null;
 
-    let pendingUpdates: Array<{ index: number; imageUrl: string; imageUrls: string[]; placeId: string | null }> = [];
-    let batchTimeout: ReturnType<typeof setTimeout> | null = null;
-
-    const flushUpdates = () => {
-      if (pendingUpdates.length === 0) return;
-      const updates = [...pendingUpdates];
-      pendingUpdates = [];
+    (async () => {
+      const pending: Array<{ index: number; urls: string[]; dbActivityId: string }> = [];
+      for (const { activity, index } of needs) {
+        const dbActivity = await ensureActivity(
+          {
+            name: activity.name,
+            city: cityName,
+            country,
+            googlePlaceId: activity.placeId || null,
+          },
+          createdBy
+        );
+        if (!dbActivity) continue;
+        const urls = await listActivityImageUrls(dbActivity.id);
+        pending.push({ index, urls, dbActivityId: dbActivity.id });
+      }
 
       const current = [...activitiesRef.current];
       let changed = false;
-      for (const u of updates) {
-        if (current[u.index] && !current[u.index].imageUrl) {
-          current[u.index] = {
-            ...current[u.index],
-            imageUrl: u.imageUrl,
-            imageUrls: u.imageUrls,
-            placeId: u.placeId || undefined,
-          };
-          changed = true;
-        }
+      for (const p of pending) {
+        if (!current[p.index]) continue;
+        current[p.index] = {
+          ...current[p.index],
+          imageUrl: p.urls[0] || undefined,
+          imageUrls: p.urls,
+          dbActivityId: p.dbActivityId,
+        };
+        changed = true;
       }
-      if (changed) {
-        setActivities(current);
-      }
-    };
-
-    // Prune expired image blobs on startup
-    pruneExpiredCache();
-
-    fetchPhotosForActivities(
-      needsPhotos,
-      (index, result) => {
-        pendingUpdates.push({
-          index,
-          imageUrl: result.imageUrl!,
-          imageUrls: result.imageUrls,
-          placeId: result.placeId,
-        });
-        if (batchTimeout) clearTimeout(batchTimeout);
-        batchTimeout = setTimeout(flushUpdates, 500);
-        // No eager prefetch — the cover URL is loaded lazily by <CachedImage>
-        // when its card scrolls into view, and the rest of the carousel only
-        // fetches when the user explicitly opens it. Eager prefetch was the
-        // single biggest line on the Places Photo bill.
-      },
-      3
-    ).then(() => {
-      flushUpdates();
-      fetchingRef.current = false;
-    }).catch(() => {
-      fetchingRef.current = false;
+      if (changed) setActivities(current);
+      runningRef.current = false;
+    })().catch((err) => {
+      console.error('useActivityPhotos failed', err);
+      runningRef.current = false;
     });
-
-    return () => {
-      if (batchTimeout) clearTimeout(batchTimeout);
-    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPlan, activities.length]);
+  }, [currentPlan, activities.length, user?.id]);
 }

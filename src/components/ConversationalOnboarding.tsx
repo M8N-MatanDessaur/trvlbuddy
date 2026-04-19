@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Plane, Check, Sparkles, Globe, Languages, Wrench, ArrowRight, Upload, Map, Compass, Sun, Coffee, Camera, Music, Heart, Star, Utensils, ShoppingBag, Mountain, Landmark } from 'lucide-react';
-import { importTripFromJson } from '../utils/tripShare';
+import { Send, Loader2, Plane, Check, Sparkles, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { useTravel } from '../contexts/TravelContext';
 import { useToast } from '../contexts/ToastContext';
@@ -14,9 +14,15 @@ interface Message {
 }
 
 const ConversationalOnboarding: React.FC = () => {
-  const { setCurrentPlan, setHasCompletedOnboarding, setIsLoading, setActivities, setTranslations, setEmergencyContacts } = useTravel();
-  const [showLanding, setShowLanding] = useState(true);
+  const { setCurrentPlan, setHasCompletedOnboarding, setIsLoading, setActivities, setTranslations, setEmergencyContacts, setAppMode } = useTravel();
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const exitToNearby = () => {
+    setAppMode('local');
+    setHasCompletedOnboarding(true);
+    navigate('/nearby', { replace: true });
+  };
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -224,147 +230,26 @@ const ConversationalOnboarding: React.FC = () => {
     extraction.budget && extraction.budget,
   ].filter(Boolean) : [];
 
-  const marqueeRow1 = [
-    { icon: Landmark, label: 'Tokyo' },
-    { icon: Coffee, label: 'Paris' },
-    { icon: Sun, label: 'Bali' },
-    { icon: Star, label: 'New York' },
-    { icon: Camera, label: 'Barcelona' },
-    { icon: Music, label: 'Seoul' },
-    { icon: Landmark, label: 'Rome' },
-    { icon: Compass, label: 'London' },
-    { icon: Mountain, label: 'Iceland' },
-    { icon: Utensils, label: 'Mexico City' },
-    { icon: ShoppingBag, label: 'Dubai' },
-    { icon: Map, label: 'Lisbon' },
-  ];
-
-  const marqueeRow2 = [
-    { icon: Sparkles, label: 'AI itineraries' },
-    { icon: Languages, label: 'Local phrases' },
-    { icon: Map, label: 'Hidden gems' },
-    { icon: Wrench, label: 'Currency tools' },
-    { icon: Heart, label: 'Save favorites' },
-    { icon: Compass, label: 'Day planner' },
-    { icon: Utensils, label: 'Food finder' },
-    { icon: Camera, label: 'Travel journal' },
-    { icon: Globe, label: 'Offline ready' },
-    { icon: Sun, label: 'Weather updates' },
-  ];
-
-  const MarqueeStrip = ({ items, direction, speed }: { items: typeof marqueeRow1; direction: 'left' | 'right'; speed: number }) => (
-    <div className="overflow-hidden" style={{ maskImage: 'linear-gradient(to right, transparent, black 8%, black 92%, transparent)', WebkitMaskImage: 'linear-gradient(to right, transparent, black 8%, black 92%, transparent)' }}>
-      <div className={`flex gap-2.5 marquee-scroll-${direction}`} style={{ '--marquee-speed': `${speed}s` } as React.CSSProperties}>
-        {[...items, ...items].map((item, i) => (
-          <div
-            key={i}
-            className="flex-shrink-0 flex items-center gap-2 px-3.5 py-2 rounded-full"
-            style={{ background: 'var(--surface-container)' }}
-          >
-            <item.icon size={13} style={{ color: 'var(--accent)' }} />
-            <span className="text-[12px] font-semibold whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>{item.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  if (showLanding) {
-    return (
-      <div
-        className="flex flex-col"
-        style={{ background: 'var(--bg-primary)', height: '100dvh', overflow: 'hidden' }}
-      >
-        {/* Top marquee section */}
-        <div className="flex-shrink-0 pt-16 space-y-2.5">
-          <MarqueeStrip items={marqueeRow1} direction="left" speed={35} />
-          <MarqueeStrip items={[...marqueeRow1].reverse()} direction="right" speed={40} />
-        </div>
-
-        {/* Hero center */}
-        <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
-          <div
-            className="flex items-center justify-center mb-5"
-            style={{
-              height: '80px',
-              aspectRatio: '1',
-              borderRadius: '24px',
-              background: 'var(--accent)',
-              color: 'white',
-            }}
-          >
-            <Plane size={36} />
-          </div>
-          <h1 className="text-4xl font-black tracking-tight mb-2">TrvlBuddy</h1>
-          <p
-            className="text-[15px] leading-relaxed max-w-[280px]"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            Tell me where you're going. I'll handle the rest.
-          </p>
-        </div>
-
-        {/* Bottom marquee section */}
-        <div className="flex-shrink-0 space-y-2.5 pb-6">
-          <MarqueeStrip items={marqueeRow2} direction="left" speed={28} />
-          <MarqueeStrip items={[...marqueeRow2].reverse()} direction="right" speed={32} />
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex-shrink-0 px-6" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-          <button
-            onClick={() => setShowLanding(false)}
-            className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-[16px] font-bold transition-all active:scale-[0.97]"
-            style={{ background: 'var(--accent)', color: 'white' }}
-          >
-            Plan My Trip
-            <ArrowRight size={20} />
-          </button>
-
-          <label
-            className="w-full flex items-center justify-center gap-2 py-3 text-[13px] font-semibold cursor-pointer transition-all active:opacity-70 mt-2"
-            style={{ color: 'var(--text-tertiary)' }}
-          >
-            <Upload size={14} />
-            Import Shared Trip
-            <input
-              type="file"
-              accept=".trvlbuddy,.json"
-              className="hidden"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                const text = await file.text();
-                const bundle = importTripFromJson(text);
-                if (bundle) {
-                  setCurrentPlan(bundle.plan);
-                  setActivities(bundle.activities);
-                  setTranslations(bundle.translations);
-                  setEmergencyContacts(bundle.emergencyContacts);
-                  if (bundle.savedActivities) {
-                    localStorage.setItem('savedActivities', JSON.stringify(bundle.savedActivities));
-                  }
-                  setHasCompletedOnboarding(true);
-                } else {
-                  toast('Invalid trip file. Please try again.', 'error');
-                }
-              }}
-            />
-          </label>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col" style={{ background: 'var(--bg-primary)', height: '100dvh', overflow: 'hidden' }}>
       {/* Header */}
       <div className="px-5 pt-12 pb-3 flex-shrink-0">
-        <div className="flex items-center gap-2.5 mb-1">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)', color: 'white' }}>
-            <Plane size={15} />
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent)', color: 'white' }}>
+              <Plane size={15} />
+            </div>
+            <span className="text-base font-extrabold tracking-tight truncate">TrvlBuddy</span>
           </div>
-          <span className="text-base font-extrabold tracking-tight">TrvlBuddy</span>
+          <button
+            onClick={exitToNearby}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full text-[12px] font-semibold flex-shrink-0 transition active:scale-95"
+            style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)' }}
+            aria-label="Exit and go to Nearby"
+          >
+            <X size={13} />
+            Exit
+          </button>
         </div>
         <p className="text-[13px] mt-2" style={{ color: 'var(--text-secondary)' }}>
           Tell me about your trip and I'll set everything up

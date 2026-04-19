@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { LocateFixed, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car, Calendar, Plus } from 'lucide-react';
 import {
@@ -48,6 +48,7 @@ const NearbyFeed: React.FC = () => {
   const [userLocation, setUserLocation] = useState<UserLocation | null>(getCachedLocation());
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
   const [exhausted, setExhausted] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [transportMode, setTransportMode] = useState<TransportMode>(readStoredTransportMode);
@@ -74,8 +75,18 @@ const NearbyFeed: React.FC = () => {
   const placesRef = useRef<NearbyPlace[]>([]);
 
   const setPlacesTracked = useCallback((next: NearbyPlace[]) => {
-    placesRef.current = next;
-    setPlaces(next);
+    // Defensive dedupe by placeId. The cursor already skips repeat IDs, but
+    // cached snapshots, StrictMode double-mounts, or a provider quirk can
+    // occasionally slip a dupe through.
+    const seen = new Set<string>();
+    const deduped: NearbyPlace[] = [];
+    for (const p of next) {
+      if (seen.has(p.placeId)) continue;
+      seen.add(p.placeId);
+      deduped.push(p);
+    }
+    placesRef.current = deduped;
+    setPlaces(deduped);
   }, []);
 
   const loadMore = useCallback(async () => {
@@ -86,6 +97,8 @@ const NearbyFeed: React.FC = () => {
       return;
     }
     fetchingRef.current = true;
+    const isSubsequent = placesRef.current.length > 0;
+    if (isSubsequent) setLoadingMore(true);
     try {
       const batch = await cursor.fetchNextBatch(BATCH_SIZE);
       const nextPlaces = [...placesRef.current, ...batch];
@@ -100,6 +113,7 @@ const NearbyFeed: React.FC = () => {
       setErrorMessage('Could not load nearby places.');
     } finally {
       fetchingRef.current = false;
+      setLoadingMore(false);
     }
   }, [setPlacesTracked]);
 
@@ -313,6 +327,18 @@ const NearbyFeed: React.FC = () => {
   const scrollToTop = () => {
     scrollableRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Final render-layer guard against duplicate cards.
+  const uniquePlaces = useMemo(() => {
+    const seen = new Set<string>();
+    const out: NearbyPlace[] = [];
+    for (const p of places) {
+      if (seen.has(p.placeId)) continue;
+      seen.add(p.placeId);
+      out.push(p);
+    }
+    return out;
+  }, [places]);
 
   return (
     <section className="page" ref={sectionRef}>
@@ -596,8 +622,8 @@ const NearbyFeed: React.FC = () => {
             </div>
           )}
 
-          {places.map((place, idx) => {
-            const isSentinel = idx === Math.max(0, places.length - PREFETCH_AHEAD);
+          {uniquePlaces.map((place, idx) => {
+            const isSentinel = idx === Math.max(0, uniquePlaces.length - PREFETCH_AHEAD);
             return (
               <React.Fragment key={place.placeId}>
                 <NearbyPost place={place} />
@@ -606,20 +632,7 @@ const NearbyFeed: React.FC = () => {
             );
           })}
 
-          {fetchingRef.current && places.length > 0 && (
-            <div className="space-y-8 py-2" aria-hidden="true">
-              <div className="w-full">
-                <div
-                  className="w-full activity-card-shimmer"
-                  style={{ aspectRatio: '4 / 5', borderRadius: '22px', background: 'var(--surface-container-high)' }}
-                />
-                <div
-                  className="h-4 rounded-full mt-3 activity-card-shimmer"
-                  style={{ width: '60%', background: 'var(--surface-container-high)' }}
-                />
-              </div>
-            </div>
-          )}
+          {/* Loading glow is rendered at the bottom of the section via AnimatePresence. */}
 
           {exhausted && places.length > 0 && (
             <div className="text-center py-10 text-[13px]" style={{ color: 'var(--text-tertiary)' }}>
@@ -654,6 +667,67 @@ const NearbyFeed: React.FC = () => {
           )}
         </>
       )}
+
+      {/* Infinite-load glow -- sticks to the bottom of the scroll viewport so
+          it appears above the PageIndicator, not over it. Wrapper has height 0
+          so it never pushes layout; the gradient extends upward via absolute
+          positioning within the sticky container. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'sticky',
+          bottom: 0,
+          height: 0,
+          pointerEvents: 'none',
+          zIndex: 30,
+        }}
+      >
+        <AnimatePresence>
+          {loadingMore && (
+            <motion.div
+              key="infinite-load-glow"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35 }}
+              style={{
+                position: 'absolute',
+                left: '-20px',
+                right: '-20px',
+                bottom: 0,
+                height: '120px',
+              }}
+            >
+              <motion.div
+                animate={{ opacity: [0.65, 1, 0.65], filter: ['blur(0px)', 'blur(1.5px)', 'blur(0px)'] }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background:
+                    'linear-gradient(to top, color-mix(in srgb, var(--accent) 55%, transparent) 0%, color-mix(in srgb, var(--accent) 22%, transparent) 45%, transparent 100%)',
+                }}
+              />
+              <motion.div
+                animate={{ opacity: [0.2, 0.6, 0.2] }}
+                transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  bottom: '8px',
+                  transform: 'translateX(-50%)',
+                  width: '58%',
+                  maxWidth: '360px',
+                  height: '10px',
+                  borderRadius: '9999px',
+                  background: 'var(--accent)',
+                  filter: 'blur(14px)',
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       <AnimatePresence>
         {showScrollTop && (

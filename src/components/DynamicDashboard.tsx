@@ -4,6 +4,8 @@ import { useTravel } from '../contexts/TravelContext';
 import { getSmartSuggestion } from '../services/aiService';
 import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb, Heart, RefreshCw, Loader2, Pencil, X as XIcon, Cloud, Sun, CloudRain } from 'lucide-react';
 import DayDebrief from './trip/DayDebrief';
+import TripMembersStrip from './TripMembersStrip';
+import ShareTripModal from './ShareTripModal';
 
 interface WeatherData {
   temp: number;
@@ -21,13 +23,22 @@ let cachedSuggestion: { title: string; description: string; activityName: string
 let suggestionFetched = false;
 
 const DynamicDashboard: React.FC = () => {
-  const { currentPlan, activities, savedActivities, setCurrentPlan } = useTravel();
+  const { currentPlan, activities, savedActivities, setCurrentPlan, currentTripId } = useTravel();
   const navigate = useNavigate();
   const [suggestion, setSuggestion] = useState(cachedSuggestion);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [editingAcc, setEditingAcc] = useState<{ segmentId: string; accId: string; name: string; address: string } | null>(null);
   const [weatherData, setWeatherData] = useState<{ [key: string]: WeatherData }>({});
   const [selectedWeatherLoc, setSelectedWeatherLoc] = useState('');
+  const [showShare, setShowShare] = useState(false);
+  const tripIdForHeader = currentTripId;
+  const openShareDialog = () => {
+    if (!tripIdForHeader) {
+      navigate('/settings');
+      return;
+    }
+    setShowShare(true);
+  };
 
   const saveAccommodation = () => {
     if (!editingAcc || !currentPlan) return;
@@ -182,20 +193,13 @@ const DynamicDashboard: React.FC = () => {
 
       {/* ---- HEADER ---- */}
       <div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-extrabold tracking-tight leading-tight">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-extrabold tracking-tight leading-tight flex-1 min-w-0">
             {currentPlan.title || 'Your Trip'}
           </h1>
-          {tripDay && (
-            <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg" style={{
-              background: tripDay.type === 'active' ? 'var(--accent)' : tripDay.type === 'upcoming' ? 'var(--accent-container)' : 'var(--surface-container-high)',
-              color: tripDay.type === 'active' ? 'white' : tripDay.type === 'upcoming' ? 'var(--accent)' : 'var(--text-tertiary)',
-            }}>
-              {tripDay.label}
-            </span>
-          )}
+          <TripMembersStrip tripId={tripIdForHeader} onInvite={openShareDialog} />
         </div>
-        <div className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)] mt-1">
+        <div className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)] mt-1 flex-wrap">
           <span>{duration} {duration === 1 ? 'day' : 'days'}</span>
           <span style={{ color: 'var(--text-tertiary)' }}>-</span>
           <span>{currentPlan.travelers} traveler{currentPlan.travelers !== 1 ? 's' : ''}</span>
@@ -204,6 +208,14 @@ const DynamicDashboard: React.FC = () => {
               <span style={{ color: 'var(--text-tertiary)' }}>-</span>
               <span>{segments.length} cities</span>
             </>
+          )}
+          {tripDay && (
+            <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-lg" style={{
+              background: tripDay.type === 'active' ? 'var(--accent)' : tripDay.type === 'upcoming' ? 'var(--accent-container)' : 'var(--surface-container-high)',
+              color: tripDay.type === 'active' ? 'white' : tripDay.type === 'upcoming' ? 'var(--accent)' : 'var(--text-tertiary)',
+            }}>
+              {tripDay.label}
+            </span>
           )}
         </div>
       </div>
@@ -470,6 +482,8 @@ const DynamicDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ShareTripModal isOpen={showShare} onClose={() => setShowShare(false)} tripId={tripIdForHeader} />
     </section>
   );
 };

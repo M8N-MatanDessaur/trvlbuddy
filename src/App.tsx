@@ -1,35 +1,40 @@
 import React, { lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { TravelProvider, useTravel } from './contexts/TravelContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ChatProvider } from './contexts/ChatContext';
 import { ContextEngineProvider } from './contexts/ContextEngineContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
 import SwipeNavigator from './components/SwipeNavigator';
 import type { PageDef } from './components/SwipeNavigator';
 import ConversationalOnboarding from './components/ConversationalOnboarding';
+import ContributorOnboarding from './components/ContributorOnboarding';
 import WelcomeScreen from './components/WelcomeScreen';
+import SignInScreen from './components/SignInScreen';
 import LoadingScreen from './components/LoadingScreen';
-import { MessageCircle, Home, Compass, Languages, Wrench, Phone, Radar } from 'lucide-react';
+import AuthSplash from './components/AuthSplash';
+import SettingsPage from './components/SettingsPage';
+import NewTripLauncher from './components/NewTripLauncher';
+import TripJoinPage from './components/TripJoinPage';
+import { MessageCircle, Home, Compass, Languages, Phone, Radar, Plus } from 'lucide-react';
 
 const ChatPage = lazy(() => import('./components/ChatPage'));
 const TripPage = lazy(() => import('./components/DynamicDashboard'));
 const NearbyPage = lazy(() => import('./components/nearby/NearbyFeed'));
 const ExplorePage = lazy(() => import('./components/DynamicActivitiesPage'));
 const LanguagePage = lazy(() => import('./components/DynamicTranslatorPage'));
-const UtilitiesPage = lazy(() => import('./components/DynamicUtilitiesPage'));
 const EmergencyPage = lazy(() => import('./components/EmergencyPage'));
 
 const tripPages: PageDef[] = [
   { path: '/chat', component: ChatPage, icon: MessageCircle, label: 'AI' },
   { path: '/', component: TripPage, icon: Home, label: 'Trip' },
-  { path: '/nearby', component: NearbyPage, icon: Radar, label: 'Nearby' },
   { path: '/explore', component: ExplorePage, icon: Compass, label: 'Explore' },
   { path: '/language', component: LanguagePage, icon: Languages, label: 'Language' },
   { path: '/emergency', component: EmergencyPage, icon: Phone, label: 'SOS' },
-  { path: '/utilities', component: UtilitiesPage, icon: Wrench, label: 'Tools' },
+  { path: '/new-trip', component: NewTripLauncher, icon: Plus, label: 'New' },
 ];
 
 // Local mode: no trip-scoped tabs. Nearby sits at index 1 so it is the
@@ -38,15 +43,29 @@ const localPages: PageDef[] = [
   { path: '/chat', component: ChatPage, icon: MessageCircle, label: 'AI' },
   { path: '/nearby', component: NearbyPage, icon: Radar, label: 'Nearby' },
   { path: '/emergency', component: EmergencyPage, icon: Phone, label: 'SOS' },
-  { path: '/utilities', component: UtilitiesPage, icon: Wrench, label: 'Tools' },
+  { path: '/new-trip', component: NewTripLauncher, icon: Plus, label: 'New' },
 ];
 
 const AppContent: React.FC = () => {
   const { hasCompletedOnboarding, isLoading, appMode } = useTravel();
+  const { session, profile, isLoading: authLoading } = useAuth();
+  const location = useLocation();
 
+  if (authLoading) return <AuthSplash />;
+  if (!session) return <SignInScreen />;
+  if (!profile) return <AuthSplash />;
+
+  const joinMatch = location.pathname.match(/^\/trip\/join\/([^/]+)/);
+  if (joinMatch) return <TripJoinPage token={joinMatch[1]} />;
+
+  if (!profile.onboarded_at) return <ContributorOnboarding />;
+
+  if (location.pathname === '/settings') return <SettingsPage />;
+
+  // Trip generation / long-running work gets the branded loading screen.
   if (isLoading) return <LoadingScreen />;
 
-  // Fresh start: no mode chosen AND no onboarding -> show the welcome chooser.
+  // Legacy fallback for pre-onboarding users: no mode chosen -> chooser.
   if (!appMode && !hasCompletedOnboarding) return <WelcomeScreen />;
 
   // Trip mode but onboarding not yet complete -> run the conversational onboarding.
@@ -82,17 +101,45 @@ const AppContent: React.FC = () => {
   );
 };
 
+const AppContentWrapped: React.FC = () => (
+  <ErrorBoundary>
+    <AppContent />
+  </ErrorBoundary>
+);
+
+// On desktop we constrain the app to a phone-sized viewport so it renders
+// the way it's designed for (touch, narrow cards, bottom-nav reach). On
+// actual phones/tablets the container simply fills the screen.
+const DesktopFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div
+    className="app-frame-backdrop"
+    style={{
+      minHeight: '100vh',
+      width: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}
+  >
+    <div className="app-frame">{children}</div>
+  </div>
+);
+
 function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <TravelProvider>
-          <ContextEngineProvider>
-            <ChatProvider>
-              <AppContent />
-            </ChatProvider>
-          </ContextEngineProvider>
-        </TravelProvider>
+        <AuthProvider>
+          <TravelProvider>
+            <ContextEngineProvider>
+              <ChatProvider>
+                <DesktopFrame>
+                  <AppContentWrapped />
+                </DesktopFrame>
+              </ChatProvider>
+            </ContextEngineProvider>
+          </TravelProvider>
+        </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
   );

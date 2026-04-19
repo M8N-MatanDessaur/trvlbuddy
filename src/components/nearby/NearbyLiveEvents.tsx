@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 import { fetchLiveEvents, type LocalEvent, DEFAULT_LIVE_EVENTS_RADIUS_KM } from '../../services/liveEventsService';
 import { UserLocation } from '../../utils/geolocation';
 import { reverseGeocodeLocality } from '../../utils/geocoding';
+import AutoScrollText from '../AutoScrollText';
 
 const typeIcons: Record<LocalEvent['type'], LucideIcon> = {
   festival: PartyPopper,
@@ -297,18 +298,13 @@ const NearbyLiveEvents: React.FC<Props> = ({ userLocation, focus }) => {
                 >
                   {event.name}
                 </h4>
-                <p
+                <AutoScrollText
                   className="text-[11px] leading-relaxed flex-1"
-                  style={{
-                    color: 'var(--text-secondary)',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                  } as React.CSSProperties}
+                  style={{ color: 'var(--text-secondary)' }}
+                  maxHeight="2.6em"
                 >
                   {event.description}
-                </p>
+                </AutoScrollText>
                 {event.location && (
                   <div
                     className="flex items-center gap-1 text-[10px] truncate"

@@ -1,80 +1,33 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { Star, Navigation, Share2, MapPin, MoreHorizontal } from 'lucide-react';
-import CachedImage from '../CachedImage';
+import React, { useMemo } from 'react';
+import { Star, Navigation, Share2, MapPin } from 'lucide-react';
 import { NearbyPlace, formatDistance, priceLevelLabel } from '../../services/nearbyService';
-import { fetchDetailedPhotos } from '../../services/placePhotoService';
+import { useActivityMedia } from '../../hooks/useActivityMedia';
+import ImageCarousel from '../ImageCarousel';
+import UploadPhotoButton from '../UploadPhotoButton';
 
 interface Props {
   place: NearbyPlace;
 }
 
 const NearbyPost: React.FC<Props> = ({ place }) => {
-  const [images, setImages] = useState<string[]>(place.imageUrls);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [loadedSet, setLoadedSet] = useState<Set<number>>(new Set());
-  const [errorSet, setErrorSet] = useState<Set<number>>(new Set());
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const swipingRef = useRef(false);
-  // Only fetch detailed photos (a Place Details call + extra Photo fetches)
-  // after the user explicitly asks for them via the ellipsis button. Most
-  // cards in the feed are scrolled past without interaction, so this cuts
-  // the bulk of the Place Details / Places Photo spend.
-  const detailsRequestedRef = useRef(false);
-  const [loadingExtras, setLoadingExtras] = useState(false);
-  const [hasExtras, setHasExtras] = useState(false);
-
-  const validImages = images.filter((_, i) => !errorSet.has(i));
-  const count = validImages.length;
   const CategoryIcon = place.categoryIcon;
   const price = priceLevelLabel(place.priceLevel);
   const mapsQuery = encodeURIComponent(`${place.name} ${place.address}`.trim());
 
-  const loadCarousel = useCallback(() => {
-    if (detailsRequestedRef.current) return;
-    detailsRequestedRef.current = true;
-    setLoadingExtras(true);
-    fetchDetailedPhotos(place.placeId)
-      .then(extras => {
-        if (!extras || extras.length === 0) return;
-        setImages(extras);
-        setLoadedSet(new Set());
-        setErrorSet(new Set());
-        setCurrentIndex(0);
-        setHasExtras(true);
-      })
-      .finally(() => setLoadingExtras(false));
-  }, [place.placeId]);
+  const activityKey = useMemo(
+    () => ({
+      name: place.name,
+      address: place.address || null,
+      city: null,
+      country: null,
+      lat: place.location.lat,
+      lng: place.location.lng,
+      googlePlaceId: place.placeId,
+    }),
+    [place.placeId, place.name, place.address, place.location.lat, place.location.lng]
+  );
 
-  const goTo = (idx: number) => {
-    if (count === 0) return;
-    if (idx < 0) idx = count - 1;
-    if (idx >= count) idx = 0;
-    setCurrentIndex(idx);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    swipingRef.current = false;
-  };
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
-    const dx = e.touches[0].clientX - touchStartRef.current.x;
-    const dy = e.touches[0].clientY - touchStartRef.current.y;
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) swipingRef.current = true;
-  };
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStartRef.current || !swipingRef.current) {
-      touchStartRef.current = null;
-      return;
-    }
-    const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
-    if (Math.abs(dx) > 40) {
-      if (dx < 0) goTo(currentIndex + 1);
-      else goTo(currentIndex - 1);
-    }
-    touchStartRef.current = null;
-    swipingRef.current = false;
-  };
+  const { images, uploading, upload } = useActivityMedia(activityKey);
 
   const handleShare = async () => {
     const url = `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`;
@@ -108,8 +61,179 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
     backdropFilter: primary ? undefined : 'blur(10px)',
     WebkitBackdropFilter: primary ? undefined : 'blur(10px)',
     color: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   });
 
+  const plainButtonStyle = (primary?: boolean): React.CSSProperties => ({
+    width: '40px',
+    height: '40px',
+    minWidth: '40px',
+    minHeight: '40px',
+    borderRadius: '9999px',
+    background: primary ? 'var(--accent)' : 'var(--surface-container-high)',
+    color: primary ? 'white' : 'var(--text-primary)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    padding: 0,
+  });
+
+  // ---------- No-image variant: compact text-first card ----------
+  if (images.length === 0) {
+    const ratingCount = place.userRatingsTotal
+      ? place.userRatingsTotal > 999
+        ? `${(place.userRatingsTotal / 1000).toFixed(1)}k`
+        : `${place.userRatingsTotal}`
+      : null;
+
+    return (
+      <article
+        className="w-full overflow-hidden"
+        style={{
+          marginBottom: '1rem',
+          borderRadius: '22px',
+          background: 'var(--surface-container)',
+          padding: '1rem',
+          border: '0.5px solid var(--outline)',
+        }}
+      >
+        {/* Top row: icon (left) + distance pill (right) */}
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div
+            className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+            style={{
+              background: 'var(--accent)',
+              color: 'white',
+              boxShadow: '0 10px 22px -10px color-mix(in srgb, var(--accent) 70%, transparent)',
+            }}
+          >
+            <CategoryIcon size={22} />
+          </div>
+          <span
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold flex-shrink-0"
+            style={{
+              background: 'var(--surface-container-high)',
+              color: 'var(--text-primary)',
+              border: '0.5px solid var(--outline)',
+            }}
+          >
+            <Navigation size={11} style={{ color: 'var(--accent)' }} />
+            {formatDistance(place.distance)}
+          </span>
+        </div>
+
+        {/* Bottom row: info (left) + 2x2 actions (right) */}
+        <div className="flex items-end justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <p
+              className="text-[10px] font-extrabold uppercase tracking-[0.14em] mb-1.5"
+              style={{ color: 'var(--accent)' }}
+            >
+              {place.categoryLabel}
+            </p>
+            <h2 className="text-[17px] font-extrabold leading-tight tracking-tight truncate">
+              {place.name}
+            </h2>
+            {place.address && (
+              <p
+                className="text-[12px] leading-snug mt-1 truncate"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                {place.address}
+              </p>
+            )}
+            {(place.rating != null || price) && (
+              <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                {place.rating != null && (
+                  <span
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px]"
+                    style={{
+                      background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    <Star
+                      size={11}
+                      fill="currentColor"
+                      style={{ color: 'var(--accent)' }}
+                    />
+                    <span className="font-bold">{place.rating.toFixed(1)}</span>
+                    {ratingCount && (
+                      <span className="font-semibold" style={{ opacity: 0.6 }}>
+                        ({ratingCount})
+                      </span>
+                    )}
+                  </span>
+                )}
+                {price && (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-bold"
+                    style={{
+                      background: 'var(--accent-container)',
+                      color: 'var(--accent)',
+                    }}
+                  >
+                    {price}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div
+            className="flex-shrink-0"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '40px 40px',
+              gridTemplateRows: '40px 40px',
+              gap: '10px',
+            }}
+          >
+            <UploadPhotoButton
+              onFile={upload}
+              uploading={uploading}
+              style={plainButtonStyle()}
+              size={17}
+              ariaLabel="Add the first photo"
+            />
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="no-underline transition-all active:scale-90"
+              style={plainButtonStyle()}
+              aria-label="View on map"
+            >
+              <MapPin size={17} />
+            </a>
+            <button
+              onClick={handleShare}
+              className="transition-all active:scale-90"
+              style={plainButtonStyle()}
+              aria-label="Share"
+            >
+              <Share2 size={16} />
+            </button>
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${mapsQuery}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="no-underline transition-all active:scale-90"
+              style={plainButtonStyle(true)}
+              aria-label="Directions"
+            >
+              <Navigation size={17} />
+            </a>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  // ---------- Image variant: hero carousel ----------
   return (
     <article
       className="w-full overflow-hidden"
@@ -119,63 +243,12 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
         background: 'var(--surface-container)',
       }}
     >
-      {/* Layer 1: image carousel with overlays */}
       <div
         className="relative w-full"
         style={{ aspectRatio: '4 / 5', background: 'var(--surface-container-high)' }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
-        {count === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center" style={{ color: 'var(--text-tertiary)' }}>
-            <CategoryIcon size={44} />
-          </div>
-        ) : (
-          <>
-            {images.map((src, i) => {
-              if (errorSet.has(i)) return null;
-              const validIdx = validImages.indexOf(src);
-              const isActive = validIdx === currentIndex;
-              return (
-                <CachedImage
-                  key={src}
-                  src={src}
-                  // Stable key per (place, photo-slot) so a new search that
-                  // returns the same place with a rotated photo token still
-                  // hits the cached blob instead of re-billing Places Photo.
-                  cacheKey={`${place.placeId}:${i}`}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover"
-                  style={{
-                    opacity: isActive && loadedSet.has(i) ? 1 : 0,
-                    transition: 'opacity 0.35s ease',
-                  }}
-                  onLoad={() => setLoadedSet(prev => new Set(prev).add(i))}
-                  onError={() => setErrorSet(prev => new Set(prev).add(i))}
-                  loading={i < 2 ? 'eager' : 'lazy'}
-                />
-              );
-            })}
+        <ImageCarousel images={images} className="absolute inset-0" eagerCount={2} />
 
-            {!loadedSet.has(0) && (
-              <div className="absolute inset-0 activity-card-shimmer" style={{ background: 'var(--surface-container-high)' }} />
-            )}
-
-            {/* Transparent shimmer overlay while the rest of the gallery is
-                fetching — the cover photo stays visible underneath, with a
-                soft sheen sweeping across to signal "more coming". */}
-            {loadingExtras && (
-              <div
-                className="absolute inset-0 activity-card-shimmer pointer-events-none"
-                style={{ background: 'transparent' }}
-                aria-hidden="true"
-              />
-            )}
-          </>
-        )}
-
-        {/* Top-left: category + rating/cost stack */}
         <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 max-w-[65%]">
           <span
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold self-start"
@@ -191,7 +264,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
             >
               {place.rating != null && (
                 <>
-                  <Star size={10} fill="currentColor" style={{ color: '#f5b300' }} />
+                  <Star size={10} fill="currentColor" style={{ color: 'var(--accent)' }} />
                   <span>{place.rating.toFixed(1)}</span>
                   {place.userRatingsTotal ? (
                     <span style={{ opacity: 0.75, fontWeight: 500 }}>
@@ -210,7 +283,6 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
           )}
         </div>
 
-        {/* Top-right: distance */}
         <div className="absolute top-3 right-3 z-10">
           <span
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold"
@@ -221,24 +293,17 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
           </span>
         </div>
 
-        {/* Right side: stacked action buttons */}
         <div className="absolute right-3 bottom-3 z-10 flex flex-col gap-2">
-          {!hasExtras && (
-            <button
-              onClick={loadCarousel}
-              disabled={loadingExtras}
-              className="flex items-center justify-center transition-all active:scale-90"
-              style={{ ...circleButtonStyle(), opacity: loadingExtras ? 0.6 : 1 }}
-              aria-label="Load more photos"
-            >
-              <MoreHorizontal size={18} />
-            </button>
-          )}
+          <UploadPhotoButton
+            onFile={upload}
+            uploading={uploading}
+            style={circleButtonStyle()}
+          />
           <a
             href={`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center no-underline transition-all active:scale-90"
+            className="no-underline transition-all active:scale-90"
             style={circleButtonStyle()}
             aria-label="View on map"
           >
@@ -246,7 +311,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
           </a>
           <button
             onClick={handleShare}
-            className="flex items-center justify-center transition-all active:scale-90"
+            className="transition-all active:scale-90"
             style={circleButtonStyle()}
             aria-label="Share"
           >
@@ -256,34 +321,15 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
             href={`https://www.google.com/maps/dir/?api=1&destination=${mapsQuery}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center no-underline transition-all active:scale-90"
+            className="no-underline transition-all active:scale-90"
             style={circleButtonStyle(true)}
             aria-label="Directions"
           >
             <Navigation size={18} />
           </a>
         </div>
-
-        {/* Bottom-left: dot indicators */}
-        {count > 1 && (
-          <div className="absolute bottom-4 left-4 z-10 flex items-center gap-1">
-            {validImages.map((_, i) => (
-              <div
-                key={i}
-                className="rounded-full transition-all duration-300"
-                style={{
-                  width: i === currentIndex ? '16px' : '5px',
-                  height: '5px',
-                  background: i === currentIndex ? 'white' : 'rgba(255,255,255,0.5)',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-                }}
-              />
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* Layer 2: name + address */}
       <div className="px-4 py-3.5">
         <h2
           className="text-[17px] font-extrabold leading-tight tracking-tight mb-1"

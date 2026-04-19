@@ -22,6 +22,8 @@ interface TravelContextType {
   setHasCompletedOnboarding: (completed: boolean) => void;
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
+  currentTripId: string | null;
+  setCurrentTripId: (id: string | null) => void;
 }
 
 const TravelContext = createContext<TravelContextType | undefined>(undefined);
@@ -105,6 +107,15 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return saved === 'trip' || saved === 'local' ? saved : null;
   });
 
+  const [currentTripId, setCurrentTripId] = useState<string | null>(() => {
+    return localStorage.getItem('currentTripId') || null;
+  });
+
+  useEffect(() => {
+    if (currentTripId) localStorage.setItem('currentTripId', currentTripId);
+    else localStorage.removeItem('currentTripId');
+  }, [currentTripId]);
+
   // Wrapper for setActivities to validate activities before setting
   const setValidatedActivities = (newActivities: GeneratedActivity[]) => {
     const validActivities = Array.isArray(newActivities) ? newActivities.filter(isValidActivity) : [];
@@ -169,6 +180,8 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setHasCompletedOnboarding,
       appMode,
       setAppMode,
+      currentTripId,
+      setCurrentTripId,
     }}>
       {children}
     </TravelContext.Provider>

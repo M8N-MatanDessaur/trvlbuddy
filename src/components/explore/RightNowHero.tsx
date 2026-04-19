@@ -81,7 +81,6 @@ const RightNowHero: React.FC<Props> = ({ onActivityClick }) => {
                 >
                   <CachedImage
                     src={activity.imageUrl}
-                    cacheKey={activity.placeId ? `${activity.placeId}:0` : undefined}
                     alt=""
                     className="w-full h-full object-cover"
                     loading="lazy"
