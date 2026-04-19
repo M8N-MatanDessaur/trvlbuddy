@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Navigation, Loader2, LocateFixed, Mic, Square } from 'lucide-react';
+import { SendHorizontal, MapPin, Navigation, Loader2, LocateFixed, Mic, Square } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { useChat, ChatMessage } from '../contexts/ChatContext';
 import { chatWithTripAssistant, chatWithLocalAssistant, transcribeAudio } from '../services/aiService';
@@ -59,7 +59,7 @@ const ChatPage: React.FC = () => {
         ],
       }]);
     }
-  }, [currentPlan, isLocalMode]);
+  }, [currentPlan, isLocalMode, messages.length, setMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -306,7 +306,9 @@ const ChatPage: React.FC = () => {
               try {
                 const loc = await getCurrentLocation();
                 setUserLocation(loc);
-              } catch {}
+              } catch (err) {
+                console.error('Location fetch failed', err);
+              }
               setLocationLoading(false);
             }}
             className="flex items-center gap-1.5 px-2.5 text-[11px] font-medium transition-all active:scale-95"
@@ -352,7 +354,7 @@ const ChatPage: React.FC = () => {
             className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:opacity-30"
             style={{ background: 'var(--accent)', color: 'white' }}
           >
-            <Send size={18} />
+            <SendHorizontal size={18} />
           </button>
         </div>
       </div>
