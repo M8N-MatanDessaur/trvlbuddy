@@ -27,13 +27,13 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
     [activity?.name, activity?.location, activity?.placeId]
   );
 
-  const { images, uploading, upload } = useActivityMedia(isOpen ? activityKey : null);
+  const { imageUrls, uploading, upload } = useActivityMedia(isOpen ? activityKey : null);
 
   if (!activity) return null;
 
   const CategoryIcon = getCategoryIcon(activity.category);
   const locationQuery = encodeURIComponent(activity.location);
-  const hasImages = images.length > 0;
+  const hasImages = imageUrls.length > 0;
 
   return (
     <AnimatePresence>
@@ -58,7 +58,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
           >
             {hasImages ? (
               <div className="relative" style={{ height: '220px' }}>
-                <ImageCarousel images={images} className="absolute inset-0" eagerCount={2} />
+                <ImageCarousel images={imageUrls} className="absolute inset-0" eagerCount={2} />
                 <div
                   className="absolute inset-0 pointer-events-none"
                   style={{ background: 'linear-gradient(to top, var(--surface-container) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)' }}

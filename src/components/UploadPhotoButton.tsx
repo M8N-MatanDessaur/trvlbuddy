@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Camera, Loader2 } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 
@@ -54,7 +54,7 @@ const UploadPhotoButton: React.FC<Props> = ({
         style={{ ...style, opacity: disabled || uploading ? 0.6 : style?.opacity ?? 1 }}
         aria-label={ariaLabel}
       >
-        {uploading ? <Loader2 size={size} className="animate-spin" /> : <Camera size={size} />}
+        {uploading ? <Loader2 size={size} className="animate-spin" /> : <Plus size={size} />}
       </button>
       <input
         ref={inputRef}

@@ -1,13 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 interface Props {
   images: string[];
   className?: string;
   style?: React.CSSProperties;
   eagerCount?: number;
+  onIndexChange?: (index: number) => void;
 }
 
-const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount = 1 }) => {
+const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount = 1, onIndexChange }) => {
   const [index, setIndex] = useState(0);
   const [loaded, setLoaded] = useState<Set<number>>(new Set());
   const [errored, setErrored] = useState<Set<number>>(new Set());
@@ -20,8 +21,18 @@ const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount =
     setErrored(new Set());
   }, [images]);
 
-  const valid = images.filter((_, i) => !errored.has(i));
+  const valid = useMemo(
+    () => images
+      .map((src, originalIndex) => ({ src, originalIndex }))
+      .filter((entry) => !errored.has(entry.originalIndex)),
+    [images, errored],
+  );
   const count = valid.length;
+
+  useEffect(() => {
+    const active = valid[index];
+    if (active) onIndexChange?.(active.originalIndex);
+  }, [index, valid, onIndexChange]);
 
   const go = (next: number) => {
     if (count === 0) return;
@@ -63,7 +74,7 @@ const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount =
     >
       {images.map((src, i) => {
         if (errored.has(i)) return null;
-        const validIdx = valid.indexOf(src);
+        const validIdx = valid.findIndex((entry) => entry.originalIndex === i);
         const isActive = validIdx === index;
         return (
           <img
@@ -91,9 +102,9 @@ const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount =
 
       {count > 1 && (
         <div className="absolute bottom-3 left-4 flex items-center gap-1.5 z-10">
-          {valid.map((_, i) => (
+          {valid.map((entry, i) => (
             <div
-              key={i}
+              key={entry.originalIndex}
               className="rounded-full transition-all duration-300"
               style={{
                 width: i === index ? '14px' : '5px',
