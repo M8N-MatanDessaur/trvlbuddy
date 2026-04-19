@@ -1,11 +1,13 @@
 import React, { useMemo } from 'react';
-import { X, MapPin, Lightbulb, Navigation, ExternalLink } from 'lucide-react';
+import { X, MapPin, Lightbulb, Navigation, ExternalLink, ChevronUp, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GeneratedActivity } from '../types/TravelData';
 import { getCategoryIcon } from '../utils/categoryIcons';
 import ImageCarousel from './ImageCarousel';
 import UploadPhotoButton from './UploadPhotoButton';
 import { useActivityMedia } from '../hooks/useActivityMedia';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 
 interface Props {
   activity: GeneratedActivity | null;
@@ -27,13 +29,25 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
     [activity?.name, activity?.location, activity?.placeId]
   );
 
-  const { imageUrls, uploading, upload } = useActivityMedia(isOpen ? activityKey : null);
+  const { imageUrls, uploading, upload, vote, setVote } = useActivityMedia(isOpen ? activityKey : null);
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   if (!activity) return null;
 
   const CategoryIcon = getCategoryIcon(activity.category);
   const locationQuery = encodeURIComponent(activity.location);
   const hasImages = imageUrls.length > 0;
+
+  const handleVote = async (target: 1 | -1) => {
+    if (!user) {
+      toast('Sign in to vote', 'info');
+      return;
+    }
+    const next: 0 | 1 | -1 = vote.myVote === target ? 0 : target;
+    const result = await setVote(next);
+    if (!result.ok && result.error) toast(result.error, 'error');
+  };
 
   return (
     <AnimatePresence>
@@ -161,6 +175,58 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
 
             <div className="overflow-y-auto px-5 pb-6" style={{ maxHeight: hasImages ? 'calc(92vh - 300px)' : 'calc(88vh - 140px)' }}>
               <div className="space-y-4">
+                {/* Vote pill (community signal for this activity) */}
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[12px] font-bold uppercase tracking-[0.1em]" style={{ color: 'var(--text-tertiary)' }}>
+                    Worth a stop?
+                  </span>
+                  <div
+                    className="flex items-center"
+                    style={{
+                      height: '38px',
+                      borderRadius: '9999px',
+                      background: 'var(--surface-container-high)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <button
+                      onClick={() => handleVote(-1)}
+                      className="flex items-center gap-1 transition-all active:scale-[0.94]"
+                      style={{
+                        height: '100%',
+                        minHeight: '38px',
+                        minWidth: 0,
+                        padding: '0 14px',
+                        background: vote.myVote === -1 ? 'var(--accent)' : 'transparent',
+                        color: vote.myVote === -1 ? 'white' : 'var(--text-primary)',
+                        border: 'none',
+                      }}
+                      aria-label={vote.myVote === -1 ? 'Remove downvote' : 'Downvote'}
+                    >
+                      <ChevronDown size={16} strokeWidth={2.6} />
+                      <span className="text-[12px] font-extrabold leading-none">{vote.downvotes}</span>
+                    </button>
+                    <span aria-hidden="true" style={{ width: '1px', height: '60%', background: 'var(--outline)' }} />
+                    <button
+                      onClick={() => handleVote(1)}
+                      className="flex items-center gap-1 transition-all active:scale-[0.94]"
+                      style={{
+                        height: '100%',
+                        minHeight: '38px',
+                        minWidth: 0,
+                        padding: '0 14px',
+                        background: vote.myVote === 1 ? 'var(--accent)' : 'transparent',
+                        color: vote.myVote === 1 ? 'white' : 'var(--text-primary)',
+                        border: 'none',
+                      }}
+                      aria-label={vote.myVote === 1 ? 'Remove upvote' : 'Upvote'}
+                    >
+                      <ChevronUp size={16} strokeWidth={2.6} />
+                      <span className="text-[12px] font-extrabold leading-none">{vote.upvotes}</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-3 gap-2.5">
                   <div className="p-3.5 rounded-xl" style={{ background: 'var(--surface-container-high)' }}>
                     <div className="text-[11px] font-semibold mb-1.5" style={{ color: 'var(--text-secondary)' }}>Duration</div>
