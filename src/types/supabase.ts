@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -70,6 +70,94 @@ export type Database = {
           },
         ]
       }
+      activity_image_comments: {
+        Row: {
+          body: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          image_id: string
+          parent_comment_id: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          image_id: string
+          parent_comment_id?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          image_id?: string
+          parent_comment_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_image_comments_image_id_fkey"
+            columns: ["image_id"]
+            isOneToOne: false
+            referencedRelation: "activity_images"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_image_comments_parent_comment_id_fkey"
+            columns: ["parent_comment_id"]
+            isOneToOne: false
+            referencedRelation: "activity_image_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_image_comments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_image_likes: {
+        Row: {
+          created_at: string
+          image_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          image_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          image_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_image_likes_image_id_fkey"
+            columns: ["image_id"]
+            isOneToOne: false
+            referencedRelation: "activity_images"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_image_likes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_images: {
         Row: {
           activity_id: string
@@ -115,90 +203,41 @@ export type Database = {
           },
         ]
       }
-      activity_image_likes: {
+      activity_votes: {
         Row: {
+          activity_id: string
           created_at: string
-          image_id: string
+          updated_at: string
           user_id: string
+          value: number
         }
         Insert: {
+          activity_id: string
           created_at?: string
-          image_id: string
+          updated_at?: string
           user_id: string
+          value: number
         }
         Update: {
+          activity_id?: string
           created_at?: string
-          image_id?: string
+          updated_at?: string
           user_id?: string
+          value?: number
         }
         Relationships: [
           {
-            foreignKeyName: "activity_image_likes_image_id_fkey"
-            columns: ["image_id"]
+            foreignKeyName: "activity_votes_activity_id_fkey"
+            columns: ["activity_id"]
             isOneToOne: false
-            referencedRelation: "activity_images"
+            referencedRelation: "activities"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "activity_image_likes_user_id_fkey"
+            foreignKeyName: "activity_votes_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      activity_image_comments: {
-        Row: {
-          body: string
-          created_at: string
-          deleted_at: string | null
-          id: string
-          image_id: string
-          parent_comment_id: string | null
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          body: string
-          created_at?: string
-          deleted_at?: string | null
-          id?: string
-          image_id: string
-          parent_comment_id?: string | null
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          body?: string
-          created_at?: string
-          deleted_at?: string | null
-          id?: string
-          image_id?: string
-          parent_comment_id?: string | null
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "activity_image_comments_image_id_fkey"
-            columns: ["image_id"]
-            isOneToOne: false
-            referencedRelation: "activity_images"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "activity_image_comments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "activity_image_comments_parent_comment_id_fkey"
-            columns: ["parent_comment_id"]
-            isOneToOne: false
-            referencedRelation: "activity_image_comments"
             referencedColumns: ["id"]
           },
         ]
@@ -528,7 +567,23 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      activity_vote_scores: {
+        Row: {
+          activity_id: string | null
+          downvotes: number | null
+          score: number | null
+          upvotes: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_votes_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       gen_share_token: { Args: never; Returns: string }
@@ -666,3 +721,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

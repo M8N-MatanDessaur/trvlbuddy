@@ -48,14 +48,14 @@ const Header: React.FC<Props> = ({ pages }) => {
       </div>
 
       <button
-        onClick={() => navigate('/settings')}
+        onClick={() => navigate('/profile')}
         className="flex items-center justify-center rounded-full transition-transform active:scale-95"
         style={{
           padding: 0,
           border: '1.5px solid var(--outline)',
           background: 'transparent',
         }}
-        aria-label="Open settings"
+        aria-label="Open profile"
       >
         <Avatar profile={profile} size={30} />
       </button>

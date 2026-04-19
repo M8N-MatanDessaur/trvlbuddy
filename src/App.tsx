@@ -17,6 +17,7 @@ import SignInScreen from './components/SignInScreen';
 import LoadingScreen from './components/LoadingScreen';
 import AuthSplash from './components/AuthSplash';
 import SettingsPage from './components/SettingsPage';
+import ProfilePage from './components/ProfilePage';
 import NewTripLauncher from './components/NewTripLauncher';
 import TripJoinPage from './components/TripJoinPage';
 import { MessageCircle, Home, Compass, Languages, Phone, Radar, Plus } from 'lucide-react';
@@ -61,6 +62,7 @@ const AppContent: React.FC = () => {
   if (!profile.onboarded_at) return <ContributorOnboarding />;
 
   if (location.pathname === '/settings') return <SettingsPage />;
+  if (location.pathname === '/profile' || location.pathname.startsWith('/profile/')) return <ProfilePage />;
 
   // Trip generation / long-running work gets the branded loading screen.
   if (isLoading) return <LoadingScreen />;

@@ -25,6 +25,7 @@ import { interpretNearbyPrompt, NearbyChipSuggestion } from '../../services/aiSe
 import { fetchDynamicChips } from '../../services/nearbyChipsService';
 import { iconFor } from '../../services/nearbyIconRegistry';
 import { useToast } from '../../contexts/ToastContext';
+import { getActivityScoresBySlug } from '../../services/activityMediaService';
 
 const CHIP_SCAN_RADIUS_BY_MODE: Record<TransportMode, number> = {
   foot: 1500,
@@ -340,6 +341,47 @@ const NearbyFeed: React.FC = () => {
     return out;
   }, [places]);
 
+  // Vote-score sort: batch-fetch scores by slug for the loaded places, then
+  // re-rank by (score desc, distance asc). Places with no row in the votes
+  // table fall back to score 0, so unranked items still come back in the
+  // original distance-sorted order.
+  const [scoreBySlug, setScoreBySlug] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (uniquePlaces.length === 0) return;
+    let cancelled = false;
+    const slugs = uniquePlaces.map((p) => `gpid-${p.placeId}`);
+    getActivityScoresBySlug(slugs)
+      .then((rows) => {
+        if (cancelled) return;
+        setScoreBySlug((prev) => {
+          const next = new Map(prev);
+          rows.forEach((value, slug) => next.set(slug, value.score));
+          return next;
+        });
+      })
+      .catch(() => {
+        // Sort fallback to original order is fine -- swallow.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [uniquePlaces]);
+
+  const sortedPlaces = useMemo(() => {
+    if (uniquePlaces.length === 0) return uniquePlaces;
+    const decorated = uniquePlaces.map((p, idx) => ({
+      place: p,
+      idx,
+      score: scoreBySlug.get(`gpid-${p.placeId}`) ?? 0,
+    }));
+    decorated.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (a.place.distance !== b.place.distance) return a.place.distance - b.place.distance;
+      return a.idx - b.idx;
+    });
+    return decorated.map((d) => d.place);
+  }, [uniquePlaces, scoreBySlug]);
+
   return (
     <section className="page" ref={sectionRef}>
       {/* Page header */}
@@ -622,8 +664,8 @@ const NearbyFeed: React.FC = () => {
             </div>
           )}
 
-          {uniquePlaces.map((place, idx) => {
-            const isSentinel = idx === Math.max(0, uniquePlaces.length - PREFETCH_AHEAD);
+          {sortedPlaces.map((place, idx) => {
+            const isSentinel = idx === Math.max(0, sortedPlaces.length - PREFETCH_AHEAD);
             return (
               <React.Fragment key={place.placeId}>
                 <NearbyPost place={place} />
