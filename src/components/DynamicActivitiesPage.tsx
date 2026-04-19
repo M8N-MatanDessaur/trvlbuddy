@@ -4,7 +4,7 @@ import { GeneratedActivity } from '../types/TravelData';
 import DynamicActivityModal from './DynamicActivityModal';
 import PlannerModal from './PlannerModal';
 import RightNowHero from './explore/RightNowHero';
-import HorizontalActivityScroll from './explore/HorizontalActivityScroll';
+import ExploreCardCarousel from './explore/ExploreCardCarousel';
 import LiveEventsSection from './explore/LiveEventsSection';
 import { getCategoryIcon } from '../utils/categoryIcons';
 import { groupActivities, groupActivitiesByContext } from '../utils/groupActivities';
@@ -104,6 +104,19 @@ const DynamicActivitiesPage: React.FC = () => {
       activities: s.activities.filter(a => a.category === activeFilter),
     })).filter(s => s.activities.length > 0);
   }, [sections, locationSections, activeFilter, activeLocation]);
+
+  // Resolve the city/country for the active location filter so social cards
+  // ensure activity rows under the right slug context.
+  const { sectionCityName, sectionCountry } = useMemo(() => {
+    const seg = activeLocation !== 'all'
+      ? currentPlan?.segments?.find((s) => s.city?.id === activeLocation || s.destination.id === activeLocation)
+      : currentPlan?.segments?.[0];
+    const dest = seg?.destination || currentPlan?.destination || currentPlan?.destinations?.[0];
+    return {
+      sectionCityName: seg?.city?.name || dest?.name || null,
+      sectionCountry: dest?.country || null,
+    };
+  }, [activeLocation, currentPlan]);
 
   const handleDiscoverMore = async (dataCategory: string, sectionId: string) => {
     // Use the active location filter to determine which segment to discover more for
@@ -311,10 +324,12 @@ const DynamicActivitiesPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Horizontal scroll cards */}
-              <HorizontalActivityScroll
+              {/* Paged card carousel (one card per swipe) */}
+              <ExploreCardCarousel
                 activities={section.activities}
-                onActivityClick={openActivityModal}
+                cityName={sectionCityName}
+                country={sectionCountry}
+                onOpenDetails={openActivityModal}
               />
             </div>
           );
