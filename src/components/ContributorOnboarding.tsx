@@ -9,6 +9,7 @@ import {
   ArrowRight,
   ArrowLeft,
   Radar,
+  ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTravel } from '../contexts/TravelContext';
@@ -81,6 +82,19 @@ const ContributorOnboarding: React.FC = () => {
           Upload a photo, get <strong>+1 Influence</strong>. It's our way of recognizing the
           travelers who make TrvlBuddy useful for everyone else. Your total lives in the menu
           and grows as you keep sharing.
+        </>
+      ),
+      art: 'share',
+    },
+    {
+      icon: ChevronUp,
+      eyebrow: 'The community',
+      title: 'Vote, comment, follow travelers',
+      body: (
+        <>
+          Upvote the spots worth a stop, downvote the ones to skip — your votes help rank
+          what shows up nearby. Tap a photo to scroll through its comments, or tap a poster's
+          avatar to see what they've explored.
         </>
       ),
       art: 'share',

@@ -403,6 +403,16 @@ export async function getActivityScoresBySlug(
   return out;
 }
 
+export async function isImageLikedByViewer(imageId: string, viewerId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('activity_image_likes')
+    .select('image_id')
+    .eq('image_id', imageId)
+    .eq('user_id', viewerId)
+    .maybeSingle();
+  return !!data;
+}
+
 export async function setActivityImageLiked(params: {
   imageId: string;
   userId: string;
