@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Star, Navigation, Share2, MapPin } from 'lucide-react';
+import { Star, Navigation, Share2, MapPin, MoreHorizontal } from 'lucide-react';
 import CachedImage from '../CachedImage';
 import { NearbyPlace, formatDistance, priceLevelLabel } from '../../services/nearbyService';
 import { fetchDetailedPhotos } from '../../services/placePhotoService';
@@ -16,10 +16,12 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const swipingRef = useRef(false);
   // Only fetch detailed photos (a Place Details call + extra Photo fetches)
-  // after the user actually engages with this card. Most cards in the feed
-  // are scrolled past without interaction, so this cuts the bulk of the
-  // Place Details / Places Photo spend.
+  // after the user explicitly asks for them via the ellipsis button. Most
+  // cards in the feed are scrolled past without interaction, so this cuts
+  // the bulk of the Place Details / Places Photo spend.
   const detailsRequestedRef = useRef(false);
+  const [loadingExtras, setLoadingExtras] = useState(false);
+  const [hasExtras, setHasExtras] = useState(false);
 
   const validImages = images.filter((_, i) => !errorSet.has(i));
   const count = validImages.length;
@@ -27,16 +29,20 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
   const price = priceLevelLabel(place.priceLevel);
   const mapsQuery = encodeURIComponent(`${place.name} ${place.address}`.trim());
 
-  const ensureDetailedPhotos = useCallback(() => {
+  const loadCarousel = useCallback(() => {
     if (detailsRequestedRef.current) return;
     detailsRequestedRef.current = true;
-    fetchDetailedPhotos(place.placeId).then(extras => {
-      if (!extras || extras.length === 0) return;
-      setImages(extras);
-      setLoadedSet(new Set());
-      setErrorSet(new Set());
-      setCurrentIndex(0);
-    });
+    setLoadingExtras(true);
+    fetchDetailedPhotos(place.placeId)
+      .then(extras => {
+        if (!extras || extras.length === 0) return;
+        setImages(extras);
+        setLoadedSet(new Set());
+        setErrorSet(new Set());
+        setCurrentIndex(0);
+        setHasExtras(true);
+      })
+      .finally(() => setLoadingExtras(false));
   }, [place.placeId]);
 
   const goTo = (idx: number) => {
@@ -49,9 +55,6 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     swipingRef.current = false;
-    // First touch on the image area = user wants more; start loading the
-    // rest of the gallery now so it's ready before the swipe completes.
-    ensureDetailedPhotos();
   };
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!touchStartRef.current) return;
@@ -158,6 +161,17 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
             {!loadedSet.has(0) && (
               <div className="absolute inset-0 activity-card-shimmer" style={{ background: 'var(--surface-container-high)' }} />
             )}
+
+            {/* Transparent shimmer overlay while the rest of the gallery is
+                fetching — the cover photo stays visible underneath, with a
+                soft sheen sweeping across to signal "more coming". */}
+            {loadingExtras && (
+              <div
+                className="absolute inset-0 activity-card-shimmer pointer-events-none"
+                style={{ background: 'transparent' }}
+                aria-hidden="true"
+              />
+            )}
           </>
         )}
 
@@ -209,6 +223,17 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
 
         {/* Right side: stacked action buttons */}
         <div className="absolute right-3 bottom-3 z-10 flex flex-col gap-2">
+          {!hasExtras && (
+            <button
+              onClick={loadCarousel}
+              disabled={loadingExtras}
+              className="flex items-center justify-center transition-all active:scale-90"
+              style={{ ...circleButtonStyle(), opacity: loadingExtras ? 0.6 : 1 }}
+              aria-label="Load more photos"
+            >
+              <MoreHorizontal size={18} />
+            </button>
+          )}
           <a
             href={`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`}
             target="_blank"
