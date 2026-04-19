@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, MapPin, Lightbulb, Navigation, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { X, MapPin, Lightbulb, Navigation, ExternalLink, MoreHorizontal } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GeneratedActivity } from '../types/TravelData';
 import { getCategoryIcon } from '../utils/categoryIcons';
 import CachedImage from './CachedImage';
 import { fetchDetailedPhotos } from '../services/placePhotoService';
-import { prefetchImages } from '../services/imageCacheService';
 
 interface Props {
   activity: GeneratedActivity | null;
@@ -14,7 +13,7 @@ interface Props {
 }
 
 /** Swipeable image carousel for the modal hero */
-const ImageCarousel: React.FC<{ images: string[] }> = ({ images }) => {
+const ImageCarousel: React.FC<{ images: string[]; placeId?: string; loading?: boolean }> = ({ images, placeId, loading }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loadedSet, setLoadedSet] = useState<Set<number>>(new Set());
   const [errorSet, setErrorSet] = useState<Set<number>>(new Set());
@@ -82,6 +81,7 @@ const ImageCarousel: React.FC<{ images: string[] }> = ({ images }) => {
           <CachedImage
             key={i}
             src={src}
+            cacheKey={placeId ? `${placeId}:${i}` : undefined}
             alt=""
             className="absolute inset-0 w-full h-full object-cover"
             style={{
@@ -98,6 +98,17 @@ const ImageCarousel: React.FC<{ images: string[] }> = ({ images }) => {
       {/* Shimmer while first image loads */}
       {!loadedSet.has(0) && (
         <div className="absolute inset-0 activity-card-shimmer" style={{ background: 'var(--surface-container-high)' }} />
+      )}
+
+      {/* Transparent shimmer overlay while detailed photos are fetching —
+          cover image stays visible underneath, with a soft sheen passing
+          across to signal the rest of the gallery is on its way. */}
+      {loading && (
+        <div
+          className="absolute inset-0 activity-card-shimmer pointer-events-none"
+          style={{ background: 'transparent' }}
+          aria-hidden="true"
+        />
       )}
 
       {/* Dot indicators - bottom right */}
@@ -121,39 +132,45 @@ const ImageCarousel: React.FC<{ images: string[] }> = ({ images }) => {
 };
 
 const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) => {
+  // Modal opens with the cover photo only. The full carousel is loaded on
+  // explicit ⋯ tap, so opening a modal costs nothing beyond the cover that
+  // was already on the card. Same recipe as NearbyPost.
   const [detailedPhotos, setDetailedPhotos] = useState<string[] | null>(null);
-  const lastFetchedRef = useRef<string | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const requestedRef = useRef<string | null>(null);
 
-  // Fetch full photo set from Place Details when modal opens
   useEffect(() => {
-    if (!isOpen || !activity?.placeId) {
+    if (!isOpen) {
       setDetailedPhotos(null);
-      lastFetchedRef.current = null;
-      return;
+      setLoadingDetails(false);
+      requestedRef.current = null;
     }
+  }, [isOpen]);
 
-    // Only fetch once per activity
-    if (lastFetchedRef.current === activity.placeId) return;
-    lastFetchedRef.current = activity.placeId;
-
-    fetchDetailedPhotos(activity.placeId).then(photos => {
-      if (photos && photos.length > 1) {
-        setDetailedPhotos(photos);
-        // Prefetch all into IndexedDB
-        prefetchImages(photos, 2);
-      }
-    });
-  }, [isOpen, activity?.placeId]);
+  const loadCarousel = useCallback(() => {
+    if (!activity?.placeId) return;
+    if (requestedRef.current === activity.placeId) return;
+    requestedRef.current = activity.placeId;
+    setLoadingDetails(true);
+    fetchDetailedPhotos(activity.placeId)
+      .then(photos => {
+        if (photos && photos.length > 1) setDetailedPhotos(photos);
+      })
+      .finally(() => setLoadingDetails(false));
+  }, [activity?.placeId]);
 
   if (!activity) return null;
 
   const CategoryIcon = getCategoryIcon(activity.category);
   const locationQuery = encodeURIComponent(activity.location);
 
-  // Use detailed photos if available, fall back to what we have
+  // Cover-only by default. detailedPhotos only populates after the user
+  // taps ⋯ (or if upstream already provided multiple imageUrls).
   const carouselImages = detailedPhotos
     || (activity.imageUrls?.length ? activity.imageUrls : (activity.imageUrl ? [activity.imageUrl] : []));
   const hasImages = carouselImages.length > 0;
+  const hasDetailedPhotos = (detailedPhotos?.length ?? 0) > 1 || (activity.imageUrls?.length ?? 0) > 1;
+  const showLoadCarouselButton = hasImages && !hasDetailedPhotos && Boolean(activity.placeId);
 
   return (
     <AnimatePresence>
@@ -179,7 +196,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
             {/* Hero carousel or plain header */}
             {hasImages ? (
               <div className="relative" style={{ height: '220px' }}>
-                <ImageCarousel images={carouselImages} />
+                <ImageCarousel images={carouselImages} placeId={activity.placeId} loading={loadingDetails} />
                 <div
                   className="absolute inset-0 pointer-events-none"
                   style={{ background: 'linear-gradient(to top, var(--surface-container) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)' }}
@@ -206,6 +223,29 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                 >
                   <X size={18} />
                 </button>
+
+                {/* ⋯ button to load the rest of the gallery on demand. Hides
+                    itself once detailed photos are in or while loading. */}
+                {showLoadCarouselButton && (
+                  <button
+                    onClick={loadCarousel}
+                    disabled={loadingDetails}
+                    className="absolute top-3 left-4 flex items-center justify-center z-10 transition-all active:scale-90"
+                    style={{
+                      background: 'rgba(0,0,0,0.3)',
+                      backdropFilter: 'blur(8px)',
+                      WebkitBackdropFilter: 'blur(8px)',
+                      color: 'white',
+                      height: '36px',
+                      aspectRatio: '1',
+                      borderRadius: '50%',
+                      opacity: loadingDetails ? 0.6 : 1,
+                    }}
+                    aria-label="Load more photos"
+                  >
+                    <MoreHorizontal size={18} />
+                  </button>
+                )}
 
                 {/* Category badge */}
                 <div className="absolute bottom-7 left-5 flex items-center gap-3 z-10">
