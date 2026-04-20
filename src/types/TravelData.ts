@@ -86,6 +86,8 @@ export interface GeneratedActivity {
   imageUrl?: string; // First Supabase-hosted photo (primary, used on cards)
   imageUrls?: string[]; // All Supabase-hosted photos (used in carousel)
   placeId?: string; // Google Place ID (used for directions / metadata lookups)
+  coordinates?: { lat: number; lng: number }; // Real-world coords from Google Places enrichment
+  formattedAddress?: string; // Real-world address from Google Places (more accurate than AI's location string)
   dbActivityId?: string; // Supabase activities.id once the row has been ensured
 }
 

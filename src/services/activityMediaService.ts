@@ -70,7 +70,19 @@ export async function ensureActivity(key: ActivityKey, createdBy: string | null)
     .eq('slug', slug)
     .maybeSingle();
 
-  if (existing) return existing;
+  if (existing) {
+    // Backfill lat/lng/place_id on rows that pre-date enrichment so the Map
+    // tab gets coords for trips planned before this column existed.
+    const updates: Record<string, unknown> = {};
+    if (existing.lat == null && key.lat != null) updates.lat = key.lat;
+    if (existing.lng == null && key.lng != null) updates.lng = key.lng;
+    if (!existing.google_place_id && key.googlePlaceId) updates.google_place_id = key.googlePlaceId;
+    if (Object.keys(updates).length > 0) {
+      await supabase.from('activities').update(updates).eq('id', existing.id);
+      return { ...existing, ...updates } as Activity;
+    }
+    return existing;
+  }
 
   const insertRow = {
     slug,
