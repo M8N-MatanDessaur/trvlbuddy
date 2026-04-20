@@ -403,6 +403,30 @@ export async function getActivityScoresBySlug(
   return out;
 }
 
+export async function deleteActivityImage(params: {
+  imageId: string;
+  userId: string;
+  storagePath: string;
+}): Promise<{ error: string | null }> {
+  const { imageId, userId, storagePath } = params;
+
+  const { error } = await supabase
+    .from('activity_images')
+    .delete()
+    .eq('id', imageId)
+    .eq('uploaded_by', userId);
+  if (error) return { error: error.message };
+
+  // Storage object cleanup is best-effort; the row delete is the source of truth.
+  try {
+    await supabase.storage.from('activity-images').remove([storagePath]);
+  } catch (storageErr) {
+    console.warn('failed to remove storage object', storageErr);
+  }
+
+  return { error: null };
+}
+
 export async function isImageLikedByViewer(imageId: string, viewerId: string): Promise<boolean> {
   const { data } = await supabase
     .from('activity_image_likes')
