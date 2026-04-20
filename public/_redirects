@@ -1,2 +1,4 @@
+/api/placesv1/searchNearby  https://places.googleapis.com/v1/places:searchNearby  200!
+/api/placesv1/searchText    https://places.googleapis.com/v1/places:searchText    200!
 /api/places/*  https://maps.googleapis.com/maps/api/place/:splat  200!
 /*             /index.html                                        200
