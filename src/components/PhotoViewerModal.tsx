@@ -146,6 +146,10 @@ const PhotoViewerModal: React.FC<Props> = ({
     swiping.current = false;
   };
 
+  // Double-tap on the image likes it (matches social-app convention).
+  // Declared here so the hook order stays stable across renders.
+  const lastTapRef = useRef(0);
+
   if (!photo) return null;
 
   const visibleComments = comments.filter((c) => !c.deleted_at);
@@ -177,9 +181,6 @@ const PhotoViewerModal: React.FC<Props> = ({
     onLikeChange?.(photo.id, next ? 1 : -1, next);
   };
 
-  // Double-tap on the image likes (or unlikes) it. Uses a 280ms window between
-  // taps. Triggers a transient heart burst overlay for feedback.
-  const lastTapRef = useRef(0);
   const handleImageTap = () => {
     const now = Date.now();
     if (now - lastTapRef.current < 280) {
