@@ -42,7 +42,10 @@ export async function findPlaceFromText(
   }
 
   try {
-    const url = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?${params.toString()}`;
+    // Route through the Netlify proxy /api/places/* (defined in netlify.toml)
+    // so the call doesn't hit Google directly from the browser -- Google's
+    // legacy Places API doesn't send CORS headers, so direct calls fail.
+    const url = `/api/places/findplacefromtext/json?${params.toString()}`;
     const res = await fetch(url);
     if (!res.ok) {
       console.warn('[places] findPlace HTTP', res.status, 'for', query);
@@ -98,7 +101,7 @@ export async function searchPlaceByText(
   }
 
   try {
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?${params.toString()}`;
+    const url = `/api/places/textsearch/json?${params.toString()}`;
     const res = await fetch(url);
     if (!res.ok) {
       console.warn('[places] textSearch HTTP', res.status, 'for', query);
