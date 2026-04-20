@@ -176,6 +176,7 @@ html[data-theme='mono-dark'] {
   --on-accent: #000000;
   --on-accent-container: #FFFFFF;
   --primary: #FFFFFF;
+  --on-primary: #000000;
   --primary-container: #232323;
   --on-primary-container: #FFFFFF;
   --text-primary: #F2F2F2;
@@ -197,6 +198,7 @@ html[data-theme='forest'] {
   --on-accent: #052E16;
   --on-accent-container: #BBF7D0;
   --primary: #DCFCE7;
+  --on-primary: #052E16;
   --primary-container: #1A2D22;
   --on-primary-container: #BBF7D0;
   --text-primary: #E8F5E9;
@@ -218,6 +220,7 @@ html[data-theme='ocean'] {
   --on-accent: #082F49;
   --on-accent-container: #BAE6FD;
   --primary: #E0F2FE;
+  --on-primary: #082F49;
   --primary-container: #182F47;
   --on-primary-container: #BAE6FD;
   --text-primary: #E6F1FB;
@@ -239,6 +242,7 @@ html[data-theme='midnight'] {
   --on-accent: #1E1B4B;
   --on-accent-container: #DDD6FE;
   --primary: #EDE9FE;
+  --on-primary: #1E1B4B;
   --primary-container: #1F1F4D;
   --on-primary-container: #DDD6FE;
   --text-primary: #ECEAFB;
@@ -302,6 +306,7 @@ html[data-theme='crimson'] {
   --on-accent: #4C0519;
   --on-accent-container: #FECDD3;
   --primary: #FFE4E6;
+  --on-primary: #4C0519;
   --primary-container: #381A24;
   --on-primary-container: #FECDD3;
   --text-primary: #FCE8EC;

@@ -101,7 +101,7 @@ const SignInScreen: React.FC = () => {
               className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center"
               style={{
                 background: 'var(--accent)',
-                color: 'white',
+                color: 'var(--on-accent)',
                 boxShadow: '0 10px 24px -8px color-mix(in srgb, var(--accent) 70%, transparent)',
               }}
             >
