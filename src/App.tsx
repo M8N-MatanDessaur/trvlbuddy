@@ -34,8 +34,8 @@ const MapPage = lazy(() => import('./components/MapPage'));
 const tripPages: PageDef[] = [
   { path: '/chat', component: ChatPage, icon: MessageCircle, label: 'AI' },
   { path: '/', component: TripPage, icon: Home, label: 'Trip' },
-  { path: '/map', component: MapPage, icon: MapIcon, label: 'Map' },
   { path: '/explore', component: ExplorePage, icon: Compass, label: 'Explore' },
+  { path: '/map', component: MapPage, icon: MapIcon, label: 'Map' },
   { path: '/language', component: LanguagePage, icon: Languages, label: 'Language' },
   { path: '/utilities', component: UtilitiesPage, icon: Wrench, label: 'Tools' },
   { path: '/emergency', component: EmergencyPage, icon: Phone, label: 'SOS' },
