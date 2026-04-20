@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import maplibregl, { Map as MlMap, Marker as MlMarker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Loader2, LocateFixed, MapPin } from 'lucide-react';
+import { Bed, Loader2, LocateFixed, MapPin } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Accommodation, GeneratedActivity, TripSegment } from '../types/TravelData';
@@ -9,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { computeSlug } from '../services/activityMediaService';
 import { geocodeMany } from '../services/geocodingService';
 import { getCachedLocation, getCurrentLocation, type UserLocation } from '../utils/geolocation';
+import { getCategoryIcon } from '../utils/categoryIcons';
 import DynamicActivityModal from './DynamicActivityModal';
 
 interface MapPoint {
@@ -16,21 +18,45 @@ interface MapPoint {
   kind: 'hotel' | 'activity';
   name: string;
   subtitle?: string | null;
+  category?: string;
   lat: number;
   lng: number;
   activity?: GeneratedActivity;
 }
 
-// Carto vector styles -- fully designed Mapbox-style maps, free for non-commercial use,
-// no API key. positron = soft light, dark-matter = subtle dark. Both blend with our app.
+// Carto vector styles -- free, no API key, designed look that flips with theme.
 const STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
 const STYLE_DARK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
-function makeHotelMarkerEl(): HTMLDivElement {
+// Zoom threshold past which the marker labels appear. ~15 = neighborhood
+// scale; higher numbers mean closer (street-level).
+const LABEL_ZOOM = 15;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function categoryIconSvg(category: string): string {
+  const Icon = getCategoryIcon(category);
+  return renderToStaticMarkup(
+    <Icon size={14} strokeWidth={2.4} />
+  );
+}
+
+function bedIconSvg(): string {
+  return renderToStaticMarkup(<Bed size={14} strokeWidth={2.6} />);
+}
+
+function makeHotelMarkerEl(point: MapPoint): HTMLDivElement {
   const el = document.createElement('div');
   el.className = 'trvl-marker trvl-marker--hotel';
   el.innerHTML = `
-    <div style="position: relative; width: 36px; height: 36px;">
+    <div class="trvl-marker__pin trvl-marker__pin--hotel" style="position: relative; width: 36px; height: 36px;">
       <div style="
         position: absolute; top: 0; left: 0;
         width: 36px; height: 36px;
@@ -45,36 +71,92 @@ function makeHotelMarkerEl(): HTMLDivElement {
         width: 22px; height: 22px;
         display: flex; align-items: center; justify-content: center;
         color: var(--on-accent);
-      ">
-        <svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'>
-          <path d='M2 4v16'/>
-          <path d='M2 8h18a2 2 0 0 1 2 2v10'/>
-          <path d='M2 17h20'/>
-          <path d='M6 8v9'/>
-        </svg>
+      ">${bedIconSvg()}</div>
+    </div>
+    <div class="trvl-marker__label" style="
+      position: absolute;
+      top: 38px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 220px;
+      padding: 6px 10px;
+      border-radius: 12px;
+      background: var(--surface-container);
+      border: 0.5px solid var(--outline);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+      font-family: inherit;
+      pointer-events: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    ">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <div style="
+          width:18px; height:18px; border-radius:50%;
+          background:var(--accent); color:var(--on-accent);
+          display:flex; align-items:center; justify-content:center; flex-shrink:0;
+        ">${bedIconSvg()}</div>
+        <div style="font-weight:800; font-size:11.5px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis;">
+          ${escapeHtml(point.name)}
+        </div>
       </div>
+      ${point.subtitle ? `<div style="font-size:10.5px; color:var(--text-secondary); margin-top:2px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(point.subtitle)}</div>` : ''}
     </div>`;
   return el;
 }
 
-function makeActivityMarkerEl(): HTMLDivElement {
+function makeActivityMarkerEl(point: MapPoint): HTMLDivElement {
   const el = document.createElement('div');
   el.className = 'trvl-marker trvl-marker--activity';
   el.style.cursor = 'pointer';
+  const iconSvg = point.category ? categoryIconSvg(point.category) : '';
   el.innerHTML = `
-    <div style="
-      width: 22px; height: 22px;
+    <div class="trvl-marker__pin trvl-marker__pin--activity" style="
+      width: 30px; height: 30px;
       border-radius: 50%;
       background: var(--surface-container);
-      border: 3px solid var(--accent);
-      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      color: var(--accent);
+      border: 2.5px solid var(--accent);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      display: flex; align-items: center; justify-content: center;
       transition: transform 0.15s ease;
-    "></div>`;
+    ">${iconSvg}</div>
+    <div class="trvl-marker__label" style="
+      position: absolute;
+      top: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 220px;
+      padding: 6px 10px;
+      border-radius: 12px;
+      background: var(--surface-container);
+      border: 0.5px solid var(--outline);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+      font-family: inherit;
+      pointer-events: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    ">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <div style="
+          width:18px; height:18px; border-radius:50%;
+          background:var(--accent-container); color:var(--accent);
+          display:flex; align-items:center; justify-content:center; flex-shrink:0;
+        ">${iconSvg}</div>
+        <div style="font-weight:800; font-size:11.5px; color:var(--text-primary); overflow:hidden; text-overflow:ellipsis;">
+          ${escapeHtml(point.name)}
+        </div>
+      </div>
+      ${point.subtitle ? `<div style="font-size:10.5px; color:var(--text-secondary); margin-top:2px; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(point.subtitle)}</div>` : ''}
+    </div>`;
   el.addEventListener('mouseenter', () => {
-    (el.firstElementChild as HTMLElement).style.transform = 'scale(1.15)';
+    const pin = el.querySelector('.trvl-marker__pin') as HTMLElement | null;
+    if (pin) pin.style.transform = 'scale(1.12)';
   });
   el.addEventListener('mouseleave', () => {
-    (el.firstElementChild as HTMLElement).style.transform = 'scale(1)';
+    const pin = el.querySelector('.trvl-marker__pin') as HTMLElement | null;
+    if (pin) pin.style.transform = 'scale(1)';
   });
   return el;
 }
@@ -116,10 +198,11 @@ const MapPage: React.FC = () => {
   const [initialLoading, setInitialLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(getCachedLocation());
 
-  const { seedHotels, activityCandidates, fallbackCity } = useMemo(() => {
+  const { seedHotels, hotelGeocodeQueue, activityCandidates, fallbackCity } = useMemo(() => {
     if (!currentPlan) {
       return {
         seedHotels: [] as MapPoint[],
+        hotelGeocodeQueue: [] as Array<{ accommodation: Accommodation; query: string }>,
         activityCandidates: [] as Array<{ activity: GeneratedActivity; key: string; query: string }>,
         fallbackCity: null as string | null,
       };
@@ -131,23 +214,31 @@ const MapPage: React.FC = () => {
       ...(currentPlan.accommodations || []),
     ];
 
-    const hotels: MapPoint[] = accs
-      .filter((acc) => acc.coordinates)
-      .map((acc) => ({
-        id: `hotel-${acc.id}`,
-        kind: 'hotel',
-        name: acc.name || 'Accommodation',
-        subtitle: acc.address || null,
-        lat: acc.coordinates!.lat,
-        lng: acc.coordinates!.lng,
-      }));
-
+    const seedH: MapPoint[] = [];
+    const hotelQueue: Array<{ accommodation: Accommodation; query: string }> = [];
     const city = segments[0]?.city?.name || segments[0]?.destination?.name
       || currentPlan.destination?.name || currentPlan.destinations?.[0]?.name || null;
     const country = segments[0]?.destination?.country
       || currentPlan.destination?.country || currentPlan.destinations?.[0]?.country || '';
 
-    // Dedupe activities by slug -- the same place can show up in two AI sections.
+    accs.forEach((acc) => {
+      if (acc.coordinates) {
+        seedH.push({
+          id: `hotel-${acc.id}`,
+          kind: 'hotel',
+          name: acc.name || 'Accommodation',
+          subtitle: acc.address || null,
+          lat: acc.coordinates.lat,
+          lng: acc.coordinates.lng,
+        });
+      } else if (acc.name) {
+        // Hotel without coords -- queue for Photon geocoding so the pin appears.
+        const parts = [acc.name, acc.address, city, country].filter(Boolean) as string[];
+        hotelQueue.push({ accommodation: acc, query: parts.join(', ') });
+      }
+    });
+
+    // Dedupe activities by slug.
     const seenSlugs = new Set<string>();
     const candidates: Array<{ activity: GeneratedActivity; key: string; query: string }> = [];
     activities.forEach((activity) => {
@@ -166,7 +257,12 @@ const MapPage: React.FC = () => {
       candidates.push({ activity, key: slug, query });
     });
 
-    return { seedHotels: hotels, activityCandidates: candidates, fallbackCity: city };
+    return {
+      seedHotels: seedH,
+      hotelGeocodeQueue: hotelQueue,
+      activityCandidates: candidates,
+      fallbackCity: city,
+    };
   }, [currentPlan, activities]);
 
   // Init MapLibre once.
@@ -183,6 +279,16 @@ const MapPage: React.FC = () => {
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     mapRef.current = map;
 
+    // Toggle a class on the container based on zoom so CSS can show labels.
+    const updateZoomClass = () => {
+      const root = containerRef.current;
+      if (!root) return;
+      if (map.getZoom() >= LABEL_ZOOM) root.classList.add('trvl-map--zoomed-in');
+      else root.classList.remove('trvl-map--zoomed-in');
+    };
+    map.on('zoom', updateZoomClass);
+    map.on('load', updateZoomClass);
+
     return () => {
       map.remove();
       mapRef.current = null;
@@ -190,25 +296,24 @@ const MapPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Swap style when theme flips. setStyle wipes markers, so re-add after the
-  // style finishes loading.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     map.setStyle(isDark ? STYLE_DARK : STYLE_LIGHT);
-    // markers are tied to map (not style) -- they survive setStyle, no action needed
   }, [isDark]);
 
-  // Resolve activity coords -- supabase first (fast, shared), Photon for misses
-  // (parallel, fast). Persists found coords back to the activities row.
+  // Resolve activity coords and missing hotel coords.
   useEffect(() => {
     let cancelled = false;
     setPoints(seedHotels);
     setPendingCount(0);
     setInitialLoading(true);
 
-    if (activityCandidates.length === 0 && seedHotels.length === 0 && fallbackCity) {
-      // Empty trip -- just center on the destination.
+    const nothingToDo = activityCandidates.length === 0
+      && hotelGeocodeQueue.length === 0
+      && seedHotels.length === 0;
+
+    if (nothingToDo && fallbackCity) {
       import('../services/geocodingService').then(({ geocode }) => geocode(fallbackCity)).then((res) => {
         if (cancelled) return;
         setInitialLoading(false);
@@ -218,12 +323,13 @@ const MapPage: React.FC = () => {
       return () => { cancelled = true; };
     }
 
-    if (activityCandidates.length === 0) {
+    if (activityCandidates.length === 0 && hotelGeocodeQueue.length === 0) {
       setInitialLoading(false);
       return () => { cancelled = true; };
     }
 
     (async () => {
+      // Activity coords from supabase first.
       const slugs = activityCandidates.map((c) => c.key).filter(Boolean);
       const { data: rows } = slugs.length > 0
         ? await supabase.from('activities').select('slug, lat, lng').in('slug', slugs)
@@ -236,18 +342,19 @@ const MapPage: React.FC = () => {
         }
       });
 
-      const seeded: MapPoint[] = [];
+      const seededActivities: MapPoint[] = [];
       const missesQueries: string[] = [];
       const missesMeta: Array<{ activity: GeneratedActivity; key: string; index: number }> = [];
 
       activityCandidates.forEach(({ activity, key, query }, i) => {
         const hit = known.get(key);
         if (hit) {
-          seeded.push({
+          seededActivities.push({
             id: `act-${i}`,
             kind: 'activity',
             name: activity.name,
-            subtitle: activity.location || null,
+            subtitle: activity.formattedAddress || activity.location || null,
+            category: activity.category,
             lat: hit.lat,
             lng: hit.lng,
             activity,
@@ -261,15 +368,19 @@ const MapPage: React.FC = () => {
       if (cancelled) return;
       setPoints((prev) => {
         const merged = new Map(prev.map((p) => [p.id, p]));
-        seeded.forEach((p) => merged.set(p.id, p));
+        seededActivities.forEach((p) => merged.set(p.id, p));
         return Array.from(merged.values());
       });
-      setPendingCount(missesQueries.length);
+
+      const totalPending = missesQueries.length + hotelGeocodeQueue.length;
+      setPendingCount(totalPending);
       setInitialLoading(false);
 
-      if (missesQueries.length === 0) return;
+      if (totalPending === 0) return;
 
-      const results = await geocodeMany(missesQueries, {
+      // Geocode misses (activities + hotels) in one parallel batch.
+      const allQueries = [...missesQueries, ...hotelGeocodeQueue.map((h) => h.query)];
+      const results = await geocodeMany(allQueries, {
         concurrency: 6,
         onProgress: (resolved, total) => {
           if (cancelled) return;
@@ -281,19 +392,32 @@ const MapPage: React.FC = () => {
       const resolved: MapPoint[] = [];
       results.forEach((res, idx) => {
         if (!res) return;
-        const { activity, key, index } = missesMeta[idx];
-        resolved.push({
-          id: `act-${index}`,
-          kind: 'activity',
-          name: activity.name,
-          subtitle: activity.location || null,
-          lat: res.lat,
-          lng: res.lng,
-          activity,
-        });
-        if (key) {
-          // Best-effort persist to supabase (other devices skip the geocode).
-          supabase.from('activities').update({ lat: res.lat, lng: res.lng }).eq('slug', key).then(() => {});
+        if (idx < missesMeta.length) {
+          const { activity, key, index } = missesMeta[idx];
+          resolved.push({
+            id: `act-${index}`,
+            kind: 'activity',
+            name: activity.name,
+            subtitle: activity.formattedAddress || activity.location || null,
+            category: activity.category,
+            lat: res.lat,
+            lng: res.lng,
+            activity,
+          });
+          if (key) {
+            supabase.from('activities').update({ lat: res.lat, lng: res.lng }).eq('slug', key).then(() => {});
+          }
+        } else {
+          const hotelIdx = idx - missesMeta.length;
+          const { accommodation } = hotelGeocodeQueue[hotelIdx];
+          resolved.push({
+            id: `hotel-${accommodation.id}`,
+            kind: 'hotel',
+            name: accommodation.name || 'Accommodation',
+            subtitle: accommodation.address || null,
+            lat: res.lat,
+            lng: res.lng,
+          });
         }
       });
 
@@ -306,7 +430,7 @@ const MapPage: React.FC = () => {
     })();
 
     return () => { cancelled = true; };
-  }, [seedHotels, activityCandidates, fallbackCity]);
+  }, [seedHotels, hotelGeocodeQueue, activityCandidates, fallbackCity]);
 
   // Re-render markers + auto-fit on point change.
   useEffect(() => {
@@ -319,13 +443,14 @@ const MapPage: React.FC = () => {
     if (points.length === 0) return;
 
     points.forEach((point) => {
-      const el = point.kind === 'hotel' ? makeHotelMarkerEl() : makeActivityMarkerEl();
+      const el = point.kind === 'hotel' ? makeHotelMarkerEl(point) : makeActivityMarkerEl(point);
       const offset: [number, number] = point.kind === 'hotel' ? [0, -16] : [0, 0];
       const marker = new maplibregl.Marker({ element: el, offset, anchor: 'center' })
         .setLngLat([point.lng, point.lat])
         .addTo(map);
       if (point.activity) {
-        el.addEventListener('click', () => setOpenActivity(point.activity ?? null));
+        const pin = el.querySelector('.trvl-marker__pin') as HTMLElement | null;
+        (pin || el).addEventListener('click', () => setOpenActivity(point.activity ?? null));
       }
       markersRef.current.push(marker);
     });
@@ -377,7 +502,7 @@ const MapPage: React.FC = () => {
     );
   }
 
-  const totalExpected = activityCandidates.length + seedHotels.length;
+  const totalExpected = activityCandidates.length + seedHotels.length + hotelGeocodeQueue.length;
   const isStillLoading = initialLoading || pendingCount > 0;
 
   return (
