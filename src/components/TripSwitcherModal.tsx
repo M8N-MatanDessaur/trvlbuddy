@@ -92,7 +92,7 @@ const TripSwitcherModal: React.FC<Props> = ({
               >
                 <div
                   className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'var(--accent)', color: 'white' }}
+                  style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
                 >
                   <Radar size={18} />
                 </div>

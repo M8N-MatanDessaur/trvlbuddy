@@ -240,7 +240,7 @@ const ImageCommentsSheet: React.FC<Props> = ({
                     onClick={() => saveEdit(comment)}
                     disabled={busyCommentId === comment.id || !editingBody.trim()}
                     className="h-8 px-2.5 rounded-lg flex items-center gap-1 text-[12px] font-bold disabled:opacity-50"
-                    style={{ background: 'var(--accent)', color: 'white' }}
+                    style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
                   >
                     {busyCommentId === comment.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                     Save
@@ -407,7 +407,7 @@ const ImageCommentsSheet: React.FC<Props> = ({
               onClick={submit}
               disabled={submitting || body.trim().length === 0}
               className="w-10 h-10 rounded-lg flex items-center justify-center disabled:opacity-50"
-              style={{ background: 'var(--accent)', color: 'white' }}
+              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
               aria-label={replyingTo ? 'Post reply' : 'Post comment'}
             >
               {submitting ? <Loader2 size={17} className="animate-spin" /> : <SendHorizontal size={18} />}

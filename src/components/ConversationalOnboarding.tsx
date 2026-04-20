@@ -236,7 +236,7 @@ const ConversationalOnboarding: React.FC = () => {
       <div className="px-5 pt-12 pb-3 flex-shrink-0">
         <div className="flex items-center justify-between gap-3 mb-1">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent)', color: 'white' }}>
+            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
               <Plane size={15} />
             </div>
             <span className="text-base font-extrabold tracking-tight truncate">TrvlBuddy</span>
@@ -304,7 +304,7 @@ const ConversationalOnboarding: React.FC = () => {
           <button
             onClick={handleCreateTrip}
             className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-[15px] font-bold transition-all active:scale-[0.98]"
-            style={{ background: 'var(--accent)', color: 'white' }}
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
           >
             <Sparkles size={18} />
             Create My Trip
@@ -339,7 +339,7 @@ const ConversationalOnboarding: React.FC = () => {
             onClick={() => send()}
             disabled={isThinking || isGenerating || !input.trim()}
             className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:opacity-30"
-            style={{ background: 'var(--accent)', color: 'white' }}
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
           >
             <SendHorizontal size={18} />
           </button>

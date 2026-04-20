@@ -44,7 +44,7 @@ const ContextualPhraseBanner: React.FC<Props> = ({ langCode, onSpeak, onShowToLo
       <div className="flex items-center gap-2">
         <div
           className="w-7 h-7 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)', color: 'white' }}
+          style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
         >
           <Sparkles size={12} />
         </div>

@@ -438,7 +438,7 @@ const PhotoViewerModal: React.FC<Props> = ({
               padding: '0 14px',
               borderRadius: '9999px',
               background: liked ? 'var(--accent)' : 'var(--surface-container-high)',
-              color: liked ? 'white' : 'var(--text-primary)',
+              color: liked ? 'var(--on-accent)' : 'var(--text-primary)',
               border: 'none',
             }}
             aria-label={liked ? 'Unlike photo' : 'Like photo'}
@@ -614,7 +614,7 @@ const PhotoViewerModal: React.FC<Props> = ({
               onClick={submitComment}
               disabled={submitting || !body.trim()}
               className="w-9 h-9 rounded-full flex items-center justify-center disabled:opacity-50 flex-shrink-0"
-              style={{ background: 'var(--accent)', color: 'white' }}
+              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
               aria-label="Post comment"
             >
               {submitting ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={16} />}

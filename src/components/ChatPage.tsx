@@ -352,7 +352,7 @@ const ChatPage: React.FC = () => {
             onClick={() => sendMessage()}
             disabled={isLoading || isRecording || isTranscribing || !inputValue.trim()}
             className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:opacity-30"
-            style={{ background: 'var(--accent)', color: 'white' }}
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
           >
             <SendHorizontal size={18} />
           </button>

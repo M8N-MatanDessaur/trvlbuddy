@@ -276,7 +276,7 @@ const NewTripLauncher: React.FC = () => {
               onClick={handleJoin}
               disabled={joining || !code.trim()}
               className="mt-4 w-full py-3.5 rounded-2xl text-[14.5px] font-bold transition active:scale-[0.985] disabled:opacity-60 flex items-center justify-center gap-2"
-              style={{ background: 'var(--accent)', color: 'white' }}
+              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
             >
               {joining && <Loader2 size={16} className="animate-spin" />}
               {joining ? 'Joining...' : 'Join trip'}

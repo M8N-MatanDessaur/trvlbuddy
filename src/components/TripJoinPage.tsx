@@ -110,7 +110,7 @@ const TripJoinPage: React.FC<Props> = ({ token }) => {
             <button
               onClick={() => navigate('/', { replace: true })}
               className="px-5 py-3 rounded-2xl text-[13px] font-bold"
-              style={{ background: 'var(--accent)', color: 'white' }}
+              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
             >
               Go to app
             </button>
@@ -128,7 +128,7 @@ const TripJoinPage: React.FC<Props> = ({ token }) => {
                 setStatus('joining');
               }}
               className="px-5 py-3 rounded-2xl text-[13px] font-bold"
-              style={{ background: 'var(--accent)', color: 'white' }}
+              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
             >
               Try again
             </button>

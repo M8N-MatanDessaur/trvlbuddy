@@ -265,7 +265,7 @@ const DynamicDashboard: React.FC = () => {
           className="flex-1 flex items-center gap-3 p-3.5 rounded-2xl text-left transition-transform active:scale-[0.98]"
           style={{ background: 'var(--accent-container)' }}
         >
-          <div className="flex items-center justify-center flex-shrink-0" style={{ height: '40px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent)', color: 'white' }}>
+          <div className="flex items-center justify-center flex-shrink-0" style={{ height: '40px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent)', color: 'var(--on-accent)' }}>
             <Lightbulb size={18} />
           </div>
           <div className="flex-1 min-w-0">
@@ -326,7 +326,7 @@ const DynamicDashboard: React.FC = () => {
           onClick={() => navigate('/explore')}
           className="card p-4 flex items-center gap-3 text-left transition-transform active:scale-[0.98]"
         >
-          <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent)', color: 'white' }}>
+          <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
             <Compass size={20} />
           </div>
           <div>
@@ -368,7 +368,7 @@ const DynamicDashboard: React.FC = () => {
                 <div className="p-4">
                   <div className="flex items-center gap-3 mb-3">
                     {!isDayTrip && (
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0" style={{ background: 'var(--accent)', color: 'white' }}>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold flex-shrink-0" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
                         {index + 1}
                       </div>
                     )}
@@ -476,7 +476,7 @@ const DynamicDashboard: React.FC = () => {
                 <input type="text" value={editingAcc.address} onChange={e => setEditingAcc({ ...editingAcc, address: e.target.value })} placeholder="Full address" className="w-full px-4 py-3 rounded-xl text-[14px] border-none outline-none" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
               </div>
             </div>
-            <button onClick={saveAccommodation} className="w-full py-3.5 rounded-2xl text-[14px] font-bold transition-all active:scale-[0.98]" style={{ background: 'var(--accent)', color: 'white' }}>
+            <button onClick={saveAccommodation} className="w-full py-3.5 rounded-2xl text-[14px] font-bold transition-all active:scale-[0.98]" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
               Save
             </button>
           </div>

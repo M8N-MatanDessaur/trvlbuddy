@@ -202,7 +202,7 @@ const DynamicTranslatorPage: React.FC = () => {
       <div className="card p-4 space-y-3">
         <div className="flex gap-2">
           <input type="text" value={customText} onChange={e => setCustomText(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleTranslate()} placeholder={`Translate to ${currentLanguage}...`} className="flex-1 px-4 py-3 rounded-xl text-[14px] border-none outline-none" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
-          <button onClick={handleTranslate} disabled={isTranslating || !customText.trim()} className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:opacity-40" style={{ background: 'var(--accent)', color: 'white' }}>
+          <button onClick={handleTranslate} disabled={isTranslating || !customText.trim()} className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
             {isTranslating ? <Loader2 size={18} className="animate-spin" /> : <ArrowRight size={18} />}
           </button>
         </div>

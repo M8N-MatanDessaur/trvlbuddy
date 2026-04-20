@@ -108,7 +108,7 @@ const ShareTripModal: React.FC<Props> = ({ isOpen, onClose, tripId }) => {
               <div className="flex items-center gap-3">
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center"
-                  style={{ background: 'var(--accent)', color: 'white' }}
+                  style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
                 >
                   <Share2 size={16} />
                 </div>
@@ -174,7 +174,7 @@ const ShareTripModal: React.FC<Props> = ({ isOpen, onClose, tripId }) => {
                 onClick={handleShare}
                 disabled={!code}
                 className="w-full py-3.5 rounded-2xl text-[14px] font-bold transition active:scale-[0.98] disabled:opacity-60 flex items-center justify-center gap-2"
-                style={{ background: 'var(--accent)', color: 'white' }}
+                style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
               >
                 <Share2 size={16} />
                 Share code with instructions

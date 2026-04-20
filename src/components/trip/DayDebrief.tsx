@@ -81,7 +81,7 @@ const DayDebrief: React.FC = () => {
           <div className="flex items-center gap-2">
             <div
               className="w-8 h-8 rounded-full flex items-center justify-center"
-              style={{ background: 'var(--accent)', color: 'white' }}
+              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
             >
               <BookOpen size={14} />
             </div>
@@ -118,7 +118,7 @@ const DayDebrief: React.FC = () => {
             onClick={handleDebrief}
             disabled={isGenerating}
             className="w-full py-3 rounded-xl text-[13px] font-bold transition-all active:scale-[0.98] disabled:opacity-60"
-            style={{ background: 'var(--accent)', color: 'white' }}
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
           >
             {isGenerating ? (
               <span className="flex items-center justify-center gap-2">

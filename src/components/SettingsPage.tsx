@@ -23,6 +23,11 @@ import Avatar from './Avatar';
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
+  const currentThemeIsDark = THEME_OPTIONS.find((t) => t.id === theme)?.isDark ?? false;
+  const [themeFamily, setThemeFamily] = useState<'light' | 'dark'>(
+    currentThemeIsDark ? 'dark' : 'light'
+  );
+  const themesInFamily = THEME_OPTIONS.filter((t) => t.isDark === (themeFamily === 'dark'));
   const {
     currentPlan,
     activities,
@@ -328,8 +333,33 @@ const SettingsPage: React.FC = () => {
               className="rounded-2xl p-3"
               style={{ background: 'var(--surface-container)' }}
             >
+              {/* Light/Dark family switch */}
+              <div
+                className="flex p-1 rounded-full mb-3"
+                style={{ background: 'var(--surface-container-high)' }}
+              >
+                {(['light', 'dark'] as const).map((family) => {
+                  const isActive = themeFamily === family;
+                  return (
+                    <button
+                      key={family}
+                      onClick={() => setThemeFamily(family)}
+                      className="flex-1 py-1.5 rounded-full text-[12px] font-bold transition-colors capitalize"
+                      style={{
+                        background: isActive ? 'var(--accent)' : 'transparent',
+                        color: isActive ? 'var(--on-accent)' : 'var(--text-secondary)',
+                        border: 'none',
+                        minHeight: 0,
+                      }}
+                      aria-pressed={isActive}
+                    >
+                      {family}
+                    </button>
+                  );
+                })}
+              </div>
               <div className="grid grid-cols-3 gap-2.5">
-                {THEME_OPTIONS.map((opt) => {
+                {themesInFamily.map((opt) => {
                   const isActive = theme === opt.id;
                   return (
                     <button
@@ -404,7 +434,7 @@ const SettingsPage: React.FC = () => {
                             width: '20px',
                             height: '20px',
                             background: 'var(--accent)',
-                            color: 'white',
+                            color: 'var(--on-accent)',
                           }}
                           aria-hidden="true"
                         >

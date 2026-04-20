@@ -100,7 +100,7 @@ const TripsCarousel: React.FC<Props> = ({
                       width: '40px',
                       height: '40px',
                       background: isActive ? 'var(--accent)' : 'var(--accent-container)',
-                      color: isActive ? 'white' : 'var(--accent)',
+                      color: isActive ? 'var(--on-accent)' : 'var(--accent)',
                     }}
                   >
                     <MapPin size={18} />
@@ -134,7 +134,7 @@ const TripsCarousel: React.FC<Props> = ({
                   className="w-full mt-3 py-2.5 rounded-xl text-[13px] font-bold transition active:scale-[0.985] disabled:opacity-60"
                   style={{
                     background: isActive ? 'var(--surface-container)' : 'var(--accent)',
-                    color: isActive ? 'var(--text-primary)' : 'white',
+                    color: isActive ? 'var(--text-primary)' : 'var(--on-accent)',
                     border: 'none',
                     minHeight: 0,
                   }}

@@ -243,7 +243,7 @@ const DynamicActivitiesPage: React.FC = () => {
           className="w-full flex items-center gap-3 p-4 rounded-2xl transition-transform active:scale-[0.98]"
           style={{ background: 'var(--accent-container)' }}
         >
-          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)', color: 'white' }}>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
             <Wand2 size={18} />
           </div>
           <div className="flex-1 text-left">
@@ -274,7 +274,7 @@ const DynamicActivitiesPage: React.FC = () => {
             <button
               onClick={handlePlanMyDay}
               className="px-4 py-3 rounded-xl text-[13px] font-bold transition-all active:scale-95"
-              style={{ background: 'var(--accent)', color: 'white' }}
+              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
             >
               <Sparkles size={16} />
             </button>

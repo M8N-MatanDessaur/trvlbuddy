@@ -630,7 +630,7 @@ const NearbyFeed: React.FC = () => {
           <button
             onClick={requestLocation}
             className="mt-2 px-5 py-3 rounded-2xl text-[13px] font-bold"
-            style={{ background: 'var(--accent)', color: 'white' }}
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
           >
             Try again
           </button>
@@ -644,7 +644,7 @@ const NearbyFeed: React.FC = () => {
           <button
             onClick={requestLocation}
             className="mt-2 px-5 py-3 rounded-2xl text-[13px] font-bold"
-            style={{ background: 'var(--accent)', color: 'white' }}
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
           >
             Try again
           </button>
@@ -700,7 +700,7 @@ const NearbyFeed: React.FC = () => {
                 <button
                   onClick={openPromptBar}
                   className="px-5 py-3 rounded-2xl text-[13px] font-bold"
-                  style={{ background: 'var(--accent)', color: 'white' }}
+                  style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
                 >
                   Search instead
                 </button>

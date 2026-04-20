@@ -198,7 +198,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                         minWidth: 0,
                         padding: '0 14px',
                         background: vote.myVote === -1 ? 'var(--accent)' : 'transparent',
-                        color: vote.myVote === -1 ? 'white' : 'var(--text-primary)',
+                        color: vote.myVote === -1 ? 'var(--on-accent)' : 'var(--text-primary)',
                         border: 'none',
                       }}
                       aria-label={vote.myVote === -1 ? 'Remove downvote' : 'Downvote'}
@@ -216,7 +216,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                         minWidth: 0,
                         padding: '0 14px',
                         background: vote.myVote === 1 ? 'var(--accent)' : 'transparent',
-                        color: vote.myVote === 1 ? 'white' : 'var(--text-primary)',
+                        color: vote.myVote === 1 ? 'var(--on-accent)' : 'var(--text-primary)',
                         border: 'none',
                       }}
                       aria-label={vote.myVote === 1 ? 'Remove upvote' : 'Upvote'}
@@ -273,7 +273,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl text-[14px] font-bold no-underline transition-all active:scale-[0.98]"
-                    style={{ background: 'var(--accent)', color: 'white' }}
+                    style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
                   >
                     <Navigation size={16} />
                     Directions

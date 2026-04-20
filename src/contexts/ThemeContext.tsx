@@ -11,7 +11,9 @@ export type ThemeId =
   | 'midnight'
   | 'sunset'
   | 'lavender'
-  | 'sand';
+  | 'sand'
+  | 'crimson'
+  | 'mint';
 
 export interface ThemeOption {
   id: ThemeId;
@@ -91,6 +93,20 @@ export const THEME_OPTIONS: ThemeOption[] = [
     description: 'Pure grayscale dark.',
     isDark: true,
     swatch: { background: '#000000', surface: '#232323', accent: '#FFFFFF' },
+  },
+  {
+    id: 'mint',
+    label: 'Mint',
+    description: 'Fresh mint-green light theme.',
+    isDark: false,
+    swatch: { background: '#F2FBF5', surface: '#DAF1E2', accent: '#14B8A6' },
+  },
+  {
+    id: 'crimson',
+    label: 'Crimson',
+    description: 'Deep red dark with rose accent.',
+    isDark: true,
+    swatch: { background: '#150A0E', surface: '#381A24', accent: '#F43F5E' },
   },
 ];
 
