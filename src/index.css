@@ -648,6 +648,22 @@ html[data-theme='dark'] .activity-card { background-color: transparent; }
   100% { transform: scale(2.2); opacity: 0; }
 }
 
+/* Map marker labels: hidden by default, shown when the map zooms past
+   LABEL_ZOOM (the container gets .trvl-map--zoomed-in). */
+.trvl-marker .trvl-marker__label {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+.trvl-map--zoomed-in .trvl-marker .trvl-marker__label {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.maplibregl-marker.trvl-marker {
+  overflow: visible;
+}
+
 ::selection { background-color: rgba(88, 86, 214, 0.2); }
 html[data-theme='dark'] ::selection { background-color: rgba(123, 121, 232, 0.3); }
 
