@@ -374,12 +374,15 @@ body {
 .text-primary-color { color: var(--primary); }
 .text-secondary-color { color: var(--secondary); }
 
-/* :where() gives the rule zero specificity so a heading inside a parent that
-   sets color (e.g. an accent-backgrounded button using --on-accent) inherits
-   that color instead of being forced back to --text-primary. */
+/* Headings inherit their colour from the parent. The body globally sets
+   color: var(--text-primary), so headings under <body> read as text-primary
+   automatically. Headings inside coloured surfaces (e.g. an accent button
+   that sets color: var(--on-accent)) inherit the surface's text colour
+   instead of being painted text-primary -- which used to render white
+   headings on white accent buttons in mono-dark. */
 :where(h1, h2, h3, h4, h5, h6) {
+  color: inherit;
   font-weight: 700;
-  color: var(--text-primary);
   letter-spacing: -0.02em;
 }
 h1 { font-size: 1.75rem; font-weight: 800; line-height: 1.15; }
