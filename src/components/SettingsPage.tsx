@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
-  Sun,
-  Moon,
   Award,
   Cloud,
   FolderOpen,
@@ -11,8 +9,9 @@ import {
   Radar,
   LogOut,
   ChevronRight,
+  Check,
 } from 'lucide-react';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme, THEME_OPTIONS } from '../contexts/ThemeContext';
 import { useTravel } from '../contexts/TravelContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -23,7 +22,7 @@ import Avatar from './Avatar';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const {
     currentPlan,
     activities,
@@ -323,38 +322,105 @@ const SettingsPage: React.FC = () => {
               className={sectionLabelClass}
               style={{ color: 'var(--text-tertiary)' }}
             >
-              Appearance
+              Theme
             </h2>
             <div
-              className="rounded-2xl overflow-hidden"
+              className="rounded-2xl p-3"
               style={{ background: 'var(--surface-container)' }}
             >
-              <button onClick={toggleTheme} className={rowClass}>
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
-                >
-                  {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-semibold">Theme</div>
-                  <div
-                    className="text-[12px]"
-                    style={{ color: 'var(--text-secondary)' }}
-                  >
-                    {theme === 'light' ? 'Currently Light' : 'Currently Dark'}
-                  </div>
-                </div>
-                <span
-                  className="text-[12px] font-bold px-2.5 py-1 rounded-full"
-                  style={{
-                    background: 'var(--accent-container)',
-                    color: 'var(--accent)',
-                  }}
-                >
-                  Switch to {theme === 'light' ? 'Dark' : 'Light'}
-                </span>
-              </button>
+              <div className="grid grid-cols-3 gap-2.5">
+                {THEME_OPTIONS.map((opt) => {
+                  const isActive = theme === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => setTheme(opt.id)}
+                      className="relative rounded-2xl overflow-hidden text-left transition-transform active:scale-[0.97]"
+                      style={{
+                        padding: 0,
+                        background: opt.swatch.background,
+                        border: isActive
+                          ? '2px solid var(--accent)'
+                          : '1px solid var(--outline)',
+                        minHeight: 0,
+                        minWidth: 0,
+                      }}
+                      aria-label={`Switch to ${opt.label} theme`}
+                    >
+                      {/* Preview surface */}
+                      <div
+                        className="px-2.5 py-3"
+                        style={{ background: opt.swatch.background, height: '76px' }}
+                      >
+                        <div
+                          className="rounded-lg w-full mb-1.5"
+                          style={{
+                            background: opt.swatch.surface,
+                            height: '14px',
+                          }}
+                        />
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className="rounded-full"
+                            style={{
+                              width: '14px',
+                              height: '14px',
+                              background: opt.swatch.accent,
+                            }}
+                          />
+                          <div
+                            className="flex-1 rounded-full"
+                            style={{
+                              height: '5px',
+                              background: opt.swatch.surface,
+                            }}
+                          />
+                        </div>
+                        <div
+                          className="rounded-full mt-1.5"
+                          style={{
+                            background: opt.swatch.surface,
+                            height: '5px',
+                            width: '60%',
+                          }}
+                        />
+                      </div>
+                      {/* Label strip */}
+                      <div
+                        className="px-2.5 py-1.5"
+                        style={{
+                          background: 'var(--surface-container-high)',
+                          color: 'var(--text-primary)',
+                        }}
+                      >
+                        <div className="text-[11.5px] font-extrabold tracking-tight truncate">
+                          {opt.label}
+                        </div>
+                      </div>
+                      {isActive && (
+                        <div
+                          className="absolute top-1.5 right-1.5 rounded-full flex items-center justify-center"
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            background: 'var(--accent)',
+                            color: 'white',
+                          }}
+                          aria-hidden="true"
+                        >
+                          <Check size={12} strokeWidth={3} />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <p
+                className="text-[11px] mt-3 px-1"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                Saved to your account, so it follows you across devices.
+              </p>
             </div>
           </section>
 

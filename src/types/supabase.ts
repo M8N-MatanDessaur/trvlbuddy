@@ -252,6 +252,7 @@ export type Database = {
           id: string
           influence: number
           onboarded_at: string | null
+          theme: string
         }
         Insert: {
           avatar_url?: string | null
@@ -262,6 +263,7 @@ export type Database = {
           id: string
           influence?: number
           onboarded_at?: string | null
+          theme?: string
         }
         Update: {
           avatar_url?: string | null
@@ -272,6 +274,7 @@ export type Database = {
           id?: string
           influence?: number
           onboarded_at?: string | null
+          theme?: string
         }
         Relationships: [
           {

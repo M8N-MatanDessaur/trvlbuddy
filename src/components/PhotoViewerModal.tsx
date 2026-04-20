@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Download,
   ExternalLink,
   Heart,
   Loader2,
   MessageCircle,
+  MoreHorizontal,
   SendHorizontal,
   Trash2,
   X,
@@ -63,7 +66,8 @@ const PhotoViewerModal: React.FC<Props> = ({
   const [submitting, setSubmitting] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
 
   const open = initialIndex !== null && photos.length > 0;
@@ -83,7 +87,8 @@ const PhotoViewerModal: React.FC<Props> = ({
     setLiked(false);
     setBody('');
     setComments([]);
-    setConfirmingDelete(false);
+    setMenuOpen(false);
+    setConfirmDeleteOpen(false);
     setLoadingComments(true);
 
     let alive = true;
@@ -195,13 +200,8 @@ const PhotoViewerModal: React.FC<Props> = ({
     }
   };
 
-  const handleDelete = async () => {
+  const confirmDelete = async () => {
     if (!user || !ownPhoto) return;
-    if (!confirmingDelete) {
-      setConfirmingDelete(true);
-      setTimeout(() => setConfirmingDelete(false), 4000);
-      return;
-    }
     setDeleting(true);
     const { error } = await deleteActivityImage({
       imageId: photo.id,
@@ -213,9 +213,33 @@ const PhotoViewerModal: React.FC<Props> = ({
       toast(error, 'error');
       return;
     }
-    toast('Photo unpublished', 'success');
     onPhotoDeleted?.(photo.id);
-    setConfirmingDelete(false);
+    setConfirmDeleteOpen(false);
+  };
+
+  const downloadImage = async () => {
+    setMenuOpen(false);
+    try {
+      const res = await fetch(photo.url);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ext = (photo.storage_path.split('.').pop() || 'jpg').toLowerCase();
+      const safeName = photo.activity_name
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60) || 'photo';
+      a.href = url;
+      a.download = `${safeName}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not download', 'error');
+    }
   };
 
   const submitComment = async () => {
@@ -437,27 +461,82 @@ const PhotoViewerModal: React.FC<Props> = ({
           </div>
 
           {ownPhoto && (
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="ml-auto inline-flex items-center gap-1.5 transition-transform active:scale-95 disabled:opacity-60"
-              style={{
-                height: '36px',
-                minHeight: '36px',
-                minWidth: 0,
-                padding: '0 14px',
-                borderRadius: '9999px',
-                background: confirmingDelete ? '#dc2626' : 'var(--surface-container-high)',
-                color: confirmingDelete ? 'white' : 'var(--error, #dc2626)',
-                border: 'none',
-              }}
-              aria-label={confirmingDelete ? 'Confirm unpublish' : 'Unpublish photo'}
-            >
-              {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-              <span className="text-[12px] font-bold leading-none">
-                {deleting ? 'Removing' : confirmingDelete ? 'Tap to confirm' : 'Unpublish'}
-              </span>
-            </button>
+            <div className="ml-auto relative">
+              <button
+                onClick={() => setMenuOpen((o) => !o)}
+                className="inline-flex items-center justify-center transition-transform active:scale-95"
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  minWidth: 0,
+                  minHeight: 0,
+                  borderRadius: '50%',
+                  background: 'var(--surface-container-high)',
+                  color: 'var(--text-primary)',
+                  border: 'none',
+                  padding: 0,
+                }}
+                aria-label="Photo options"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {menuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-[1]"
+                    onClick={() => setMenuOpen(false)}
+                    aria-hidden="true"
+                  />
+                  <div
+                    role="menu"
+                    className="absolute right-0 mt-2 rounded-2xl overflow-hidden z-[2]"
+                    style={{
+                      background: 'var(--surface-container)',
+                      border: '0.5px solid var(--outline)',
+                      minWidth: '180px',
+                      boxShadow: '0 12px 32px -8px rgba(0,0,0,0.35)',
+                    }}
+                  >
+                    <button
+                      onClick={downloadImage}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                      style={{
+                        background: 'transparent',
+                        color: 'var(--text-primary)',
+                        border: 'none',
+                        minHeight: 0,
+                        minWidth: 0,
+                      }}
+                      role="menuitem"
+                    >
+                      <Download size={16} style={{ color: 'var(--accent)' }} />
+                      <span className="text-[13px] font-semibold">Download image</span>
+                    </button>
+                    <div style={{ height: '0.5px', background: 'var(--outline)' }} aria-hidden="true" />
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setConfirmDeleteOpen(true);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                      style={{
+                        background: 'transparent',
+                        color: '#dc2626',
+                        border: 'none',
+                        minHeight: 0,
+                        minWidth: 0,
+                      }}
+                      role="menuitem"
+                    >
+                      <Trash2 size={16} />
+                      <span className="text-[13px] font-semibold">Unpublish</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
 
@@ -543,6 +622,80 @@ const PhotoViewerModal: React.FC<Props> = ({
           </div>
         </div>
       </div>
+
+      {/* Unpublish confirmation modal */}
+      <AnimatePresence>
+        {confirmDeleteOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[90] flex items-center justify-center px-5"
+            style={{ background: 'rgba(0,0,0,0.65)' }}
+            onClick={() => !deleting && setConfirmDeleteOpen(false)}
+          >
+            <motion.div
+              initial={{ y: 16, scale: 0.96, opacity: 0 }}
+              animate={{ y: 0, scale: 1, opacity: 1 }}
+              exit={{ y: 16, scale: 0.96, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+              className="w-full max-w-sm rounded-2xl overflow-hidden"
+              style={{ background: 'var(--surface-container)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-5 flex flex-col items-center text-center gap-3">
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center"
+                  style={{
+                    background: 'rgba(220, 38, 38, 0.12)',
+                    color: '#dc2626',
+                  }}
+                >
+                  <AlertTriangle size={22} />
+                </div>
+                <h3 className="text-[16px] font-extrabold tracking-tight">
+                  Unpublish this image?
+                </h3>
+                <p className="text-[13px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                  This is non-reversible. The photo, its likes, and its comments will be removed from
+                  every place it appears.
+                </p>
+              </div>
+              <div className="flex border-t" style={{ borderColor: 'var(--outline)' }}>
+                <button
+                  onClick={() => setConfirmDeleteOpen(false)}
+                  disabled={deleting}
+                  className="flex-1 py-3.5 text-[14px] font-bold transition-colors"
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--text-primary)',
+                    border: 'none',
+                    minHeight: 0,
+                  }}
+                >
+                  Cancel
+                </button>
+                <div style={{ width: '0.5px', background: 'var(--outline)' }} aria-hidden="true" />
+                <button
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                  className="flex-1 py-3.5 text-[14px] font-bold transition-colors disabled:opacity-60 inline-flex items-center justify-center gap-2"
+                  style={{
+                    background: 'transparent',
+                    color: '#dc2626',
+                    border: 'none',
+                    minHeight: 0,
+                  }}
+                >
+                  {deleting && <Loader2 size={14} className="animate-spin" />}
+                  {deleting ? 'Removing' : 'Unpublish'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
