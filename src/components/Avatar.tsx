@@ -36,7 +36,7 @@ const Avatar: React.FC<Props> = ({ profile, size = 32, className, style }) => {
     overflow: 'hidden',
     flexShrink: 0,
     background: 'var(--accent)',
-    color: 'white',
+    color: 'var(--on-accent)',
     fontWeight: 800,
     fontSize: `${Math.round(size * 0.4)}px`,
     letterSpacing: '0.02em',

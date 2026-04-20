@@ -195,7 +195,7 @@ const Header: React.FC<Props> = ({ pages }) => {
         >
           <div
             className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--accent)', color: 'white' }}
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
           >
             <Plane size={13} />
           </div>

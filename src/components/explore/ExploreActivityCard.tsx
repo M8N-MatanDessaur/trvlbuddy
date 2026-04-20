@@ -135,7 +135,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
     background: active || primary ? 'var(--accent)' : 'rgba(0,0,0,0.5)',
     backdropFilter: active || primary ? undefined : 'blur(10px)',
     WebkitBackdropFilter: active || primary ? undefined : 'blur(10px)',
-    color: 'white',
+    color: active || primary ? 'var(--on-accent)' : 'white',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -150,7 +150,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
     minHeight: `${ACTION_SIZE}px`,
     borderRadius: '50%',
     background: primary ? 'var(--accent)' : 'var(--surface-container-high)',
-    color: primary ? 'white' : 'var(--text-primary)',
+    color: primary ? 'var(--on-accent)' : 'var(--text-primary)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -254,7 +254,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
           minWidth: 0,
           padding: '0 14px',
           background: vote.myVote === -1 ? 'var(--accent)' : 'transparent',
-          color: vote.myVote === -1 ? 'white' : 'var(--text-primary)',
+          color: vote.myVote === -1 ? 'var(--on-accent)' : 'var(--text-primary)',
           border: 'none',
         }}
         aria-label={vote.myVote === -1 ? 'Remove downvote' : 'Downvote'}
@@ -275,7 +275,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
           minWidth: 0,
           padding: '0 14px',
           background: vote.myVote === 1 ? 'var(--accent)' : 'transparent',
-          color: vote.myVote === 1 ? 'white' : 'var(--text-primary)',
+          color: vote.myVote === 1 ? 'var(--on-accent)' : 'var(--text-primary)',
           border: 'none',
         }}
         aria-label={vote.myVote === 1 ? 'Remove upvote' : 'Upvote'}

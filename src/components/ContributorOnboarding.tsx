@@ -37,6 +37,12 @@ const ContributorOnboarding: React.FC = () => {
   const [stepIndex, setStepIndex] = useState(0);
   const [finishing, setFinishing] = useState<null | 'trip' | 'local'>(null);
 
+  const currentThemeIsDark = THEME_OPTIONS.find((t) => t.id === theme)?.isDark ?? false;
+  const [themeFamily, setThemeFamily] = useState<'light' | 'dark'>(
+    currentThemeIsDark ? 'dark' : 'light',
+  );
+  const themesInFamily = THEME_OPTIONS.filter((t) => t.isDark === (themeFamily === 'dark'));
+
   const firstName = (profile?.display_name || profile?.email || '').split(/[@\s]/)[0] || 'traveler';
 
   const steps: Step[] = [
@@ -218,7 +224,7 @@ const ContributorOnboarding: React.FC = () => {
                 className="absolute bottom-2 right-2 w-9 h-9 rounded-xl flex items-center justify-center"
                 style={{
                   background: 'var(--accent)',
-                  color: 'white',
+                  color: 'var(--on-accent)',
                   boxShadow: '0 6px 14px -6px color-mix(in srgb, var(--accent) 70%, transparent)',
                 }}
               >
@@ -250,8 +256,33 @@ const ContributorOnboarding: React.FC = () => {
               </p>
 
               {current.eyebrow === 'Make it yours' && (
-                <div className="mt-5 grid grid-cols-3 gap-2 text-left">
-                  {THEME_OPTIONS.map((opt) => {
+                <div className="mt-5 text-left">
+                  <div
+                    className="flex p-1 rounded-full mb-3"
+                    style={{ background: 'var(--surface-container-high)' }}
+                  >
+                    {(['light', 'dark'] as const).map((family) => {
+                      const isActive = themeFamily === family;
+                      return (
+                        <button
+                          key={family}
+                          onClick={() => setThemeFamily(family)}
+                          className="flex-1 py-1.5 rounded-full text-[12px] font-bold transition-colors capitalize"
+                          style={{
+                            background: isActive ? 'var(--accent)' : 'transparent',
+                            color: isActive ? 'var(--on-accent)' : 'var(--text-secondary)',
+                            border: 'none',
+                            minHeight: 0,
+                          }}
+                          aria-pressed={isActive}
+                        >
+                          {family}
+                        </button>
+                      );
+                    })}
+                  </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {themesInFamily.map((opt) => {
                     const isActive = theme === opt.id;
                     return (
                       <button
@@ -305,7 +336,7 @@ const ContributorOnboarding: React.FC = () => {
                               width: '16px',
                               height: '16px',
                               background: 'var(--accent)',
-                              color: 'white',
+                              color: 'var(--on-accent)',
                             }}
                             aria-hidden="true"
                           >
@@ -316,6 +347,7 @@ const ContributorOnboarding: React.FC = () => {
                     );
                   })}
                 </div>
+                </div>
               )}
 
               {isLast && (
@@ -324,7 +356,7 @@ const ContributorOnboarding: React.FC = () => {
                     onClick={() => finish('trip')}
                     disabled={finishing !== null}
                     className="flex items-center gap-3 rounded-2xl p-4 text-left transition active:scale-[0.985] disabled:opacity-60"
-                    style={{ background: 'var(--accent)', color: 'white' }}
+                    style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
                   >
                     <div
                       className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"

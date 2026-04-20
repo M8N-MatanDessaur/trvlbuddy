@@ -150,7 +150,7 @@ const ShowToLocal: React.FC<Props> = ({ isOpen, onClose, phrases, startIndex, la
             <button
               onClick={speak}
               className="flex items-center justify-center mb-3 transition-transform active:scale-90"
-              style={{ height: '64px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent)', color: 'white' }}
+              style={{ height: '64px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent)', color: 'var(--on-accent)' }}
             >
               <Volume2 size={28} />
             </button>

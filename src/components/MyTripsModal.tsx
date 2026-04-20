@@ -89,7 +89,7 @@ const MyTripsModal: React.FC<Props> = ({ isOpen, onClose }) => {
           >
             <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--outline)' }}>
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)', color: 'white' }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
                   <Cloud size={16} />
                 </div>
                 <h3 className="text-[17px] font-extrabold tracking-tight">My Trips</h3>
@@ -144,7 +144,7 @@ const MyTripsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                             onClick={() => handleLoad(trip.id)}
                             disabled={working === trip.id}
                             className="w-9 h-9 rounded-full flex items-center justify-center disabled:opacity-50"
-                            style={{ background: 'var(--accent)', color: 'white' }}
+                            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
                             aria-label="Load trip"
                           >
                             <Download size={16} />

@@ -26,7 +26,7 @@ const WelcomeScreen: React.FC = () => {
       <div className="flex items-center gap-3 mb-8">
         <div
           className="w-10 h-10 rounded-full flex items-center justify-center"
-          style={{ background: 'var(--accent)', color: 'white' }}
+          style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
         >
           <Plane size={18} />
         </div>
