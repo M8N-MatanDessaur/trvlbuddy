@@ -197,7 +197,7 @@ const EmergencyPage: React.FC = () => {
       {allCountries.length > 1 && (
         <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
           {allCountries.map(c => (
-            <button key={c.id} onClick={() => setSelectedCountry(c.id)} className="px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all" style={{ background: c.id === currentCountryId ? 'var(--error)' : 'var(--surface-container)', color: c.id === currentCountryId ? 'white' : 'var(--text-secondary)' }}>
+            <button key={c.id} onClick={() => setSelectedCountry(c.id)} className="px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all" style={{ background: c.id === currentCountryId ? 'var(--error)' : 'var(--surface-container)', color: c.id === currentCountryId ? 'var(--on-accent)' : 'var(--text-secondary)' }}>
               {c.name}
             </button>
           ))}

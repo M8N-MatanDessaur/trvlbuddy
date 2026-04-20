@@ -10,8 +10,10 @@ import {
   ArrowLeft,
   Radar,
   ChevronUp,
+  ChevronDown,
   Palette,
   Check,
+  MapPin,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTravel } from '../contexts/TravelContext';
@@ -99,12 +101,15 @@ const ContributorOnboarding: React.FC = () => {
     {
       icon: ChevronUp,
       eyebrow: 'The community',
-      title: 'Vote, comment, peek at travelers',
+      title: 'Upvote, downvote, comment',
       body: (
         <>
-          Upvote the spots worth a stop, downvote the ones to skip — your votes help rank
-          what shows up nearby. Tap a photo to scroll through its comments, or tap a poster's
-          avatar to see what they've explored.
+          Every place card has a small pill with{' '}
+          <ChevronUp size={12} className="inline -mt-0.5" /> and{' '}
+          <ChevronDown size={12} className="inline -mt-0.5" />. One vote per traveler — tap
+          again to take it back. Score = upvotes minus downvotes, and we use it to push the
+          spots worth your time to the top of the feed. Tap a photo to read its comments, or
+          tap a poster's avatar to see what they've explored.
         </>
       ),
       art: 'share',
@@ -122,12 +127,35 @@ const ContributorOnboarding: React.FC = () => {
       art: 'travel',
     },
     {
+      icon: MapPin,
+      eyebrow: 'Two ways in',
+      title: 'Nearby vs Trips',
+      body: (
+        <>
+          <span className="font-bold" style={{ color: 'var(--text-primary)' }}>Nearby</span> uses
+          your live location to surface what's open around you right now — great for a stop you
+          didn't plan, or for exploring your own city.
+          <br />
+          <br />
+          <span className="font-bold" style={{ color: 'var(--text-primary)' }}>Trips</span> are
+          planned itineraries you build for upcoming travel. AI generates activities, you save
+          translations, emergency contacts, and photos — all bundled per trip and synced to
+          your account so a friend can co-plan with the trip code.
+          <br />
+          <br />
+          Tap the title at the top of the app to jump between Nearby and any saved trip.
+        </>
+      ),
+      art: 'travel',
+    },
+    {
       icon: Compass,
       eyebrow: 'Pick your starting point',
       title: 'Where do you want to begin?',
       body: (
         <>
-          You can switch between trip planning and local exploration any time from the menu.
+          You can switch between trip planning and local exploration any time from the title
+          at the top.
         </>
       ),
       art: 'travel',

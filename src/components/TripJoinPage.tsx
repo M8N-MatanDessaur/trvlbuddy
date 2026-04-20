@@ -79,7 +79,7 @@ const TripJoinPage: React.FC<Props> = ({ token }) => {
           className="w-16 h-16 mx-auto mb-5 rounded-2xl flex items-center justify-center"
           style={{
             background: status === 'loaded' ? 'var(--accent)' : 'var(--accent-container)',
-            color: status === 'loaded' ? 'white' : 'var(--accent)',
+            color: status === 'loaded' ? 'var(--on-accent)' : 'var(--accent)',
           }}
         >
           {status === 'loaded' ? <Check size={28} /> : <Users size={28} />}
