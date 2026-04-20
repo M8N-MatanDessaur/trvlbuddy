@@ -3,8 +3,13 @@
   publish = "dist"
 
 [[redirects]]
+  # Places API (New) routes through a Netlify function because the request
+  # path contains a literal ":" (e.g. "places:searchNearby") which Netlify's
+  # redirect engine treats as a :param marker -- the direct rewrite
+  # silently 404s. The function reads the method name from the path tail
+  # and forwards to https://places.googleapis.com/v1/places:<method>.
   from = "/api/placesv1/*"
-  to = "https://places.googleapis.com/v1/:splat"
+  to = "/.netlify/functions/placesv1/:splat"
   status = 200
   force = true
 
