@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Clock,
   Check,
+  Loader2,
 } from 'lucide-react';
 import { GeneratedActivity } from '../../types/TravelData';
 import { useActivityMedia } from '../../hooks/useActivityMedia';
@@ -219,38 +220,44 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
     </a>
   );
 
+  const [doneSaving, setDoneSaving] = useState(false);
   const handleToggleDone = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) {
-      toast('Sign in to track what you\'ve done', 'info');
+      toast("Sign in to track what you've done", 'info');
       return;
     }
     if (!dbActivityId) {
       toast('Activity not ready yet', 'info');
       return;
     }
+    setDoneSaving(true);
     const result = await toggleCompleted(dbActivityId);
-    if (!result.ok) {
-      toast('Could not update', 'error');
-      return;
-    }
-    if (result.nextCompleted) toast('Marked as done', 'success');
+    setDoneSaving(false);
+    if (!result.ok) toast('Could not update', 'error');
+    // Success is silent -- the green check (or its removal) is the feedback.
   };
 
+  // While the supabase round-trip is in flight, show a neutral loader pill so
+  // the user knows the change isn't committed yet. Only flip to the green
+  // confirmed state after the call resolves.
+  const showDoneConfirmed = isDone && !doneSaving;
   const doneButton = (
     <button
       onClick={handleToggleDone}
-      className="transition-all active:scale-90"
+      disabled={doneSaving}
+      className="transition-all active:scale-90 disabled:opacity-90"
       style={{
-        ...solidCircleStyle(isDone),
-        background: isDone ? '#16a34a' : 'var(--surface-container-high)',
-        color: isDone ? '#ffffff' : 'var(--text-primary)',
+        ...solidCircleStyle(showDoneConfirmed),
+        background: showDoneConfirmed ? '#16a34a' : 'var(--surface-container-high)',
+        color: showDoneConfirmed ? '#ffffff' : 'var(--text-primary)',
       }}
       aria-label={isDone ? 'Unmark as done' : 'Mark as done'}
       aria-pressed={isDone}
-      title={isDone ? 'Done' : 'Mark as done'}
+      aria-busy={doneSaving}
+      title={doneSaving ? 'Saving...' : isDone ? 'Done' : 'Mark as done'}
     >
-      <Check size={16} strokeWidth={3} />
+      {doneSaving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} strokeWidth={3} />}
     </button>
   );
 
