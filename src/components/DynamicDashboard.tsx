@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTravel } from '../contexts/TravelContext';
 import { getSmartSuggestion } from '../services/aiService';
+import { tripExists } from '../services/tripsService';
+import TripGoneScreen from './TripGoneScreen';
 import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb, Heart, RefreshCw, Loader2, Pencil, X as XIcon, Cloud, Sun, CloudRain } from 'lucide-react';
 import DayDebrief from './trip/DayDebrief';
 import TripMembersStrip from './TripMembersStrip';
@@ -23,8 +25,51 @@ let cachedSuggestion: { title: string; description: string; activityName: string
 let suggestionFetched = false;
 
 const DynamicDashboard: React.FC = () => {
-  const { currentPlan, activities, savedActivities, setCurrentPlan, currentTripId } = useTravel();
+  const {
+    currentPlan,
+    activities,
+    savedActivities,
+    setCurrentPlan,
+    currentTripId,
+    setActivities,
+    setTranslations,
+    setEmergencyContacts,
+    setCurrentTripId,
+  } = useTravel();
   const navigate = useNavigate();
+  const [tripGone, setTripGone] = useState(false);
+  const [goneTripTitle, setGoneTripTitle] = useState<string | null>(null);
+
+  // Verify the loaded trip still exists in supabase. If the owner deleted it,
+  // wipe the local cached plan and show TripGoneScreen so the user isn't
+  // staring at a phantom dashboard.
+  useEffect(() => {
+    if (!currentTripId) return;
+    let cancelled = false;
+    (async () => {
+      const status = await tripExists(currentTripId);
+      if (cancelled) return;
+      if (status === 'gone') {
+        // Capture the title before we wipe local state.
+        setGoneTripTitle(currentPlan?.title ?? null);
+        // Clear local trip-scoped state so the gone-screen CTAs land on a clean slate.
+        setCurrentPlan(null);
+        setActivities([]);
+        setTranslations([]);
+        setEmergencyContacts([]);
+        setCurrentTripId(null);
+        try {
+          localStorage.removeItem('currentTravelPlan');
+          localStorage.removeItem('generatedActivities');
+        } catch {
+          // ignore quota errors
+        }
+        setTripGone(true);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTripId]);
   const [suggestion, setSuggestion] = useState(cachedSuggestion);
   const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [editingAcc, setEditingAcc] = useState<{ segmentId: string; accId: string; name: string; address: string } | null>(null);
@@ -107,6 +152,10 @@ const DynamicDashboard: React.FC = () => {
       setWeatherData(prev => ({ ...prev, [loc.id]: w }));
     });
   }, [weatherLocations.length]);
+
+  if (tripGone) {
+    return <TripGoneScreen tripTitle={goneTripTitle} />;
+  }
 
   if (!currentPlan) {
     return (
