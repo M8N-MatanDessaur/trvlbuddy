@@ -140,7 +140,6 @@ const ProfilePage: React.FC = () => {
     setAppMode('trip');
     setHasCompletedOnboarding(true);
     setCurrentTripId(row.id);
-    toast(`Loaded ${row.title}`, 'success');
     navigate('/');
   };
 

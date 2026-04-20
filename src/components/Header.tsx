@@ -95,7 +95,6 @@ const Header: React.FC<Props> = ({ pages }) => {
       setHasCompletedOnboarding(true);
       setCurrentTripId(row.id);
       setSwitcherOpen(false);
-      toast(`Switched to ${row.title}`, 'success');
       navigate('/');
     },
     [
