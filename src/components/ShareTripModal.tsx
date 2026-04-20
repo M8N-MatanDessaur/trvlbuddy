@@ -158,7 +158,7 @@ const ShareTripModal: React.FC<Props> = ({ isOpen, onClose, tripId }) => {
                   className="mt-1 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[12px] font-bold transition active:scale-95 disabled:opacity-60"
                   style={{
                     background: copied === 'code' ? 'var(--accent)' : 'rgba(0,0,0,0.0)',
-                    color: copied === 'code' ? 'white' : 'var(--accent)',
+                    color: copied === 'code' ? 'var(--on-accent)' : 'var(--accent)',
                     border: copied === 'code' ? 'none' : '1.5px solid var(--accent)',
                     minHeight: 0,
                     minWidth: 0,

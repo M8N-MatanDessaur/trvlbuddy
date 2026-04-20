@@ -212,7 +212,7 @@ const DynamicDashboard: React.FC = () => {
           {tripDay && (
             <span className="ml-auto text-[11px] font-bold px-2.5 py-1 rounded-lg" style={{
               background: tripDay.type === 'active' ? 'var(--accent)' : tripDay.type === 'upcoming' ? 'var(--accent-container)' : 'var(--surface-container-high)',
-              color: tripDay.type === 'active' ? 'white' : tripDay.type === 'upcoming' ? 'var(--accent)' : 'var(--text-tertiary)',
+              color: tripDay.type === 'active' ? 'var(--on-accent)' : tripDay.type === 'upcoming' ? 'var(--accent)' : 'var(--text-tertiary)',
             }}>
               {tripDay.label}
             </span>
@@ -228,7 +228,7 @@ const DynamicDashboard: React.FC = () => {
             {weatherLocations.length > 1 && (
               <div className="flex gap-1">
                 {weatherLocations.map(l => (
-                  <button key={l.id} onClick={() => setSelectedWeatherLoc(l.id)} className="px-2 py-1 rounded-lg text-[11px] font-semibold" style={{ background: l.id === currentWeatherLocId ? 'var(--accent)' : 'transparent', color: l.id === currentWeatherLocId ? 'white' : 'var(--text-secondary)' }}>
+                  <button key={l.id} onClick={() => setSelectedWeatherLoc(l.id)} className="px-2 py-1 rounded-lg text-[11px] font-semibold" style={{ background: l.id === currentWeatherLocId ? 'var(--accent)' : 'transparent', color: l.id === currentWeatherLocId ? 'var(--on-accent)' : 'var(--text-secondary)' }}>
                     {l.name}
                   </button>
                 ))}

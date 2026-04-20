@@ -230,7 +230,7 @@ const ChatPage: React.FC = () => {
               className="max-w-[82%] px-4 py-3"
               style={{
                 background: msg.type === 'user' ? 'var(--accent)' : 'var(--surface-container)',
-                color: msg.type === 'user' ? 'white' : 'var(--text-primary)',
+                color: msg.type === 'user' ? 'var(--on-accent)' : 'var(--text-primary)',
                 borderRadius: msg.type === 'user' ? '20px 20px 6px 20px' : '20px 20px 20px 6px',
               }}
             >

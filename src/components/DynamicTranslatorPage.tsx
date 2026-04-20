@@ -184,7 +184,7 @@ const DynamicTranslatorPage: React.FC = () => {
       {languages.length > 1 && (
         <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
           {languages.map(lang => (
-            <button key={lang} onClick={() => setSelectedLanguage(lang)} className="px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all" style={{ background: lang === currentLanguage ? 'var(--accent)' : 'var(--surface-container)', color: lang === currentLanguage ? 'white' : 'var(--text-secondary)' }}>
+            <button key={lang} onClick={() => setSelectedLanguage(lang)} className="px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all" style={{ background: lang === currentLanguage ? 'var(--accent)' : 'var(--surface-container)', color: lang === currentLanguage ? 'var(--on-accent)' : 'var(--text-secondary)' }}>
               {lang}
             </button>
           ))}

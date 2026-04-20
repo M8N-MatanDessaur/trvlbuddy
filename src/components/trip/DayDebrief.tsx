@@ -104,7 +104,7 @@ const DayDebrief: React.FC = () => {
                 className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl transition-all"
                 style={{
                   background: selectedMood === m.id ? 'var(--accent)' : 'var(--surface-container)',
-                  color: selectedMood === m.id ? 'white' : 'var(--text-secondary)',
+                  color: selectedMood === m.id ? 'var(--on-accent)' : 'var(--text-secondary)',
                 }}
               >
                 <m.icon size={18} />

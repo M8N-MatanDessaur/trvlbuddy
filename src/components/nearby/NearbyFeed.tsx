@@ -411,7 +411,7 @@ const NearbyFeed: React.FC = () => {
                   height: '34px',
                   borderRadius: '9999px',
                   background: transportMode === 'foot' ? 'var(--accent)' : 'transparent',
-                  color: transportMode === 'foot' ? 'white' : 'var(--text-secondary)',
+                  color: transportMode === 'foot' ? 'var(--on-accent)' : 'var(--text-secondary)',
                 }}
                 aria-label="Walking distance"
                 aria-pressed={transportMode === 'foot'}
@@ -426,7 +426,7 @@ const NearbyFeed: React.FC = () => {
                   height: '34px',
                   borderRadius: '9999px',
                   background: transportMode === 'car' ? 'var(--accent)' : 'transparent',
-                  color: transportMode === 'car' ? 'white' : 'var(--text-secondary)',
+                  color: transportMode === 'car' ? 'var(--on-accent)' : 'var(--text-secondary)',
                 }}
                 aria-label="Driving distance"
                 aria-pressed={transportMode === 'car'}
@@ -541,7 +541,7 @@ const NearbyFeed: React.FC = () => {
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
             style={{
               background: selectedTypes.length === 0 && !activeChipLabel ? 'var(--accent)' : 'var(--surface-container)',
-              color: selectedTypes.length === 0 && !activeChipLabel ? 'white' : 'var(--text-secondary)',
+              color: selectedTypes.length === 0 && !activeChipLabel ? 'var(--on-accent)' : 'var(--text-secondary)',
             }}
           >
             <Globe size={14} />
@@ -568,7 +568,7 @@ const NearbyFeed: React.FC = () => {
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
                 style={{
                   background: isActive ? 'var(--accent)' : 'var(--surface-container)',
-                  color: isActive ? 'white' : 'var(--text-secondary)',
+                  color: isActive ? 'var(--on-accent)' : 'var(--text-secondary)',
                 }}
               >
                 <ChipIcon size={14} />

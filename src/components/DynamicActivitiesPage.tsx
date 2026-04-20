@@ -180,7 +180,7 @@ const DynamicActivitiesPage: React.FC = () => {
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
             style={{
               background: activeLocation === 'all' ? 'var(--accent)' : 'var(--surface-container)',
-              color: activeLocation === 'all' ? 'white' : 'var(--text-secondary)',
+              color: activeLocation === 'all' ? 'var(--on-accent)' : 'var(--text-secondary)',
             }}
           >
             <Globe size={14} />
@@ -195,7 +195,7 @@ const DynamicActivitiesPage: React.FC = () => {
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
                 style={{
                   background: isActive ? 'var(--accent)' : 'var(--surface-container)',
-                  color: isActive ? 'white' : 'var(--text-secondary)',
+                  color: isActive ? 'var(--on-accent)' : 'var(--text-secondary)',
                 }}
               >
                 <MapPin size={14} />
@@ -218,7 +218,7 @@ const DynamicActivitiesPage: React.FC = () => {
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
               style={{
                 background: isActive ? 'var(--accent)' : 'var(--surface-container)',
-                color: isActive ? 'white' : 'var(--text-secondary)',
+                color: isActive ? 'var(--on-accent)' : 'var(--text-secondary)',
               }}
             >
               <CatIcon size={14} />
