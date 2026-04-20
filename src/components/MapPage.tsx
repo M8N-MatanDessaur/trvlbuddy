@@ -694,6 +694,12 @@ const MapPage: React.FC = () => {
 
   const totalExpected = activityCandidates.length + seedHotels.length + hotelGeocodeQueue.length;
   const isStillLoading = initialLoading || pendingCount > 0;
+  // Cover the empty map with a full overlay until at least one point lands.
+  // If all geocoding finished without resolving anything, fall back to an
+  // empty-state inside the overlay so the user isn't stuck on a spinner.
+  const noPointsYet = points.length === 0;
+  const finishedWithNothing = !initialLoading && pendingCount === 0 && totalExpected > 0 && noPointsYet;
+  const showOverlay = noPointsYet && (isStillLoading || finishedWithNothing);
 
   return (
     <section className="page space-y-3" style={{ paddingBottom: 0 }}>
@@ -796,32 +802,85 @@ const MapPage: React.FC = () => {
           <LocateFixed size={18} />
         </button>
 
-        {initialLoading && (
+        {showOverlay && (
           <div
-            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            className="absolute inset-0 flex items-center justify-center"
             style={{
               borderRadius: '20px',
-              background: 'color-mix(in srgb, var(--bg-primary) 70%, transparent)',
-              backdropFilter: 'blur(4px)',
-              WebkitBackdropFilter: 'blur(4px)',
+              background: 'var(--bg-primary)',
             }}
           >
-            <div
-              className="flex flex-col items-center gap-2 px-5 py-4 rounded-2xl"
-              style={{
-                background: 'var(--surface-container)',
-                border: '0.5px solid var(--outline)',
-                boxShadow: '0 12px 32px -10px rgba(0,0,0,0.25)',
-              }}
-            >
-              <Loader2 size={22} className="animate-spin" style={{ color: 'var(--accent)' }} />
-              <div className="text-[12.5px] font-bold" style={{ color: 'var(--text-primary)' }}>
-                Plotting your trip
+            {finishedWithNothing ? (
+              <div
+                className="flex flex-col items-center gap-2 px-6 py-6 rounded-2xl text-center max-w-sm"
+                style={{
+                  background: 'var(--surface-container)',
+                  border: '0.5px solid var(--outline)',
+                  boxShadow: '0 12px 32px -10px rgba(0,0,0,0.25)',
+                }}
+              >
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center mb-1"
+                  style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
+                >
+                  <MapPin size={22} />
+                </div>
+                <div className="text-[14px] font-extrabold" style={{ color: 'var(--text-primary)' }}>
+                  Couldn't load any places
+                </div>
+                <div className="text-[12px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                  Geocoding came back empty for every activity in this trip.
+                  Check your connection or try again in a moment.
+                </div>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[12.5px] font-bold transition-transform active:scale-95"
+                  style={{
+                    background: 'var(--accent)',
+                    color: 'var(--on-accent)',
+                    border: 'none',
+                    minHeight: 0,
+                    minWidth: 0,
+                  }}
+                >
+                  Retry
+                </button>
               </div>
-              <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-                Loading places...
+            ) : (
+              <div
+                className="flex flex-col items-center gap-3 px-5 py-5 rounded-2xl"
+                style={{
+                  background: 'var(--surface-container)',
+                  border: '0.5px solid var(--outline)',
+                  boxShadow: '0 12px 32px -10px rgba(0,0,0,0.25)',
+                  minWidth: '220px',
+                }}
+              >
+                <Loader2 size={26} className="animate-spin" style={{ color: 'var(--accent)' }} />
+                <div className="text-[13px] font-extrabold" style={{ color: 'var(--text-primary)' }}>
+                  Plotting your trip
+                </div>
+                <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>
+                  {totalExpected > 0
+                    ? `Looking up ${totalExpected} ${totalExpected === 1 ? 'place' : 'places'}...`
+                    : 'Loading places...'}
+                </div>
+                {totalExpected > 0 && pendingCount > 0 && pendingCount < totalExpected && (
+                  <div
+                    className="w-full rounded-full overflow-hidden mt-1"
+                    style={{ height: '4px', background: 'var(--surface-container-high)' }}
+                  >
+                    <div
+                      className="h-full transition-all duration-200 ease-out"
+                      style={{
+                        width: `${Math.round(((totalExpected - pendingCount) / totalExpected) * 100)}%`,
+                        background: 'var(--accent)',
+                      }}
+                    />
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
