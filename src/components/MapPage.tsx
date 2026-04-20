@@ -8,7 +8,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import type { Accommodation, GeneratedActivity, TripSegment } from '../types/TravelData';
 import { supabase } from '../lib/supabase';
 import { computeSlug } from '../services/activityMediaService';
-import { findPlaceFromText } from '../services/googlePlacesService';
+import { findPlaceFromText, searchPlaceByText } from '../services/googlePlacesService';
 import { useCompletedActivities } from '../hooks/useCompletedActivities';
 import { getCachedLocation, getCurrentLocation, type UserLocation } from '../utils/geolocation';
 import { getCategoryIcon } from '../utils/categoryIcons';
@@ -346,6 +346,20 @@ const MapPage: React.FC = () => {
       candidates.push({ activity, key: slug, queries, near: actCoords });
     });
 
+    if (typeof console !== 'undefined') {
+      console.info('[map] trip stays summary:', {
+        accommodationsTotal: accs.length,
+        seededWithCoords: seedH.length,
+        queuedForGeocode: hotelQueue.length,
+        accommodations: accs.map((a) => ({
+          name: a.name,
+          address: a.address,
+          hasCoords: !!a.coordinates,
+          cityId: a.cityId,
+        })),
+      });
+    }
+
     return {
       seedHotels: seedH,
       hotelGeocodeQueue: hotelQueue,
@@ -423,12 +437,20 @@ const MapPage: React.FC = () => {
       // Activity coords from supabase first.
       const slugs = activityCandidates.map((c) => c.key).filter(Boolean);
       const { data: rows } = slugs.length > 0
-        ? await supabase.from('activities').select('id, slug, lat, lng').in('slug', slugs)
-        : { data: [] as Array<{ id: string; slug: string; lat: number | null; lng: number | null }> };
+        ? await supabase
+            .from('activities')
+            .select('id, slug, lat, lng, google_place_id')
+            .in('slug', slugs)
+        : { data: [] as Array<{ id: string; slug: string; lat: number | null; lng: number | null; google_place_id: string | null }> };
 
+      // Trust supabase-stored coords ONLY when Google verified the place
+      // (google_place_id is set). Coords without a place_id came from the
+      // earlier Photon-based geocoder and were often wrong (e.g. Seoul
+      // addresses pinned in London). Treating them as misses forces a
+      // re-geocode through Google.
       const known = new Map<string, { lat: number; lng: number }>();
       rows?.forEach((row) => {
-        if (row.lat != null && row.lng != null && row.slug) {
+        if (row.lat != null && row.lng != null && row.slug && row.google_place_id) {
           known.set(row.slug, { lat: row.lat, lng: row.lng });
         }
       });
@@ -498,11 +520,20 @@ const MapPage: React.FC = () => {
       const runJob = async (job: Job) => {
         const queries = job.kind === 'activity' ? job.data.queries : [job.data.query];
         const near = job.data.near;
+        // Try Find Place (cheaper, exact match) for each query; if all miss,
+        // try the more permissive Text Search on the most-specific query.
         for (const q of queries) {
           if (cancelled) return null;
           const hit = await findPlaceFromText(q, near ? { near } : undefined);
           if (hit) return { lat: hit.lat, lng: hit.lng, place_id: hit.place_id, formatted_address: hit.formatted_address };
         }
+        for (const q of queries) {
+          if (cancelled) return null;
+          const hit = await searchPlaceByText(q, near ? { near } : undefined);
+          if (hit) return { lat: hit.lat, lng: hit.lng, place_id: hit.place_id, formatted_address: hit.formatted_address };
+        }
+        const label = job.kind === 'activity' ? job.data.activity.name : job.data.accommodation.name;
+        console.warn('[map] could not locate', job.kind, label, 'queries:', queries);
         return null;
       };
 
