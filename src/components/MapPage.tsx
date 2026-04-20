@@ -3,12 +3,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import maplibregl, { Map as MlMap, Marker as MlMarker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Bed, Loader2, LocateFixed, MapPin } from 'lucide-react';
+// geocodeMany was used in the previous batched approach; per-candidate retry
+// uses geocode() directly inside the worker pool.
 import { useTravel } from '../contexts/TravelContext';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Accommodation, GeneratedActivity, TripSegment } from '../types/TravelData';
 import { supabase } from '../lib/supabase';
 import { computeSlug } from '../services/activityMediaService';
-import { geocodeMany } from '../services/geocodingService';
 import { getCachedLocation, getCurrentLocation, type UserLocation } from '../utils/geolocation';
 import { getCategoryIcon } from '../utils/categoryIcons';
 import DynamicActivityModal from './DynamicActivityModal';
@@ -215,53 +216,108 @@ const MapPage: React.FC = () => {
     ];
 
     const seedH: MapPoint[] = [];
-    const hotelQueue: Array<{ accommodation: Accommodation; query: string }> = [];
-    const city = segments[0]?.city?.name || segments[0]?.destination?.name
+    const hotelQueue: Array<{ accommodation: Accommodation; query: string; markerId: string }> = [];
+    const tripCity = segments[0]?.city?.name || segments[0]?.destination?.name
       || currentPlan.destination?.name || currentPlan.destinations?.[0]?.name || null;
-    const country = segments[0]?.destination?.country
+    const tripCountry = segments[0]?.destination?.country
       || currentPlan.destination?.country || currentPlan.destinations?.[0]?.country || '';
 
-    accs.forEach((acc) => {
+    // Per-accommodation context: prefer the segment that actually owns the
+    // accommodation (multi-city trips), else fall back to the first.
+    const findOwningSegment = (acc: Accommodation): TripSegment | undefined => {
+      if (acc.cityId || acc.destinationId) {
+        return segments.find(
+          (s) => (acc.cityId && s.city?.id === acc.cityId)
+            || (acc.destinationId && s.destination.id === acc.destinationId),
+        );
+      }
+      return segments.find((s) => (s.accommodations || []).some((a) => a.id === acc.id));
+    };
+
+    accs.forEach((acc, i) => {
+      const seg = findOwningSegment(acc);
+      const segCity = seg?.city?.name || seg?.destination?.name || tripCity;
+      const segCountry = seg?.destination?.country || tripCountry;
+      const id = acc.id ? `hotel-${acc.id}` : `hotel-idx-${i}`;
+      const display = acc.name?.trim() || acc.address?.trim() || 'Accommodation';
+
       if (acc.coordinates) {
         seedH.push({
-          id: `hotel-${acc.id}`,
+          id,
           kind: 'hotel',
-          name: acc.name || 'Accommodation',
+          name: display,
           subtitle: acc.address || null,
           lat: acc.coordinates.lat,
           lng: acc.coordinates.lng,
         });
-      } else if (acc.name) {
-        // Hotel without coords -- queue for Photon geocoding so the pin appears.
-        const parts = [acc.name, acc.address, city, country].filter(Boolean) as string[];
-        hotelQueue.push({ accommodation: acc, query: parts.join(', ') });
+        return;
       }
+
+      // Build the geocode query from whatever we have. Skip only when we have
+      // literally nothing to search on.
+      const parts = [acc.name, acc.address, segCity, segCountry]
+        .map((p) => (p || '').trim())
+        .filter(Boolean);
+      if (parts.length === 0) return;
+      hotelQueue.push({
+        accommodation: acc,
+        query: Array.from(new Set(parts)).join(', '),
+        markerId: id,
+      });
     });
 
-    // Dedupe activities by slug.
+    // Dedupe activities by slug. Resolve each activity's segment so we use the
+    // right city/country in the geocode query (multi-city trips).
+    const findActivitySegment = (activity: GeneratedActivity): TripSegment | undefined => {
+      if (!activity.cityId && !activity.destinationId) return segments[0];
+      return segments.find(
+        (s) => (activity.cityId && s.city?.id === activity.cityId)
+          || (activity.destinationId && s.destination.id === activity.destinationId),
+      );
+    };
+
     const seenSlugs = new Set<string>();
-    const candidates: Array<{ activity: GeneratedActivity; key: string; query: string }> = [];
+    const candidates: Array<{
+      activity: GeneratedActivity;
+      key: string;
+      queries: string[]; // tried in order, first hit wins
+    }> = [];
     activities.forEach((activity) => {
+      const seg = findActivitySegment(activity);
+      const actCity = seg?.city?.name || seg?.destination?.name || tripCity;
+      const actCountry = seg?.destination?.country || tripCountry;
       const slug = computeSlug({
         name: activity.name,
-        city,
-        address: activity.location || null,
+        city: actCity,
+        address: activity.formattedAddress || activity.location || null,
         googlePlaceId: activity.placeId || null,
       });
       if (seenSlugs.has(slug)) return;
       seenSlugs.add(slug);
-      const parts = [activity.name, activity.location, city, country]
+
+      // Multi-step query strategy: try the most specific first, fall back to
+      // looser queries so AI-named places that don't match the full address
+      // still resolve.
+      const queries: string[] = [];
+      const fullParts = [activity.name, activity.formattedAddress || activity.location, actCity, actCountry]
         .map((p) => (p || '').trim())
         .filter(Boolean);
-      const query = Array.from(new Set(parts)).join(', ');
-      candidates.push({ activity, key: slug, query });
+      if (fullParts.length > 0) queries.push(Array.from(new Set(fullParts)).join(', '));
+      const cityParts = [activity.name, actCity, actCountry]
+        .map((p) => (p || '').trim())
+        .filter(Boolean);
+      const cityQuery = Array.from(new Set(cityParts)).join(', ');
+      if (cityQuery && cityQuery !== queries[0]) queries.push(cityQuery);
+      const nameOnly = activity.name?.trim();
+      if (nameOnly && !queries.includes(nameOnly)) queries.push(nameOnly);
+      candidates.push({ activity, key: slug, queries });
     });
 
     return {
       seedHotels: seedH,
       hotelGeocodeQueue: hotelQueue,
       activityCandidates: candidates,
-      fallbackCity: city,
+      fallbackCity: tripCity,
     };
   }, [currentPlan, activities]);
 
@@ -273,9 +329,11 @@ const MapPage: React.FC = () => {
       style: isDark ? STYLE_DARK : STYLE_LIGHT,
       center: [0, 20],
       zoom: 1.5,
+      pitch: 0,
+      maxPitch: 0, // lock the map flat: pan / zoom / rotate only, no tilt
       attributionControl: false,
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: false }), 'top-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     mapRef.current = map;
 
@@ -343,10 +401,10 @@ const MapPage: React.FC = () => {
       });
 
       const seededActivities: MapPoint[] = [];
-      const missesQueries: string[] = [];
-      const missesMeta: Array<{ activity: GeneratedActivity; key: string; index: number }> = [];
+      type ActivityMiss = { activity: GeneratedActivity; key: string; queries: string[]; index: number };
+      const activityMisses: ActivityMiss[] = [];
 
-      activityCandidates.forEach(({ activity, key, query }, i) => {
+      activityCandidates.forEach(({ activity, key, queries }, i) => {
         const hit = known.get(key);
         if (hit) {
           seededActivities.push({
@@ -360,8 +418,7 @@ const MapPage: React.FC = () => {
             activity,
           });
         } else {
-          missesQueries.push(query);
-          missesMeta.push({ activity, key, index: i });
+          activityMisses.push({ activity, key, queries, index: i });
         }
       });
 
@@ -372,61 +429,90 @@ const MapPage: React.FC = () => {
         return Array.from(merged.values());
       });
 
-      const totalPending = missesQueries.length + hotelGeocodeQueue.length;
+      const totalPending = activityMisses.length + hotelGeocodeQueue.length;
       setPendingCount(totalPending);
       setInitialLoading(false);
 
       if (totalPending === 0) return;
 
-      // Geocode misses (activities + hotels) in one parallel batch.
-      const allQueries = [...missesQueries, ...hotelGeocodeQueue.map((h) => h.query)];
-      const results = await geocodeMany(allQueries, {
-        concurrency: 6,
-        onProgress: (resolved, total) => {
-          if (cancelled) return;
-          setPendingCount(Math.max(0, total - resolved));
-        },
-      });
-      if (cancelled) return;
+      // Per-candidate worker pool: each candidate tries its query list in
+      // order, first hit wins. Hotels share the same pool with a single-query
+      // list each.
+      const { geocode } = await import('../services/geocodingService');
+      type Job =
+        | { kind: 'activity'; data: ActivityMiss }
+        | { kind: 'hotel'; data: typeof hotelGeocodeQueue[number] };
+      const jobs: Job[] = [
+        ...activityMisses.map((m) => ({ kind: 'activity' as const, data: m })),
+        ...hotelGeocodeQueue.map((h) => ({ kind: 'hotel' as const, data: h })),
+      ];
 
-      const resolved: MapPoint[] = [];
-      results.forEach((res, idx) => {
-        if (!res) return;
-        if (idx < missesMeta.length) {
-          const { activity, key, index } = missesMeta[idx];
-          resolved.push({
-            id: `act-${index}`,
-            kind: 'activity',
-            name: activity.name,
-            subtitle: activity.formattedAddress || activity.location || null,
-            category: activity.category,
-            lat: res.lat,
-            lng: res.lng,
-            activity,
-          });
-          if (key) {
-            supabase.from('activities').update({ lat: res.lat, lng: res.lng }).eq('slug', key).then(() => {});
-          }
-        } else {
-          const hotelIdx = idx - missesMeta.length;
-          const { accommodation } = hotelGeocodeQueue[hotelIdx];
-          resolved.push({
-            id: `hotel-${accommodation.id}`,
-            kind: 'hotel',
-            name: accommodation.name || 'Accommodation',
-            subtitle: accommodation.address || null,
-            lat: res.lat,
-            lng: res.lng,
-          });
+      let nextJobIdx = 0;
+      let resolvedCount = 0;
+      const concurrency = 6;
+
+      const runJob = async (job: Job) => {
+        const queries = job.kind === 'activity' ? job.data.queries : [job.data.query];
+        for (const q of queries) {
+          if (cancelled) return null;
+          const res = await geocode(q);
+          if (res) return res;
         }
-      });
+        return null;
+      };
 
-      setPoints((prev) => {
-        const merged = new Map(prev.map((p) => [p.id, p]));
-        resolved.forEach((p) => merged.set(p.id, p));
-        return Array.from(merged.values());
-      });
-      setPendingCount(0);
+      const worker = async () => {
+        while (true) {
+          const i = nextJobIdx++;
+          if (i >= jobs.length) return;
+          const job = jobs[i];
+          const res = await runJob(job);
+          if (cancelled) return;
+          resolvedCount += 1;
+          setPendingCount(Math.max(0, totalPending - resolvedCount));
+          if (!res) continue;
+
+          if (job.kind === 'activity') {
+            const { activity, key, index } = job.data;
+            const point: MapPoint = {
+              id: `act-${index}`,
+              kind: 'activity',
+              name: activity.name,
+              subtitle: activity.formattedAddress || activity.location || null,
+              category: activity.category,
+              lat: res.lat,
+              lng: res.lng,
+              activity,
+            };
+            setPoints((prev) => {
+              if (prev.some((p) => p.id === point.id)) return prev;
+              return [...prev, point];
+            });
+            if (key) {
+              supabase.from('activities').update({ lat: res.lat, lng: res.lng }).eq('slug', key).then(() => {});
+            }
+          } else {
+            const { accommodation, markerId } = job.data;
+            const display = accommodation.name?.trim() || accommodation.address?.trim() || 'Accommodation';
+            const point: MapPoint = {
+              id: markerId,
+              kind: 'hotel',
+              name: display,
+              subtitle: accommodation.address || null,
+              lat: res.lat,
+              lng: res.lng,
+            };
+            setPoints((prev) => {
+              if (prev.some((p) => p.id === point.id)) return prev;
+              return [...prev, point];
+            });
+          }
+        }
+      };
+
+      const workers: Promise<void>[] = [];
+      for (let i = 0; i < Math.min(concurrency, jobs.length); i++) workers.push(worker());
+      await Promise.all(workers);
     })();
 
     return () => { cancelled = true; };
@@ -487,6 +573,19 @@ const MapPage: React.FC = () => {
     } catch {
       // permission denied or unavailable -- silent
     }
+  };
+
+  const hotelPoints = points.filter((p) => p.kind === 'hotel');
+  const recenterOnAccommodations = () => {
+    const map = mapRef.current;
+    if (!map || hotelPoints.length === 0) return;
+    if (hotelPoints.length === 1) {
+      map.flyTo({ center: [hotelPoints[0].lng, hotelPoints[0].lat], zoom: 15, essential: true });
+      return;
+    }
+    const bounds = new maplibregl.LngLatBounds();
+    hotelPoints.forEach((h) => bounds.extend([h.lng, h.lat]));
+    map.fitBounds(bounds, { padding: 80, maxZoom: 14, duration: 600 });
   };
 
   if (!currentPlan) {
@@ -554,6 +653,33 @@ const MapPage: React.FC = () => {
             border: '0.5px solid var(--outline)',
           }}
         />
+
+        {hotelPoints.length > 0 && (
+          <button
+            onClick={recenterOnAccommodations}
+            className="absolute z-10 transition-transform active:scale-90"
+            style={{
+              right: '14px',
+              bottom: '114px',
+              width: '40px',
+              height: '40px',
+              minWidth: 0,
+              minHeight: 0,
+              borderRadius: '50%',
+              background: 'var(--surface-container)',
+              color: 'var(--accent)',
+              border: '0.5px solid var(--outline)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+            }}
+            aria-label={hotelPoints.length === 1 ? 'Center on accommodation' : 'Frame all accommodations'}
+            title={hotelPoints.length === 1 ? 'Show accommodation' : `Show all ${hotelPoints.length} accommodations`}
+          >
+            <Bed size={18} />
+          </button>
+        )}
 
         <button
           onClick={recenterOnMe}
