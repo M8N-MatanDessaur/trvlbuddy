@@ -58,7 +58,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
           className="flex items-end justify-center"
-          style={{ background: 'rgba(0,0,0,0.4)', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 60, margin: 0, padding: 0 }}
+          style={{ background: 'rgba(0,0,0,0.4)', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, margin: 0, padding: 0 }}
           onClick={onClose}
         >
           <motion.div

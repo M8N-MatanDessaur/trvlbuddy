@@ -186,7 +186,20 @@ const DynamicDashboard: React.FC = () => {
   };
 
   const tripDay = getTripDayInfo();
-  const savedActivityList = activities.filter(a => savedActivities.includes(a.name));
+  // Dedupe: the same activity can appear in multiple AI sections (e.g. both
+  // "Food & Dining" and "Recommended for you"); we only want one entry per
+  // saved name on the dashboard.
+  const savedActivityList = (() => {
+    const seen = new Set<string>();
+    const out: typeof activities = [];
+    for (const a of activities) {
+      if (!savedActivities.includes(a.name)) continue;
+      if (seen.has(a.name)) continue;
+      seen.add(a.name);
+      out.push(a);
+    }
+    return out;
+  })();
 
   return (
     <section className="page space-y-5">
