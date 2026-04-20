@@ -44,15 +44,22 @@ export async function findPlaceFromText(
   try {
     const url = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?${params.toString()}`;
     const res = await fetch(url);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn('[places] findPlace HTTP', res.status, 'for', query);
+      return null;
+    }
     const data: {
       status?: string;
+      error_message?: string;
       candidates?: Array<{
         place_id?: string;
         geometry?: { location?: { lat: number; lng: number } };
         formatted_address?: string;
       }>;
     } = await res.json();
+    if (data.status && data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+      console.warn('[places] findPlace status', data.status, data.error_message || '', 'for', query);
+    }
     const cand = data.candidates?.[0];
     if (!cand?.place_id || !cand.geometry?.location) return null;
     return {
@@ -62,7 +69,63 @@ export async function findPlaceFromText(
       formatted_address: cand.formatted_address,
     };
   } catch (err) {
-    console.error('findPlaceFromText failed for', query, err);
+    console.error('[places] findPlace failed for', query, err);
+    return null;
+  }
+}
+
+/**
+ * Text Search ($32 / 1K) -- more permissive than Find Place, better at
+ * matching descriptive AI-generated names ("Cozy cafe near Han River") to
+ * real places. Use as a fallback after findPlaceFromText returns null.
+ */
+export async function searchPlaceByText(
+  query: string,
+  options: FindPlaceOptions = {},
+): Promise<GooglePlaceHit | null> {
+  if (!GOOGLE_PLACES_API_KEY) return null;
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+
+  const params = new URLSearchParams({
+    query: trimmed,
+    key: GOOGLE_PLACES_API_KEY,
+  });
+  if (options.near) {
+    const radius = options.near.radiusMeters ?? 50000;
+    params.set('location', `${options.near.lat},${options.near.lng}`);
+    params.set('radius', String(radius));
+  }
+
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?${params.toString()}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.warn('[places] textSearch HTTP', res.status, 'for', query);
+      return null;
+    }
+    const data: {
+      status?: string;
+      error_message?: string;
+      results?: Array<{
+        place_id?: string;
+        geometry?: { location?: { lat: number; lng: number } };
+        formatted_address?: string;
+      }>;
+    } = await res.json();
+    if (data.status && data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+      console.warn('[places] textSearch status', data.status, data.error_message || '', 'for', query);
+    }
+    const hit = data.results?.[0];
+    if (!hit?.place_id || !hit.geometry?.location) return null;
+    return {
+      place_id: hit.place_id,
+      lat: hit.geometry.location.lat,
+      lng: hit.geometry.location.lng,
+      formatted_address: hit.formatted_address,
+    };
+  } catch (err) {
+    console.error('[places] textSearch failed for', query, err);
     return null;
   }
 }
