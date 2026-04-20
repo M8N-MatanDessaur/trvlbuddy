@@ -1,6 +1,7 @@
-// Free geocoding via OpenStreetMap's Nominatim. Cached to localStorage so a
-// given query is only resolved once per device. Requests are queued through a
-// 1.2s throttle to respect Nominatim's 1 req/sec usage policy.
+// Geocoding via Photon (komoot.io's open-source OSM geocoder). Photon is free,
+// requires no API key, and is friendlier to parallel requests than Nominatim.
+// Results + negative results are cached in localStorage so a query is resolved
+// at most once per device.
 
 interface CacheEntry {
   lat: number;
@@ -8,12 +9,9 @@ interface CacheEntry {
   ts: number;
 }
 
-const CACHE_KEY = 'geocode-cache-v1';
-const NEGATIVE_CACHE_KEY = 'geocode-negative-v1';
-const THROTTLE_MS = 1200;
+const CACHE_KEY = 'geocode-cache-v2';
+const NEGATIVE_CACHE_KEY = 'geocode-negative-v2';
 const NEGATIVE_TTL = 1000 * 60 * 60 * 24 * 7; // 7 days
-
-let lastFetchAt = 0;
 
 function readCache(): Record<string, CacheEntry> {
   if (typeof localStorage === 'undefined') return {};
@@ -28,7 +26,7 @@ function writeCache(cache: Record<string, CacheEntry>): void {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
   } catch {
-    // out of quota — ignore
+    // out of quota -- ignore
   }
 }
 
@@ -53,23 +51,14 @@ function normalizeKey(query: string): string {
   return query.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-async function throttle(): Promise<void> {
-  const now = Date.now();
-  const since = now - lastFetchAt;
-  if (since < THROTTLE_MS) {
-    await new Promise((resolve) => setTimeout(resolve, THROTTLE_MS - since));
-  }
-  lastFetchAt = Date.now();
-}
-
 export interface GeocodeResult {
   lat: number;
   lng: number;
 }
 
 /**
- * Geocode a free-text query (e.g. "Eiffel Tower, Paris, France") via
- * Nominatim. Returns null if no result, or on rate-limit/failure.
+ * Geocode a free-text query (e.g. "Eiffel Tower, Paris, France").
+ * Returns null on no result or network failure.
  */
 export async function geocode(query: string): Promise<GeocodeResult | null> {
   const trimmed = query.trim();
@@ -86,31 +75,22 @@ export async function geocode(query: string): Promise<GeocodeResult | null> {
     return null;
   }
 
-  await throttle();
-
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(trimmed)}&format=json&limit=1`;
-    const res = await fetch(url, {
-      headers: {
-        // Nominatim asks for an identifying user agent in the Accept-Language /
-        // referer; in a browser the origin is sent automatically.
-        Accept: 'application/json',
-      },
-    });
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(trimmed)}&limit=1`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!res.ok) {
       negative[key] = Date.now();
       writeNegativeCache(negative);
       return null;
     }
-    const rows: Array<{ lat: string; lon: string }> = await res.json();
-    const first = rows[0];
-    if (!first) {
+    const data: { features?: Array<{ geometry?: { coordinates?: [number, number] } }> } = await res.json();
+    const coords = data.features?.[0]?.geometry?.coordinates;
+    if (!coords || coords.length < 2) {
       negative[key] = Date.now();
       writeNegativeCache(negative);
       return null;
     }
-    const lat = parseFloat(first.lat);
-    const lng = parseFloat(first.lon);
+    const [lng, lat] = coords;
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       negative[key] = Date.now();
       writeNegativeCache(negative);
@@ -124,4 +104,36 @@ export async function geocode(query: string): Promise<GeocodeResult | null> {
     writeNegativeCache(negative);
     return null;
   }
+}
+
+/**
+ * Geocode many queries in parallel with a small concurrency cap so we don't
+ * blast the public Photon endpoint. Returns results in the same order as the
+ * input queries; null entries are misses.
+ */
+export async function geocodeMany(
+  queries: string[],
+  options: { concurrency?: number; onProgress?: (resolved: number, total: number) => void } = {},
+): Promise<Array<GeocodeResult | null>> {
+  const { concurrency = 6, onProgress } = options;
+  const results: Array<GeocodeResult | null> = new Array(queries.length).fill(null);
+  let nextIndex = 0;
+  let resolvedCount = 0;
+
+  async function worker() {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= queries.length) return;
+      results[i] = await geocode(queries[i]);
+      resolvedCount += 1;
+      onProgress?.(resolvedCount, queries.length);
+    }
+  }
+
+  const workers: Promise<void>[] = [];
+  for (let i = 0; i < Math.min(concurrency, queries.length); i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+  return results;
 }

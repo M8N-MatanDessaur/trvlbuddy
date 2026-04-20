@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { Loader2, MapPin } from 'lucide-react';
+import maplibregl, { Map as MlMap, Marker as MlMarker } from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { Loader2, LocateFixed, MapPin } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Accommodation, GeneratedActivity, TripSegment } from '../types/TravelData';
 import { supabase } from '../lib/supabase';
 import { computeSlug } from '../services/activityMediaService';
-import { geocode } from '../services/geocodingService';
+import { geocodeMany } from '../services/geocodingService';
+import { getCachedLocation, getCurrentLocation, type UserLocation } from '../utils/geolocation';
 import DynamicActivityModal from './DynamicActivityModal';
 
 interface MapPoint {
@@ -20,62 +21,100 @@ interface MapPoint {
   activity?: GeneratedActivity;
 }
 
-// CartoDB Voyager / dark_all -- free, no API key, designed look that
-// blends with our app's neutrals far better than raw OSM tiles.
-const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+// Carto vector styles -- fully designed Mapbox-style maps, free for non-commercial use,
+// no API key. positron = soft light, dark-matter = subtle dark. Both blend with our app.
+const STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json';
+const STYLE_DARK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
-function hotelMarkerHtml(): string {
-  return `
-  <div style="position: relative; width: 36px; height: 36px;">
-    <div style="
-      position: absolute; top: 0; left: 0;
-      width: 36px; height: 36px;
-      border-radius: 50% 50% 50% 0;
-      transform: rotate(-45deg);
-      background: var(--accent);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-      border: 2px solid var(--surface-container);
-    "></div>
-    <div style="
-      position: absolute; top: 7px; left: 7px;
-      width: 22px; height: 22px;
-      display: flex; align-items: center; justify-content: center;
-      color: var(--on-accent);
-    ">
-      <svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'>
-        <path d='M2 4v16'/>
-        <path d='M2 8h18a2 2 0 0 1 2 2v10'/>
-        <path d='M2 17h20'/>
-        <path d='M6 8v9'/>
-      </svg>
-    </div>
-  </div>`;
+function makeHotelMarkerEl(): HTMLDivElement {
+  const el = document.createElement('div');
+  el.className = 'trvl-marker trvl-marker--hotel';
+  el.innerHTML = `
+    <div style="position: relative; width: 36px; height: 36px;">
+      <div style="
+        position: absolute; top: 0; left: 0;
+        width: 36px; height: 36px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        background: var(--accent);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        border: 2px solid var(--surface-container);
+      "></div>
+      <div style="
+        position: absolute; top: 7px; left: 7px;
+        width: 22px; height: 22px;
+        display: flex; align-items: center; justify-content: center;
+        color: var(--on-accent);
+      ">
+        <svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'>
+          <path d='M2 4v16'/>
+          <path d='M2 8h18a2 2 0 0 1 2 2v10'/>
+          <path d='M2 17h20'/>
+          <path d='M6 8v9'/>
+        </svg>
+      </div>
+    </div>`;
+  return el;
 }
 
-function activityMarkerHtml(): string {
-  return `
-  <div style="
-    width: 22px; height: 22px;
-    border-radius: 50%;
-    background: var(--surface-container);
-    border: 3px solid var(--accent);
-    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-  "></div>`;
+function makeActivityMarkerEl(): HTMLDivElement {
+  const el = document.createElement('div');
+  el.className = 'trvl-marker trvl-marker--activity';
+  el.style.cursor = 'pointer';
+  el.innerHTML = `
+    <div style="
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--surface-container);
+      border: 3px solid var(--accent);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      transition: transform 0.15s ease;
+    "></div>`;
+  el.addEventListener('mouseenter', () => {
+    (el.firstElementChild as HTMLElement).style.transform = 'scale(1.15)';
+  });
+  el.addEventListener('mouseleave', () => {
+    (el.firstElementChild as HTMLElement).style.transform = 'scale(1)';
+  });
+  return el;
+}
+
+function makeUserLocationEl(): HTMLDivElement {
+  const el = document.createElement('div');
+  el.className = 'trvl-marker trvl-marker--me';
+  el.innerHTML = `
+    <div style="position: relative; width: 22px; height: 22px;">
+      <div style="
+        position: absolute; inset: 0;
+        border-radius: 50%;
+        background: var(--accent);
+        opacity: 0.25;
+        animation: trvl-me-pulse 1.6s ease-out infinite;
+      "></div>
+      <div style="
+        position: absolute; top: 5px; left: 5px;
+        width: 12px; height: 12px;
+        border-radius: 50%;
+        background: var(--accent);
+        border: 2px solid var(--surface-container);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      "></div>
+    </div>`;
+  return el;
 }
 
 const MapPage: React.FC = () => {
   const { currentPlan, activities } = useTravel();
   const { isDark } = useTheme();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const markersRef = useRef<L.Marker[]>([]);
+  const mapRef = useRef<MlMap | null>(null);
+  const markersRef = useRef<MlMarker[]>([]);
+  const userMarkerRef = useRef<MlMarker | null>(null);
   const [points, setPoints] = useState<MapPoint[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [openActivity, setOpenActivity] = useState<GeneratedActivity | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(getCachedLocation());
 
   const { seedHotels, activityCandidates, fallbackCity } = useMemo(() => {
     if (!currentPlan) {
@@ -108,8 +147,7 @@ const MapPage: React.FC = () => {
     const country = segments[0]?.destination?.country
       || currentPlan.destination?.country || currentPlan.destinations?.[0]?.country || '';
 
-    // Dedupe activities by slug so a place that appears in two AI sections is
-    // only plotted once.
+    // Dedupe activities by slug -- the same place can show up in two AI sections.
     const seenSlugs = new Set<string>();
     const candidates: Array<{ activity: GeneratedActivity; key: string; query: string }> = [];
     activities.forEach((activity) => {
@@ -131,43 +169,38 @@ const MapPage: React.FC = () => {
     return { seedHotels: hotels, activityCandidates: candidates, fallbackCity: city };
   }, [currentPlan, activities]);
 
-  // Init Leaflet once.
+  // Init MapLibre once.
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = L.map(containerRef.current, {
-      zoomControl: true,
-      attributionControl: true,
-    }).setView([20, 0], 2);
-    tileLayerRef.current = L.tileLayer(isDark ? TILE_DARK : TILE_LIGHT, {
-      attribution: TILE_ATTRIBUTION,
-      maxZoom: 19,
-      subdomains: 'abcd',
-      detectRetina: true,
-    }).addTo(map);
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: isDark ? STYLE_DARK : STYLE_LIGHT,
+      center: [0, 20],
+      zoom: 1.5,
+      attributionControl: false,
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     mapRef.current = map;
 
     return () => {
       map.remove();
       mapRef.current = null;
-      tileLayerRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Swap tiles when theme flips light/dark.
+  // Swap style when theme flips. setStyle wipes markers, so re-add after the
+  // style finishes loading.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !tileLayerRef.current) return;
-    map.removeLayer(tileLayerRef.current);
-    tileLayerRef.current = L.tileLayer(isDark ? TILE_DARK : TILE_LIGHT, {
-      attribution: TILE_ATTRIBUTION,
-      maxZoom: 19,
-      subdomains: 'abcd',
-      detectRetina: true,
-    }).addTo(map);
+    if (!map) return;
+    map.setStyle(isDark ? STYLE_DARK : STYLE_LIGHT);
+    // markers are tied to map (not style) -- they survive setStyle, no action needed
   }, [isDark]);
 
-  // Load activity coords -- supabase first (fast, shared), Nominatim only for misses.
+  // Resolve activity coords -- supabase first (fast, shared), Photon for misses
+  // (parallel, fast). Persists found coords back to the activities row.
   useEffect(() => {
     let cancelled = false;
     setPoints(seedHotels);
@@ -175,11 +208,12 @@ const MapPage: React.FC = () => {
     setInitialLoading(true);
 
     if (activityCandidates.length === 0 && seedHotels.length === 0 && fallbackCity) {
-      geocode(fallbackCity).then((res) => {
+      // Empty trip -- just center on the destination.
+      import('../services/geocodingService').then(({ geocode }) => geocode(fallbackCity)).then((res) => {
         if (cancelled) return;
         setInitialLoading(false);
         if (!res || !mapRef.current) return;
-        mapRef.current.setView([res.lat, res.lng], 12);
+        mapRef.current.flyTo({ center: [res.lng, res.lat], zoom: 11, essential: true });
       });
       return () => { cancelled = true; };
     }
@@ -203,7 +237,9 @@ const MapPage: React.FC = () => {
       });
 
       const seeded: MapPoint[] = [];
-      const queue: typeof activityCandidates = [];
+      const missesQueries: string[] = [];
+      const missesMeta: Array<{ activity: GeneratedActivity; key: string; index: number }> = [];
+
       activityCandidates.forEach(({ activity, key, query }, i) => {
         const hit = known.get(key);
         if (hit) {
@@ -217,46 +253,56 @@ const MapPage: React.FC = () => {
             activity,
           });
         } else {
-          queue.push({ activity, key, query });
+          missesQueries.push(query);
+          missesMeta.push({ activity, key, index: i });
         }
       });
 
       if (cancelled) return;
       setPoints((prev) => {
-        const map = new Map(prev.map((p) => [p.id, p]));
-        seeded.forEach((p) => map.set(p.id, p));
-        return Array.from(map.values());
+        const merged = new Map(prev.map((p) => [p.id, p]));
+        seeded.forEach((p) => merged.set(p.id, p));
+        return Array.from(merged.values());
       });
-      setPendingCount(queue.length);
+      setPendingCount(missesQueries.length);
       setInitialLoading(false);
 
-      for (let i = 0; i < queue.length; i++) {
-        if (cancelled) return;
-        const { activity, key, query } = queue[i];
-        const res = await geocode(query);
-        if (cancelled) return;
-        setPendingCount((n) => Math.max(0, n - 1));
-        if (!res) continue;
+      if (missesQueries.length === 0) return;
 
-        setPoints((prev) => {
-          const idx = activityCandidates.findIndex((c) => c.key === key);
-          const id = `act-${idx}`;
-          if (prev.some((p) => p.id === id)) return prev;
-          return [...prev, {
-            id,
-            kind: 'activity',
-            name: activity.name,
-            subtitle: activity.location || null,
-            lat: res.lat,
-            lng: res.lng,
-            activity,
-          }];
+      const results = await geocodeMany(missesQueries, {
+        concurrency: 6,
+        onProgress: (resolved, total) => {
+          if (cancelled) return;
+          setPendingCount(Math.max(0, total - resolved));
+        },
+      });
+      if (cancelled) return;
+
+      const resolved: MapPoint[] = [];
+      results.forEach((res, idx) => {
+        if (!res) return;
+        const { activity, key, index } = missesMeta[idx];
+        resolved.push({
+          id: `act-${index}`,
+          kind: 'activity',
+          name: activity.name,
+          subtitle: activity.location || null,
+          lat: res.lat,
+          lng: res.lng,
+          activity,
         });
-
         if (key) {
+          // Best-effort persist to supabase (other devices skip the geocode).
           supabase.from('activities').update({ lat: res.lat, lng: res.lng }).eq('slug', key).then(() => {});
         }
-      }
+      });
+
+      setPoints((prev) => {
+        const merged = new Map(prev.map((p) => [p.id, p]));
+        resolved.forEach((p) => merged.set(p.id, p));
+        return Array.from(merged.values());
+      });
+      setPendingCount(0);
     })();
 
     return () => { cancelled = true; };
@@ -273,29 +319,50 @@ const MapPage: React.FC = () => {
     if (points.length === 0) return;
 
     points.forEach((point) => {
-      const html = point.kind === 'hotel' ? hotelMarkerHtml() : activityMarkerHtml();
-      const icon = L.divIcon({
-        className: 'trvl-map-marker',
-        html,
-        iconSize: point.kind === 'hotel' ? [36, 36] : [22, 22],
-        iconAnchor: point.kind === 'hotel' ? [18, 32] : [11, 11],
-      });
-      const marker = L.marker([point.lat, point.lng], { icon, title: point.name }).addTo(map);
+      const el = point.kind === 'hotel' ? makeHotelMarkerEl() : makeActivityMarkerEl();
+      const offset: [number, number] = point.kind === 'hotel' ? [0, -16] : [0, 0];
+      const marker = new maplibregl.Marker({ element: el, offset, anchor: 'center' })
+        .setLngLat([point.lng, point.lat])
+        .addTo(map);
       if (point.activity) {
-        marker.on('click', () => setOpenActivity(point.activity ?? null));
-      } else {
-        marker.bindTooltip(point.name, { direction: 'top', offset: [0, -28] });
+        el.addEventListener('click', () => setOpenActivity(point.activity ?? null));
       }
       markersRef.current.push(marker);
     });
 
     if (points.length === 1) {
-      map.setView([points[0].lat, points[0].lng], 14);
+      map.flyTo({ center: [points[0].lng, points[0].lat], zoom: 14, essential: true });
     } else {
-      const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      const bounds = new maplibregl.LngLatBounds();
+      points.forEach((p) => bounds.extend([p.lng, p.lat]));
+      map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 });
     }
   }, [points]);
+
+  // User location dot.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !userLocation) return;
+    if (userMarkerRef.current) {
+      userMarkerRef.current.setLngLat([userLocation.lng, userLocation.lat]);
+      return;
+    }
+    const el = makeUserLocationEl();
+    userMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([userLocation.lng, userLocation.lat])
+      .addTo(map);
+  }, [userLocation]);
+
+  const recenterOnMe = async () => {
+    try {
+      const loc = await getCurrentLocation();
+      setUserLocation(loc);
+      const map = mapRef.current;
+      if (map) map.flyTo({ center: [loc.lng, loc.lat], zoom: 14, essential: true });
+    } catch {
+      // permission denied or unavailable -- silent
+    }
+  };
 
   if (!currentPlan) {
     return (
@@ -362,6 +429,30 @@ const MapPage: React.FC = () => {
             border: '0.5px solid var(--outline)',
           }}
         />
+
+        <button
+          onClick={recenterOnMe}
+          className="absolute z-10 transition-transform active:scale-90"
+          style={{
+            right: '14px',
+            bottom: '64px',
+            width: '40px',
+            height: '40px',
+            minWidth: 0,
+            minHeight: 0,
+            borderRadius: '50%',
+            background: 'var(--surface-container)',
+            color: 'var(--accent)',
+            border: '0.5px solid var(--outline)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+          }}
+          aria-label="Center on my location"
+        >
+          <LocateFixed size={18} />
+        </button>
 
         {initialLoading && (
           <div
