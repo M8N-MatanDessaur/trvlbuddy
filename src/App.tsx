@@ -20,7 +20,7 @@ import SettingsPage from './components/SettingsPage';
 import ProfilePage from './components/ProfilePage';
 import NewTripLauncher from './components/NewTripLauncher';
 import TripJoinPage from './components/TripJoinPage';
-import { MessageCircle, Home, Compass, Languages, Phone, Radar, Plus, Wrench } from 'lucide-react';
+import { MessageCircle, Home, Compass, Languages, Phone, Radar, Plus, Wrench, Map as MapIcon } from 'lucide-react';
 
 const ChatPage = lazy(() => import('./components/ChatPage'));
 const TripPage = lazy(() => import('./components/DynamicDashboard'));
@@ -29,10 +29,12 @@ const ExplorePage = lazy(() => import('./components/DynamicActivitiesPage'));
 const LanguagePage = lazy(() => import('./components/DynamicTranslatorPage'));
 const UtilitiesPage = lazy(() => import('./components/DynamicUtilitiesPage'));
 const EmergencyPage = lazy(() => import('./components/EmergencyPage'));
+const MapPage = lazy(() => import('./components/MapPage'));
 
 const tripPages: PageDef[] = [
   { path: '/chat', component: ChatPage, icon: MessageCircle, label: 'AI' },
   { path: '/', component: TripPage, icon: Home, label: 'Trip' },
+  { path: '/map', component: MapPage, icon: MapIcon, label: 'Map' },
   { path: '/explore', component: ExplorePage, icon: Compass, label: 'Explore' },
   { path: '/language', component: LanguagePage, icon: Languages, label: 'Language' },
   { path: '/utilities', component: UtilitiesPage, icon: Wrench, label: 'Tools' },
