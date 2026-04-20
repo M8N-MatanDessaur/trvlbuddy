@@ -20,7 +20,7 @@ import SettingsPage from './components/SettingsPage';
 import ProfilePage from './components/ProfilePage';
 import NewTripLauncher from './components/NewTripLauncher';
 import TripJoinPage from './components/TripJoinPage';
-import { MessageCircle, Home, Compass, Languages, Phone, Radar, Plus, Wrench, Map as MapIcon } from 'lucide-react';
+import { MessageCircle, Home, Compass, Languages, Phone, Radar, Plus, Wrench } from 'lucide-react';
 
 const ChatPage = lazy(() => import('./components/ChatPage'));
 const TripPage = lazy(() => import('./components/DynamicDashboard'));
@@ -29,13 +29,14 @@ const ExplorePage = lazy(() => import('./components/DynamicActivitiesPage'));
 const LanguagePage = lazy(() => import('./components/DynamicTranslatorPage'));
 const UtilitiesPage = lazy(() => import('./components/DynamicUtilitiesPage'));
 const EmergencyPage = lazy(() => import('./components/EmergencyPage'));
-const MapPage = lazy(() => import('./components/MapPage'));
+// Map view is parked on feature/trip-map-v2 -- the data layer (Google
+// Places enrichment of activity coordinates at trip generation) stays on
+// master so when Map comes back it'll have everything it needs.
 
 const tripPages: PageDef[] = [
   { path: '/chat', component: ChatPage, icon: MessageCircle, label: 'AI' },
   { path: '/', component: TripPage, icon: Home, label: 'Trip' },
   { path: '/explore', component: ExplorePage, icon: Compass, label: 'Explore' },
-  { path: '/map', component: MapPage, icon: MapIcon, label: 'Map' },
   { path: '/language', component: LanguagePage, icon: Languages, label: 'Language' },
   { path: '/utilities', component: UtilitiesPage, icon: Wrench, label: 'Tools' },
   { path: '/emergency', component: EmergencyPage, icon: Phone, label: 'SOS' },
