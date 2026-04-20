@@ -12,8 +12,17 @@ let _placesBlocked: { reason: 'OVER_QUERY_LIMIT' | 'REQUEST_DENIED'; message: st
 // Negative cache: query strings Google said don't exist. Stored in
 // localStorage with a 7-day TTL so repeat map opens for the same trip don't
 // re-burn quota on activities Google has already said it can't find.
-const NEG_KEY = 'places-negative-v1';
+//
+// v2 abandons the v1 entries that got poisoned by treating quota / auth
+// errors as "this query has no result" -- old caches would short-circuit
+// every lookup forever after the first OVER_QUERY_LIMIT.
+const NEG_KEY = 'places-negative-v2';
 const NEG_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+
+// Best-effort cleanup of the poisoned predecessor on module load.
+if (typeof localStorage !== 'undefined') {
+  try { localStorage.removeItem('places-negative-v1'); } catch { /* noop */ }
+}
 
 function negKey(query: string): string {
   return query.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -121,12 +130,18 @@ export async function findPlaceFromText(
         formatted_address?: string;
       }>;
     } = await res.json();
-    if (data.status && data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-      console.warn('[places] findPlace status', data.status, data.error_message || '', 'for', query);
-      maybeBlock(data.status, data.error_message);
+    const status = data.status;
+    if (status && status !== 'OK' && status !== 'ZERO_RESULTS') {
+      console.warn('[places] findPlace status', status, data.error_message || '', 'for', query);
+      maybeBlock(status, data.error_message);
+      // Quota / auth / config errors are NOT a property of this query --
+      // don't poison the negative cache or the user gets stuck with empty
+      // results forever after the first error.
+      return null;
     }
     const cand = data.candidates?.[0];
     if (!cand?.place_id || !cand.geometry?.location) {
+      // Genuine "Google considered this and found nothing" -- safe to cache.
       recordMiss(trimmed);
       return null;
     }
@@ -182,8 +197,11 @@ export async function searchPlaceByText(
         formatted_address?: string;
       }>;
     } = await res.json();
-    if (data.status && data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-      console.warn('[places] textSearch status', data.status, data.error_message || '', 'for', query);
+    const status = data.status;
+    if (status && status !== 'OK' && status !== 'ZERO_RESULTS') {
+      console.warn('[places] textSearch status', status, data.error_message || '', 'for', query);
+      maybeBlock(status, data.error_message);
+      return null;
     }
     const hit = data.results?.[0];
     if (!hit?.place_id || !hit.geometry?.location) return null;
