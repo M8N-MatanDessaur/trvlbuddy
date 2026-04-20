@@ -148,7 +148,7 @@ const NewTripLauncher: React.FC = () => {
                 className="text-left rounded-3xl p-5 transition active:scale-[0.985]"
                 style={{
                   background: 'var(--accent)',
-                  color: 'white',
+                  color: 'var(--on-accent)',
                   boxShadow: '0 10px 26px -12px color-mix(in srgb, var(--accent) 70%, transparent)',
                 }}
               >

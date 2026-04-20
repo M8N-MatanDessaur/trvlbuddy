@@ -11,7 +11,7 @@ const AuthSplash: React.FC = () => (
         className="w-14 h-14 rounded-full flex items-center justify-center"
         style={{
           background: 'var(--accent)',
-          color: 'white',
+          color: 'var(--on-accent)',
           boxShadow: '0 10px 24px -8px color-mix(in srgb, var(--accent) 70%, transparent)',
         }}
       >

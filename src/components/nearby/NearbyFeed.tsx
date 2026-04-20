@@ -790,7 +790,7 @@ const NearbyFeed: React.FC = () => {
               height: '46px',
               borderRadius: '50%',
               background: 'var(--accent)',
-              color: 'white',
+              color: 'var(--on-accent)',
               boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
               zIndex: 40,
               border: 'none',

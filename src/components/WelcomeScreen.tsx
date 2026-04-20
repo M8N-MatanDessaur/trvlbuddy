@@ -50,7 +50,7 @@ const WelcomeScreen: React.FC = () => {
           className="text-left rounded-3xl p-5 transition-all active:scale-[0.98]"
           style={{
             background: 'var(--accent)',
-            color: 'white',
+            color: 'var(--on-accent)',
             boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
           }}
         >
