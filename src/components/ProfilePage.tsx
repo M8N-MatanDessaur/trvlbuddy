@@ -6,7 +6,6 @@ import {
   Heart,
   Image as ImageIcon,
   LogOut,
-  MapPin,
   MessageCircle,
   Plane,
   Settings as SettingsIcon,
@@ -24,6 +23,7 @@ import {
 import { listMyTrips, loadTrip } from '../services/tripsService';
 import Avatar from './Avatar';
 import PhotoViewerModal from './PhotoViewerModal';
+import TripsCarousel from './TripsCarousel';
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -119,7 +119,8 @@ const ProfilePage: React.FC = () => {
     navigate('/', { replace: true });
   };
 
-  const handleLoadTrip = async (tripId: string) => {
+  const handleLoadTrip = async (tripIdOrTrip: string | Trip) => {
+    const tripId = typeof tripIdOrTrip === 'string' ? tripIdOrTrip : tripIdOrTrip.id;
     setLoadingTripId(tripId);
     const row = await loadTrip(tripId);
     setLoadingTripId(null);
@@ -335,18 +336,13 @@ const ProfilePage: React.FC = () => {
           {isOwn && (
             <section>
               <h2 className={sectionLabelClass} style={{ color: 'var(--text-tertiary)' }}>
-                My trips
+                My trips {trips.length > 0 && <span style={{ opacity: 0.7 }}>({trips.length})</span>}
               </h2>
               {tripsLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 2 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="activity-card-shimmer rounded-2xl h-16"
-                      style={{ background: 'var(--surface-container-high)' }}
-                    />
-                  ))}
-                </div>
+                <div
+                  className="activity-card-shimmer rounded-2xl"
+                  style={{ height: '140px', background: 'var(--surface-container-high)' }}
+                />
               ) : trips.length === 0 ? (
                 <div
                   className="rounded-2xl px-4 py-6 text-center"
@@ -357,38 +353,12 @@ const ProfilePage: React.FC = () => {
                   <p className="text-[12px] mt-1">Plan a trip and save it to the cloud.</p>
                 </div>
               ) : (
-                <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface-container)' }}>
-                  {trips.map((trip, idx) => (
-                    <button
-                      key={trip.id}
-                      onClick={() => handleLoadTrip(trip.id)}
-                      disabled={loadingTripId === trip.id}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors disabled:opacity-60"
-                      style={{
-                        borderBottom: idx === trips.length - 1 ? 'none' : '0.33px solid var(--outline)',
-                      }}
-                    >
-                      <div
-                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
-                      >
-                        <MapPin size={18} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[14px] font-bold truncate">{trip.title}</div>
-                        <div className="text-[12px] truncate" style={{ color: 'var(--text-secondary)' }}>
-                          {(trip.cities || []).join(' · ') || 'No cities yet'}
-                        </div>
-                      </div>
-                      <span
-                        className="text-[11px] font-bold px-2.5 py-1 rounded-full flex-shrink-0"
-                        style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
-                      >
-                        {loadingTripId === trip.id ? 'Loading...' : 'Open'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+                <TripsCarousel
+                  trips={trips}
+                  onSelect={handleLoadTrip}
+                  busyTripId={loadingTripId}
+                  selectLabel="Open trip"
+                />
               )}
             </section>
           )}
@@ -432,6 +402,16 @@ const ProfilePage: React.FC = () => {
             ),
           );
           setStats((s) => ({ ...s, likesReceived: Math.max(0, s.likesReceived + delta) }));
+        }}
+        onPhotoDeleted={(photoId) => {
+          const removed = photos.find((p) => p.id === photoId);
+          setPhotos((rows) => rows.filter((row) => row.id !== photoId));
+          setStats((s) => ({
+            postCount: Math.max(0, s.postCount - 1),
+            likesReceived: Math.max(0, s.likesReceived - (removed?.likeCount ?? 0)),
+            commentsReceived: Math.max(0, s.commentsReceived - (removed?.commentCount ?? 0)),
+          }));
+          setOpenPhotoId(null);
         }}
         onCommentAdded={(photoId) => {
           setPhotos((rows) =>

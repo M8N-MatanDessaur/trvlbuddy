@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft,
   ChevronRight,
@@ -7,10 +8,12 @@ import {
   Loader2,
   MessageCircle,
   SendHorizontal,
+  Trash2,
   X,
 } from 'lucide-react';
 import {
   addActivityImageComment,
+  deleteActivityImage,
   isImageLikedByViewer,
   listActivityImageComments,
   setActivityImageLiked,
@@ -27,6 +30,7 @@ interface Props {
   onClose: () => void;
   onLikeChange?: (photoId: string, delta: number, liked: boolean) => void;
   onCommentAdded?: (photoId: string) => void;
+  onPhotoDeleted?: (photoId: string) => void;
 }
 
 function formatCommentTime(value: string): string {
@@ -46,6 +50,7 @@ const PhotoViewerModal: React.FC<Props> = ({
   onClose,
   onLikeChange,
   onCommentAdded,
+  onPhotoDeleted,
 }) => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -57,6 +62,9 @@ const PhotoViewerModal: React.FC<Props> = ({
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [likeBusy, setLikeBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [heartBurst, setHeartBurst] = useState(0);
 
   const open = initialIndex !== null && photos.length > 0;
   const photo = open ? photos[Math.max(0, Math.min(index, photos.length - 1))] : null;
@@ -75,6 +83,7 @@ const PhotoViewerModal: React.FC<Props> = ({
     setLiked(false);
     setBody('');
     setComments([]);
+    setConfirmingDelete(false);
     setLoadingComments(true);
 
     let alive = true;
@@ -166,6 +175,46 @@ const PhotoViewerModal: React.FC<Props> = ({
       return;
     }
     onLikeChange?.(photo.id, next ? 1 : -1, next);
+  };
+
+  // Double-tap on the image likes (or unlikes) it. Uses a 280ms window between
+  // taps. Triggers a transient heart burst overlay for feedback.
+  const lastTapRef = useRef(0);
+  const handleImageTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      lastTapRef.current = 0;
+      setHeartBurst((n) => n + 1);
+      // Only fire a like (not an unlike) on double-tap to match social-app convention.
+      if (!liked && !ownPhoto && user) {
+        void handleLike();
+      }
+    } else {
+      lastTapRef.current = now;
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!user || !ownPhoto) return;
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      setTimeout(() => setConfirmingDelete(false), 4000);
+      return;
+    }
+    setDeleting(true);
+    const { error } = await deleteActivityImage({
+      imageId: photo.id,
+      userId: user.id,
+      storagePath: photo.storage_path,
+    });
+    setDeleting(false);
+    if (error) {
+      toast(error, 'error');
+      return;
+    }
+    toast('Photo unpublished', 'success');
+    onPhotoDeleted?.(photo.id);
+    setConfirmingDelete(false);
   };
 
   const submitComment = async () => {
@@ -279,12 +328,38 @@ const PhotoViewerModal: React.FC<Props> = ({
             src={photo.url}
             alt={photo.activity_name}
             draggable={false}
+            onClick={handleImageTap}
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'contain',
+              cursor: 'pointer',
             }}
           />
+          {/* Heart burst on double-tap */}
+          <AnimatePresence>
+            {heartBurst > 0 && (
+              <motion.div
+                key={heartBurst}
+                initial={{ opacity: 0, scale: 0.4 }}
+                animate={{ opacity: 1, scale: 1.2 }}
+                exit={{ opacity: 0, scale: 1.4 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
+                onAnimationComplete={() => setHeartBurst((n) => Math.max(0, n - 1))}
+                className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                style={{ zIndex: 5 }}
+              >
+                <Heart
+                  size={120}
+                  fill="white"
+                  style={{
+                    color: 'white',
+                    filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.4))',
+                  }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
           {hasPrev && (
             <button
               onClick={goPrev}
@@ -324,15 +399,18 @@ const PhotoViewerModal: React.FC<Props> = ({
 
         {/* Action row */}
         <div
-          className="flex items-center gap-3 px-4 py-3"
+          className="flex items-center gap-2 px-4 py-3"
           style={{ borderBottom: '0.33px solid var(--outline)', flexShrink: 0 }}
         >
           <button
             onClick={handleLike}
             disabled={likeBusy}
-            className="flex items-center gap-1.5 transition-transform active:scale-90 disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 transition-transform active:scale-95 disabled:opacity-60"
             style={{
-              padding: '6px 12px',
+              height: '36px',
+              minHeight: '36px',
+              minWidth: 0,
+              padding: '0 14px',
               borderRadius: '9999px',
               background: liked ? 'var(--accent)' : 'var(--surface-container-high)',
               color: liked ? 'white' : 'var(--text-primary)',
@@ -341,15 +419,45 @@ const PhotoViewerModal: React.FC<Props> = ({
             aria-label={liked ? 'Unlike photo' : 'Like photo'}
           >
             <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
-            <span className="text-[13px] font-bold">{likeCount}</span>
+            <span className="text-[13px] font-bold leading-none">{likeCount}</span>
           </button>
           <div
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-            style={{ background: 'var(--surface-container-high)', color: 'var(--text-primary)' }}
+            className="inline-flex items-center gap-1.5"
+            style={{
+              height: '36px',
+              padding: '0 14px',
+              borderRadius: '9999px',
+              background: 'var(--surface-container-high)',
+              color: 'var(--text-primary)',
+            }}
           >
             <MessageCircle size={16} />
-            <span className="text-[13px] font-bold">{visibleComments.length}</span>
+            <span className="text-[13px] font-bold leading-none">{visibleComments.length}</span>
           </div>
+
+          {ownPhoto && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="ml-auto inline-flex items-center gap-1.5 transition-transform active:scale-95 disabled:opacity-60"
+              style={{
+                height: '36px',
+                minHeight: '36px',
+                minWidth: 0,
+                padding: '0 14px',
+                borderRadius: '9999px',
+                background: confirmingDelete ? '#dc2626' : 'var(--surface-container-high)',
+                color: confirmingDelete ? 'white' : 'var(--error, #dc2626)',
+                border: 'none',
+              }}
+              aria-label={confirmingDelete ? 'Confirm unpublish' : 'Unpublish photo'}
+            >
+              {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              <span className="text-[12px] font-bold leading-none">
+                {deleting ? 'Removing' : confirmingDelete ? 'Tap to confirm' : 'Unpublish'}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Comments scroll */}
