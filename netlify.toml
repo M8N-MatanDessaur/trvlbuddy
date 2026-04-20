@@ -2,9 +2,19 @@
   command = "npm run build"
   publish = "dist"
 
+# Places API (New) endpoints. Explicit per-method rules instead of a splat
+# because Netlify decodes the URL before matching redirects -- a path like
+# /api/placesv1/places:searchNearby (or its %3A-encoded form) collides with
+# Netlify's :param syntax and the splat rule never matches, returning 404.
 [[redirects]]
-  from = "/api/placesv1/*"
-  to = "https://places.googleapis.com/v1/:splat"
+  from = "/api/placesv1/searchNearby"
+  to = "https://places.googleapis.com/v1/places:searchNearby"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/placesv1/searchText"
+  to = "https://places.googleapis.com/v1/places:searchText"
   status = 200
   force = true
 
