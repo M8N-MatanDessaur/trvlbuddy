@@ -138,6 +138,179 @@ html[data-theme='dark'] {
   --shadow-xl: 0 16px 48px rgba(0,0,0,0.5);
 }
 
+/* ---------- Tinted themes ---------- */
+/* Each block overrides only the perceptual colors so the rest of the system
+   inherits structure from the light/dark base. Surfaces and text get a tint
+   so the theme reads at a glance instead of just a swapped accent. */
+
+/* Mono Light: pure grayscale, B&W only. */
+html[data-theme='mono-light'] {
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F0F0F0;
+  --surface-container: #FFFFFF;
+  --surface-container-high: #ECECEC;
+  --accent: #1A1A1A;
+  --accent-light: #3A3A3A;
+  --accent-container: rgba(26, 26, 26, 0.06);
+  --on-accent: #FFFFFF;
+  --on-accent-container: #1A1A1A;
+  --primary: #1A1A1A;
+  --primary-container: #ECECEC;
+  --on-primary-container: #1A1A1A;
+  --text-primary: #1A1A1A;
+  --text-secondary: #555555;
+  --text-tertiary: #999999;
+  --outline: rgba(0, 0, 0, 0.08);
+  --progress-blue: #1A1A1A;
+}
+
+/* Mono Dark: pure grayscale dark. */
+html[data-theme='mono-dark'] {
+  --bg-primary: #000000;
+  --bg-secondary: #141414;
+  --surface-container: #161616;
+  --surface-container-high: #232323;
+  --accent: #FFFFFF;
+  --accent-light: #DEDEDE;
+  --accent-container: rgba(255, 255, 255, 0.10);
+  --on-accent: #000000;
+  --on-accent-container: #FFFFFF;
+  --primary: #FFFFFF;
+  --primary-container: #232323;
+  --on-primary-container: #FFFFFF;
+  --text-primary: #F2F2F2;
+  --text-secondary: #9A9A9A;
+  --text-tertiary: #5A5A5A;
+  --outline: rgba(255, 255, 255, 0.08);
+  --progress-blue: #FFFFFF;
+}
+
+/* Forest: deep green-tinted dark. */
+html[data-theme='forest'] {
+  --bg-primary: #0A1410;
+  --bg-secondary: #0F1B16;
+  --surface-container: #122119;
+  --surface-container-high: #1A2D22;
+  --accent: #4ADE80;
+  --accent-light: #86EFAC;
+  --accent-container: rgba(74, 222, 128, 0.12);
+  --on-accent: #052E16;
+  --on-accent-container: #BBF7D0;
+  --primary: #DCFCE7;
+  --primary-container: #1A2D22;
+  --on-primary-container: #BBF7D0;
+  --text-primary: #E8F5E9;
+  --text-secondary: #8EA89A;
+  --text-tertiary: #4A6258;
+  --outline: rgba(134, 239, 172, 0.08);
+  --progress-blue: #4ADE80;
+}
+
+/* Ocean: cool blue-tinted dark. */
+html[data-theme='ocean'] {
+  --bg-primary: #07101A;
+  --bg-secondary: #0C1A2A;
+  --surface-container: #102236;
+  --surface-container-high: #182F47;
+  --accent: #38BDF8;
+  --accent-light: #7DD3FC;
+  --accent-container: rgba(56, 189, 248, 0.12);
+  --on-accent: #082F49;
+  --on-accent-container: #BAE6FD;
+  --primary: #E0F2FE;
+  --primary-container: #182F47;
+  --on-primary-container: #BAE6FD;
+  --text-primary: #E6F1FB;
+  --text-secondary: #8FA8C0;
+  --text-tertiary: #4A6480;
+  --outline: rgba(125, 211, 252, 0.08);
+  --progress-blue: #38BDF8;
+}
+
+/* Midnight: deep purple-blue dark with cool whites. */
+html[data-theme='midnight'] {
+  --bg-primary: #08081A;
+  --bg-secondary: #11112B;
+  --surface-container: #15153A;
+  --surface-container-high: #1F1F4D;
+  --accent: #A78BFA;
+  --accent-light: #C4B5FD;
+  --accent-container: rgba(167, 139, 250, 0.14);
+  --on-accent: #1E1B4B;
+  --on-accent-container: #DDD6FE;
+  --primary: #EDE9FE;
+  --primary-container: #1F1F4D;
+  --on-primary-container: #DDD6FE;
+  --text-primary: #ECEAFB;
+  --text-secondary: #9D9BBE;
+  --text-tertiary: #5C5A8A;
+  --outline: rgba(196, 181, 253, 0.08);
+  --progress-blue: #A78BFA;
+}
+
+/* Sunset: warm coral light. */
+html[data-theme='sunset'] {
+  --bg-primary: #FFF8F4;
+  --bg-secondary: #FFEFE5;
+  --surface-container: #FFFFFF;
+  --surface-container-high: #FFEDE0;
+  --accent: #F97316;
+  --accent-light: #FB923C;
+  --accent-container: rgba(249, 115, 22, 0.10);
+  --on-accent: #FFFFFF;
+  --on-accent-container: #9A3412;
+  --primary: #431407;
+  --primary-container: #FFEDE0;
+  --on-primary-container: #9A3412;
+  --text-primary: #2A1A0F;
+  --text-secondary: #8C6753;
+  --text-tertiary: #C4A491;
+  --outline: rgba(249, 115, 22, 0.10);
+  --progress-blue: #F97316;
+}
+
+/* Lavender: soft pink-purple light. */
+html[data-theme='lavender'] {
+  --bg-primary: #FBF6FE;
+  --bg-secondary: #F4E8FB;
+  --surface-container: #FFFFFF;
+  --surface-container-high: #F3E5FB;
+  --accent: #C026D3;
+  --accent-light: #D946EF;
+  --accent-container: rgba(192, 38, 211, 0.10);
+  --on-accent: #FFFFFF;
+  --on-accent-container: #6B21A8;
+  --primary: #2E1065;
+  --primary-container: #F3E5FB;
+  --on-primary-container: #6B21A8;
+  --text-primary: #2A132A;
+  --text-secondary: #8B6B8B;
+  --text-tertiary: #BAA7BA;
+  --outline: rgba(192, 38, 211, 0.10);
+  --progress-blue: #C026D3;
+}
+
+/* Sand: sepia-warm beige light. */
+html[data-theme='sand'] {
+  --bg-primary: #FAF6EE;
+  --bg-secondary: #F1EADC;
+  --surface-container: #FFFFFF;
+  --surface-container-high: #F0E8D6;
+  --accent: #B45309;
+  --accent-light: #D97706;
+  --accent-container: rgba(180, 83, 9, 0.10);
+  --on-accent: #FFFFFF;
+  --on-accent-container: #78350F;
+  --primary: #1C1917;
+  --primary-container: #F0E8D6;
+  --on-primary-container: #78350F;
+  --text-primary: #2B221A;
+  --text-secondary: #8A7B65;
+  --text-tertiary: #C2B69E;
+  --outline: rgba(180, 83, 9, 0.08);
+  --progress-blue: #B45309;
+}
+
 html, body {
   overscroll-behavior-y: contain;
 }

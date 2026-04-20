@@ -10,9 +10,12 @@ import {
   ArrowLeft,
   Radar,
   ChevronUp,
+  Palette,
+  Check,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTravel } from '../contexts/TravelContext';
+import { useTheme, THEME_OPTIONS } from '../contexts/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 
 interface Step {
@@ -29,6 +32,7 @@ const PISA_GIF = '/onboarding/pisa-selfie.gif';
 const ContributorOnboarding: React.FC = () => {
   const { profile, markOnboarded } = useAuth();
   const { setAppMode, setHasCompletedOnboarding } = useTravel();
+  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const [stepIndex, setStepIndex] = useState(0);
   const [finishing, setFinishing] = useState<null | 'trip' | 'local'>(null);
@@ -89,7 +93,7 @@ const ContributorOnboarding: React.FC = () => {
     {
       icon: ChevronUp,
       eyebrow: 'The community',
-      title: 'Vote, comment, follow travelers',
+      title: 'Vote, comment, peek at travelers',
       body: (
         <>
           Upvote the spots worth a stop, downvote the ones to skip — your votes help rank
@@ -98,6 +102,18 @@ const ContributorOnboarding: React.FC = () => {
         </>
       ),
       art: 'share',
+    },
+    {
+      icon: Palette,
+      eyebrow: 'Make it yours',
+      title: 'Pick a theme that feels like you',
+      body: (
+        <>
+          Light, dark, or one of the tinted moods. The pick follows you across devices, and
+          you can change it any time from Settings.
+        </>
+      ),
+      art: 'travel',
     },
     {
       icon: Compass,
@@ -232,6 +248,75 @@ const ContributorOnboarding: React.FC = () => {
               <p className="text-[14px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
                 {current.body}
               </p>
+
+              {current.eyebrow === 'Make it yours' && (
+                <div className="mt-5 grid grid-cols-3 gap-2 text-left">
+                  {THEME_OPTIONS.map((opt) => {
+                    const isActive = theme === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => setTheme(opt.id)}
+                        className="relative rounded-xl overflow-hidden transition-transform active:scale-[0.96]"
+                        style={{
+                          background: opt.swatch.background,
+                          border: isActive ? '2px solid var(--accent)' : '1px solid var(--outline)',
+                          padding: 0,
+                          minHeight: 0,
+                          minWidth: 0,
+                        }}
+                        aria-label={`Use ${opt.label} theme`}
+                      >
+                        <div className="px-2 py-2.5" style={{ height: '54px' }}>
+                          <div
+                            className="rounded w-full mb-1"
+                            style={{ background: opt.swatch.surface, height: '8px' }}
+                          />
+                          <div className="flex items-center gap-1">
+                            <div
+                              className="rounded-full"
+                              style={{
+                                width: '10px',
+                                height: '10px',
+                                background: opt.swatch.accent,
+                              }}
+                            />
+                            <div
+                              className="flex-1 rounded"
+                              style={{ height: '4px', background: opt.swatch.surface }}
+                            />
+                          </div>
+                        </div>
+                        <div
+                          className="px-2 py-1"
+                          style={{
+                            background: 'var(--surface-container-high)',
+                            color: 'var(--text-primary)',
+                          }}
+                        >
+                          <div className="text-[10.5px] font-extrabold tracking-tight truncate">
+                            {opt.label}
+                          </div>
+                        </div>
+                        {isActive && (
+                          <div
+                            className="absolute top-1 right-1 rounded-full flex items-center justify-center"
+                            style={{
+                              width: '16px',
+                              height: '16px',
+                              background: 'var(--accent)',
+                              color: 'white',
+                            }}
+                            aria-hidden="true"
+                          >
+                            <Check size={10} strokeWidth={3} />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {isLast && (
                 <div className="mt-7 flex flex-col gap-3">
