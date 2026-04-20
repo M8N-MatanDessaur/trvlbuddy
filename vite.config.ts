@@ -23,7 +23,11 @@ export default defineConfig({
       '/api/placesv1': {
         target: 'https://places.googleapis.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/placesv1/, '/v1'),
+        rewrite: (path) => {
+          if (path === '/api/placesv1/searchNearby') return '/v1/places:searchNearby';
+          if (path === '/api/placesv1/searchText') return '/v1/places:searchText';
+          return path.replace(/^\/api\/placesv1/, '/v1');
+        },
       },
       // Legacy Places API — still used for Place Details photo fetch and the
       // broad type-count scan that feeds Gemini chip suggestions.
