@@ -4,6 +4,65 @@
 
 const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
 
+// Quota / auth gate. When Google returns OVER_QUERY_LIMIT or REQUEST_DENIED,
+// we short-circuit every subsequent call for the rest of the session so we
+// stop hammering the API (and let the UI surface the actual reason).
+let _placesBlocked: { reason: 'OVER_QUERY_LIMIT' | 'REQUEST_DENIED'; message: string } | null = null;
+
+// Negative cache: query strings Google said don't exist. Stored in
+// localStorage with a 7-day TTL so repeat map opens for the same trip don't
+// re-burn quota on activities Google has already said it can't find.
+const NEG_KEY = 'places-negative-v1';
+const NEG_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+
+function negKey(query: string): string {
+  return query.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function readNeg(): Record<string, number> {
+  if (typeof localStorage === 'undefined') return {};
+  try { return JSON.parse(localStorage.getItem(NEG_KEY) || '{}'); } catch { return {}; }
+}
+
+function writeNeg(cache: Record<string, number>) {
+  try { localStorage.setItem(NEG_KEY, JSON.stringify(cache)); } catch { /* quota */ }
+}
+
+function isNegativelyCached(query: string): boolean {
+  const cache = readNeg();
+  const k = negKey(query);
+  const ts = cache[k];
+  return !!ts && Date.now() - ts < NEG_TTL_MS;
+}
+
+function recordMiss(query: string) {
+  const cache = readNeg();
+  cache[negKey(query)] = Date.now();
+  writeNeg(cache);
+}
+
+export function clearPlacesNegativeCache() {
+  try { localStorage.removeItem(NEG_KEY); } catch { /* noop */ }
+}
+
+export interface PlacesBlocked {
+  reason: 'OVER_QUERY_LIMIT' | 'REQUEST_DENIED';
+  message: string;
+}
+
+export function getPlacesBlocked(): PlacesBlocked | null {
+  return _placesBlocked;
+}
+
+function maybeBlock(status: string | undefined, errorMessage: string | undefined) {
+  if (status === 'OVER_QUERY_LIMIT' || status === 'REQUEST_DENIED') {
+    if (!_placesBlocked) {
+      _placesBlocked = { reason: status, message: errorMessage || '' };
+      console.error('[places] blocked further calls -', status, errorMessage);
+    }
+  }
+}
+
 export interface GooglePlaceHit {
   place_id: string;
   lat: number;
@@ -27,8 +86,10 @@ export async function findPlaceFromText(
   options: FindPlaceOptions = {},
 ): Promise<GooglePlaceHit | null> {
   if (!GOOGLE_PLACES_API_KEY) return null;
+  if (_placesBlocked) return null;
   const trimmed = query.trim();
   if (!trimmed) return null;
+  if (isNegativelyCached(trimmed)) return null;
 
   const params = new URLSearchParams({
     input: trimmed,
@@ -62,9 +123,13 @@ export async function findPlaceFromText(
     } = await res.json();
     if (data.status && data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
       console.warn('[places] findPlace status', data.status, data.error_message || '', 'for', query);
+      maybeBlock(data.status, data.error_message);
     }
     const cand = data.candidates?.[0];
-    if (!cand?.place_id || !cand.geometry?.location) return null;
+    if (!cand?.place_id || !cand.geometry?.location) {
+      recordMiss(trimmed);
+      return null;
+    }
     return {
       place_id: cand.place_id,
       lat: cand.geometry.location.lat,
@@ -87,6 +152,7 @@ export async function searchPlaceByText(
   options: FindPlaceOptions = {},
 ): Promise<GooglePlaceHit | null> {
   if (!GOOGLE_PLACES_API_KEY) return null;
+  if (_placesBlocked) return null;
   const trimmed = query.trim();
   if (!trimmed) return null;
 

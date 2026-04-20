@@ -8,7 +8,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import type { Accommodation, GeneratedActivity, TripSegment } from '../types/TravelData';
 import { supabase } from '../lib/supabase';
 import { computeSlug } from '../services/activityMediaService';
-import { findPlaceFromText, searchPlaceByText } from '../services/googlePlacesService';
+import { findPlaceFromText, getPlacesBlocked, type PlacesBlocked } from '../services/googlePlacesService';
 import { useCompletedActivities } from '../hooks/useCompletedActivities';
 import { getCachedLocation, getCurrentLocation, type UserLocation } from '../utils/geolocation';
 import { getCategoryIcon } from '../utils/categoryIcons';
@@ -518,22 +518,17 @@ const MapPage: React.FC = () => {
       const concurrency = 6;
 
       const runJob = async (job: Job) => {
-        const queries = job.kind === 'activity' ? job.data.queries : [job.data.query];
+        // ONE Google call per candidate. The previous "try 3 query variants
+        // then fall back to Text Search" pattern multiplied quota burn by ~6x,
+        // which is what blew through the free 1000-calls/day allowance.
+        const query = job.kind === 'activity' ? job.data.queries[0] : job.data.query;
         const near = job.data.near;
-        // Try Find Place (cheaper, exact match) for each query; if all miss,
-        // try the more permissive Text Search on the most-specific query.
-        for (const q of queries) {
-          if (cancelled) return null;
-          const hit = await findPlaceFromText(q, near ? { near } : undefined);
-          if (hit) return { lat: hit.lat, lng: hit.lng, place_id: hit.place_id, formatted_address: hit.formatted_address };
+        if (!query) return null;
+        if (cancelled) return null;
+        const hit = await findPlaceFromText(query, near ? { near } : undefined);
+        if (hit) {
+          return { lat: hit.lat, lng: hit.lng, place_id: hit.place_id, formatted_address: hit.formatted_address };
         }
-        for (const q of queries) {
-          if (cancelled) return null;
-          const hit = await searchPlaceByText(q, near ? { near } : undefined);
-          if (hit) return { lat: hit.lat, lng: hit.lng, place_id: hit.place_id, formatted_address: hit.formatted_address };
-        }
-        const label = job.kind === 'activity' ? job.data.activity.name : job.data.accommodation.name;
-        console.warn('[map] could not locate', job.kind, label, 'queries:', queries);
         return null;
       };
 
@@ -694,6 +689,11 @@ const MapPage: React.FC = () => {
 
   const totalExpected = activityCandidates.length + seedHotels.length + hotelGeocodeQueue.length;
   const isStillLoading = initialLoading || pendingCount > 0;
+  const [placesBlocked, setPlacesBlocked] = useState<PlacesBlocked | null>(null);
+  useEffect(() => {
+    // Re-check after each loading round whether Google blocked us mid-flight.
+    if (!isStillLoading) setPlacesBlocked(getPlacesBlocked());
+  }, [isStillLoading, pendingCount]);
   // Cover the empty map with a full overlay until at least one point lands.
   // If all geocoding finished without resolving anything, fall back to an
   // empty-state inside the overlay so the user isn't stuck on a spinner.
@@ -826,25 +826,65 @@ const MapPage: React.FC = () => {
                   <MapPin size={22} />
                 </div>
                 <div className="text-[14px] font-extrabold" style={{ color: 'var(--text-primary)' }}>
-                  Couldn't load any places
+                  {placesBlocked?.reason === 'OVER_QUERY_LIMIT'
+                    ? 'Google quota reached'
+                    : placesBlocked?.reason === 'REQUEST_DENIED'
+                    ? 'Google rejected the request'
+                    : "Couldn't load any places"}
                 </div>
                 <div className="text-[12px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                  Geocoding came back empty for every activity in this trip.
-                  Check your connection or try again in a moment.
+                  {placesBlocked?.reason === 'OVER_QUERY_LIMIT' ? (
+                    <>
+                      The free Google Maps quota for today is used up. Enable billing on your
+                      Google Cloud project (Maps APIs come with a $200/month free credit) and the
+                      map will start filling in. Quota resets at midnight Pacific Time.
+                    </>
+                  ) : placesBlocked?.reason === 'REQUEST_DENIED' ? (
+                    <>
+                      Google denied the API request. Check that the API key has Places API
+                      enabled, billing is active, and any HTTP-referrer restrictions allow
+                      this domain.
+                    </>
+                  ) : (
+                    <>
+                      Geocoding returned nothing for the {totalExpected} {totalExpected === 1 ? 'place' : 'places'} in
+                      this trip.
+                    </>
+                  )}
                 </div>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[12.5px] font-bold transition-transform active:scale-95"
-                  style={{
-                    background: 'var(--accent)',
-                    color: 'var(--on-accent)',
-                    border: 'none',
-                    minHeight: 0,
-                    minWidth: 0,
-                  }}
-                >
-                  Retry
-                </button>
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[12.5px] font-bold transition-transform active:scale-95"
+                    style={{
+                      background: 'var(--accent)',
+                      color: 'var(--on-accent)',
+                      border: 'none',
+                      minHeight: 0,
+                      minWidth: 0,
+                    }}
+                  >
+                    Retry
+                  </button>
+                  <button
+                    onClick={() => {
+                      try { localStorage.removeItem('places-negative-v1'); } catch { /* noop */ }
+                      try { localStorage.removeItem('geocode-cache-v2'); } catch { /* noop */ }
+                      try { localStorage.removeItem('geocode-negative-v2'); } catch { /* noop */ }
+                      window.location.reload();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[12.5px] font-bold transition-transform active:scale-95"
+                    style={{
+                      background: 'var(--surface-container-high)',
+                      color: 'var(--text-primary)',
+                      border: '0.5px solid var(--outline)',
+                      minHeight: 0,
+                      minWidth: 0,
+                    }}
+                  >
+                    Clear cache + retry
+                  </button>
+                </div>
               </div>
             ) : (
               <div
