@@ -349,7 +349,21 @@ const ProfilePage: React.FC = () => {
                 >
                   <Plane size={20} className="mx-auto mb-2" style={{ color: 'var(--text-tertiary)' }} />
                   <p className="text-[13px] font-bold">No saved trips</p>
-                  <p className="text-[12px] mt-1">Plan a trip and save it to the cloud.</p>
+                  <p className="text-[12px] mt-1 mb-3">Plan a trip and save it to the cloud.</p>
+                  <button
+                    onClick={() => navigate('/new-trip')}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold transition-transform active:scale-[0.97]"
+                    style={{
+                      background: 'var(--accent)',
+                      color: 'var(--on-accent)',
+                      border: 'none',
+                      minHeight: 0,
+                      minWidth: 0,
+                    }}
+                  >
+                    <Plane size={14} />
+                    Plan a trip
+                  </button>
                 </div>
               ) : (
                 <TripsCarousel
