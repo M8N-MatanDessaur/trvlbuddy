@@ -766,6 +766,89 @@ Focus on authentic, must-visit destinations that locals and tourists love for da
   }
 }
 
+// Enrich AI-generated activities with real-world Google Places data
+// (place_id, lat/lng, formatted address). Runs once at trip generation so the
+// Map tab can plot every activity instantly without later geocoding.
+//
+// Cost: Find Place from Text "basic" SKU at $17 / 1000 calls. A typical
+// 80-activity trip = ~$1.40. The $200/month Maps free credit covers ~117
+// trips/month free.
+async function findPlaceFromText(query: string): Promise<{
+  place_id: string;
+  lat: number;
+  lng: number;
+  formatted_address?: string;
+} | null> {
+  if (!GOOGLE_PLACES_API_KEY) return null;
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=${encodeURIComponent(query)}&inputtype=textquery&fields=place_id,geometry,formatted_address&key=${GOOGLE_PLACES_API_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data: {
+      candidates?: Array<{
+        place_id?: string;
+        geometry?: { location?: { lat: number; lng: number } };
+        formatted_address?: string;
+      }>;
+      status?: string;
+    } = await res.json();
+    const cand = data.candidates?.[0];
+    if (!cand?.place_id || !cand.geometry?.location) return null;
+    return {
+      place_id: cand.place_id,
+      lat: cand.geometry.location.lat,
+      lng: cand.geometry.location.lng,
+      formatted_address: cand.formatted_address,
+    };
+  } catch (err) {
+    console.error('findPlaceFromText failed for', query, err);
+    return null;
+  }
+}
+
+async function enrichActivitiesWithPlaces(
+  activities: GeneratedActivity[],
+  travelPlan: TravelPlan,
+): Promise<GeneratedActivity[]> {
+  if (activities.length === 0) return activities;
+
+  // Index activities by their place context so the query lands on the right city.
+  const queries: Array<{ activity: GeneratedActivity; query: string }> = activities.map((activity) => {
+    const seg = travelPlan.segments?.find(
+      (s) => s.city?.id === activity.cityId || s.destination.id === activity.destinationId,
+    );
+    const dest = seg?.destination
+      || travelPlan.destinations?.find((d) => d.id === activity.destinationId)
+      || travelPlan.destination
+      || travelPlan.destinations?.[0];
+    const city = seg?.city?.name || dest?.name || '';
+    const country = dest?.country || '';
+    const parts = [activity.name, city, country].filter(Boolean);
+    return { activity, query: parts.join(', ') };
+  });
+
+  const concurrency = 8;
+  let next = 0;
+
+  async function worker() {
+    while (true) {
+      const i = next++;
+      if (i >= queries.length) return;
+      const { activity, query } = queries[i];
+      const hit = await findPlaceFromText(query);
+      if (!hit) continue;
+      activity.placeId = hit.place_id;
+      activity.coordinates = { lat: hit.lat, lng: hit.lng };
+      if (hit.formatted_address) activity.formattedAddress = hit.formatted_address;
+    }
+  }
+
+  const workers: Promise<void>[] = [];
+  for (let i = 0; i < Math.min(concurrency, queries.length); i++) workers.push(worker());
+  await Promise.all(workers);
+  return activities;
+}
+
 export async function generateActivities(travelPlan: TravelPlan): Promise<GeneratedActivity[]> {
   const { interests, budget, travelers } = travelPlan;
   let allActivities: GeneratedActivity[] = [];
@@ -818,7 +901,13 @@ export async function generateActivities(travelPlan: TravelPlan): Promise<Genera
   }
 
   // Final validation filter
-  return allActivities.filter(isValidActivity);
+  const valid = allActivities.filter(isValidActivity);
+
+  // Enrich with Google Places (place_id + lat/lng + formatted address) so the
+  // Map tab can plot every activity instantly with no later geocoding.
+  await enrichActivitiesWithPlaces(valid, travelPlan);
+
+  return valid;
 }
 
 export async function generateTranslationsForDestination(destination: Destination): Promise<Translation[]> {

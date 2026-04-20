@@ -37,6 +37,9 @@ export function useActivityPhotos() {
             name: activity.name,
             city: cityName,
             country,
+            address: activity.formattedAddress || activity.location || null,
+            lat: activity.coordinates?.lat ?? null,
+            lng: activity.coordinates?.lng ?? null,
             googlePlaceId: activity.placeId || null,
           },
           createdBy
