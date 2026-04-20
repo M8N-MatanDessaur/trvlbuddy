@@ -326,35 +326,6 @@ const DynamicDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Save-to-cloud CTA: only when the trip isn't backed by a supabase row yet. */}
-      {user && !currentTripId && (
-        <button
-          onClick={handleSaveToCloud}
-          disabled={savingToCloud}
-          className="w-full flex items-center gap-3 p-4 rounded-2xl transition-transform active:scale-[0.99] disabled:opacity-60"
-          style={{
-            background: 'var(--accent-container)',
-            border: '0.5px solid var(--outline)',
-            minHeight: 0,
-          }}
-        >
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
-          >
-            <Cloud size={18} />
-          </div>
-          <div className="flex-1 text-left min-w-0">
-            <div className="text-[14px] font-extrabold" style={{ color: 'var(--accent)' }}>
-              {savingToCloud ? 'Saving to cloud...' : 'Save trip to cloud'}
-            </div>
-            <div className="text-[11.5px]" style={{ color: 'var(--text-secondary)' }}>
-              Sync this trip across devices and invite friends.
-            </div>
-          </div>
-        </button>
-      )}
-
       {/* Weather */}
       {weatherLocations.length > 0 && (
         <div className="card p-4">
@@ -617,6 +588,39 @@ const DynamicDashboard: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Save-to-cloud CTA: pinned to the bottom of the dashboard, only when
+          the trip isn't already backed by a supabase row. Extra bottom margin
+          keeps it clear of the bottom navigation bar. */}
+      {user && !currentTripId && (
+        <button
+          onClick={handleSaveToCloud}
+          disabled={savingToCloud}
+          className="w-full flex items-center gap-3 p-4 rounded-2xl transition-transform active:scale-[0.99] disabled:opacity-60"
+          style={{
+            background: 'var(--accent-container)',
+            border: '0.5px solid var(--outline)',
+            marginTop: '0.75rem',
+            marginBottom: '5rem',
+            minHeight: 0,
+          }}
+        >
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+          >
+            <Cloud size={18} />
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            <div className="text-[14px] font-extrabold" style={{ color: 'var(--accent)' }}>
+              {savingToCloud ? 'Saving to cloud...' : 'Save trip to cloud'}
+            </div>
+            <div className="text-[11.5px]" style={{ color: 'var(--text-secondary)' }}>
+              Sync this trip across devices and invite friends.
+            </div>
+          </div>
+        </button>
       )}
 
       <ShareTripModal isOpen={showShare} onClose={() => setShowShare(false)} tripId={tripIdForHeader} />
