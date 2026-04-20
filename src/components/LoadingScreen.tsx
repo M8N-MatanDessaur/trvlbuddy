@@ -30,8 +30,10 @@ const LoadingScreen: React.FC = () => {
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-bold mb-2">Setting up your trip</h2>
-        <p className="text-sm text-text-secondary mb-8">AI is generating personalized content for you</p>
+        <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Setting up your trip</h2>
+        <p className="text-sm mb-8" style={{ color: 'var(--text-secondary)' }}>
+          AI is generating personalized content for you
+        </p>
 
         {/* Progress steps */}
         <div className="space-y-3 mb-8 text-left">
@@ -39,19 +41,36 @@ const LoadingScreen: React.FC = () => {
             const Icon = step.icon;
             const isActive = i === activeStep;
             const isDone = i < activeStep;
+            const rowBg = isActive ? 'var(--surface-container)' : 'transparent';
+            const iconBg = isActive ? 'var(--accent)' : isDone ? 'var(--accent-container)' : 'var(--surface-container-high)';
+            const iconColor = isActive ? 'var(--on-accent)' : isDone ? 'var(--accent)' : 'var(--text-tertiary)';
+            const textColor = isActive
+              ? 'var(--text-primary)'
+              : isDone
+              ? 'var(--text-secondary)'
+              : 'var(--text-tertiary)';
             return (
               <div
                 key={i}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${
-                  isActive ? 'glass-card' : isDone ? 'opacity-50' : 'opacity-30'
-                }`}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300"
+                style={{
+                  background: rowBg,
+                  border: isActive ? '0.5px solid var(--outline)' : '0.5px solid transparent',
+                }}
               >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
-                  isActive ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface-container-high)] text-text-secondary'
-                }`}>
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors"
+                  style={{ background: iconBg, color: iconColor }}
+                >
                   <Icon size={16} />
                 </div>
-                <span className={`text-sm ${isActive ? 'font-medium text-text-primary' : 'text-text-secondary'}`}>
+                <span
+                  className="text-sm"
+                  style={{
+                    color: textColor,
+                    fontWeight: isActive ? 600 : 500,
+                  }}
+                >
                   {step.text}
                 </span>
                 {isActive && (
@@ -65,7 +84,7 @@ const LoadingScreen: React.FC = () => {
         </div>
 
         {/* Status text */}
-        <p className="text-xs text-text-tertiary">
+        <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
           {activeStep < loadingSteps.length - 1 ? loadingSteps[activeStep].text : 'Almost ready...'}
         </p>
 
