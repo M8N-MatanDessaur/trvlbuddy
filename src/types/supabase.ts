@@ -70,6 +70,39 @@ export type Database = {
           },
         ]
       }
+      activity_completions: {
+        Row: {
+          activity_id: string
+          completed_at: string
+          user_id: string
+        }
+        Insert: {
+          activity_id: string
+          completed_at?: string
+          user_id: string
+        }
+        Update: {
+          activity_id?: string
+          completed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_completions_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_completions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_image_comments: {
         Row: {
           body: string

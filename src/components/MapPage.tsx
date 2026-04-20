@@ -2,27 +2,28 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import maplibregl, { Map as MlMap, Marker as MlMarker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Bed, Loader2, LocateFixed, MapPin } from 'lucide-react';
-// geocodeMany was used in the previous batched approach; per-candidate retry
-// uses geocode() directly inside the worker pool.
+import { Bed, Check, Loader2, LocateFixed, MapPin } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Accommodation, GeneratedActivity, TripSegment } from '../types/TravelData';
 import { supabase } from '../lib/supabase';
 import { computeSlug } from '../services/activityMediaService';
+import { findPlaceFromText } from '../services/googlePlacesService';
+import { useCompletedActivities } from '../hooks/useCompletedActivities';
 import { getCachedLocation, getCurrentLocation, type UserLocation } from '../utils/geolocation';
 import { getCategoryIcon } from '../utils/categoryIcons';
 import DynamicActivityModal from './DynamicActivityModal';
 
 interface MapPoint {
   id: string;
-  kind: 'hotel' | 'activity';
+  kind: 'stay' | 'activity';
   name: string;
   subtitle?: string | null;
   category?: string;
   lat: number;
   lng: number;
   activity?: GeneratedActivity;
+  dbActivityId?: string;
 }
 
 // Carto vector styles -- free, no API key, designed look that flips with theme.
@@ -106,22 +107,40 @@ function makeHotelMarkerEl(point: MapPoint): HTMLDivElement {
   return el;
 }
 
-function makeActivityMarkerEl(point: MapPoint): HTMLDivElement {
+function makeActivityMarkerEl(point: MapPoint, done = false): HTMLDivElement {
   const el = document.createElement('div');
-  el.className = 'trvl-marker trvl-marker--activity';
+  el.className = 'trvl-marker trvl-marker--activity' + (done ? ' trvl-marker--done' : '');
   el.style.cursor = 'pointer';
   const iconSvg = point.category ? categoryIconSvg(point.category) : '';
-  el.innerHTML = `
-    <div class="trvl-marker__pin trvl-marker__pin--activity" style="
-      width: 30px; height: 30px;
+  const checkBadge = done ? `
+    <div style="
+      position: absolute; top: -4px; right: -4px;
+      width: 16px; height: 16px;
       border-radius: 50%;
-      background: var(--surface-container);
-      color: var(--accent);
-      border: 2.5px solid var(--accent);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      background: #16a34a;
+      color: white;
       display: flex; align-items: center; justify-content: center;
-      transition: transform 0.15s ease;
-    ">${iconSvg}</div>
+      border: 2px solid var(--surface-container);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    ">${renderToStaticMarkup(<Check size={9} strokeWidth={3.5} />)}</div>` : '';
+  const pinBg = done ? '#16a34a' : 'var(--accent)';
+  const pinBorder = done ? '#16a34a' : 'var(--accent)';
+  const pinColor = done ? '#ffffff' : 'var(--accent)';
+  const pinFill = done ? '#16a34a' : 'var(--surface-container)';
+  el.innerHTML = `
+    <div style="position: relative; width: 30px; height: 30px;">
+      <div class="trvl-marker__pin trvl-marker__pin--activity" style="
+        width: 30px; height: 30px;
+        border-radius: 50%;
+        background: ${pinFill};
+        color: ${pinColor};
+        border: 2.5px solid ${pinBorder};
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 0.15s ease;
+      ">${iconSvg}</div>
+      ${checkBadge}
+    </div>${''/* close inner; outer label below */}
     <div class="trvl-marker__label" style="
       position: absolute;
       top: 32px;
@@ -189,6 +208,7 @@ function makeUserLocationEl(): HTMLDivElement {
 const MapPage: React.FC = () => {
   const { currentPlan, activities } = useTravel();
   const { isDark } = useTheme();
+  const { completedIds } = useCompletedActivities();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MlMap | null>(null);
   const markersRef = useRef<MlMarker[]>([]);
@@ -216,7 +236,12 @@ const MapPage: React.FC = () => {
     ];
 
     const seedH: MapPoint[] = [];
-    const hotelQueue: Array<{ accommodation: Accommodation; query: string; markerId: string }> = [];
+    const hotelQueue: Array<{
+      accommodation: Accommodation;
+      query: string;
+      markerId: string;
+      near?: { lat: number; lng: number };
+    }> = [];
     const tripCity = segments[0]?.city?.name || segments[0]?.destination?.name
       || currentPlan.destination?.name || currentPlan.destinations?.[0]?.name || null;
     const tripCountry = segments[0]?.destination?.country
@@ -238,13 +263,16 @@ const MapPage: React.FC = () => {
       const seg = findOwningSegment(acc);
       const segCity = seg?.city?.name || seg?.destination?.name || tripCity;
       const segCountry = seg?.destination?.country || tripCountry;
+      const segCoords = seg?.city?.coordinates || seg?.destination?.coordinates
+        || currentPlan.destination?.coordinates
+        || currentPlan.destinations?.[0]?.coordinates;
       const id = acc.id ? `hotel-${acc.id}` : `hotel-idx-${i}`;
       const display = acc.name?.trim() || acc.address?.trim() || 'Accommodation';
 
       if (acc.coordinates) {
         seedH.push({
           id,
-          kind: 'hotel',
+          kind: 'stay',
           name: display,
           subtitle: acc.address || null,
           lat: acc.coordinates.lat,
@@ -263,6 +291,7 @@ const MapPage: React.FC = () => {
         accommodation: acc,
         query: Array.from(new Set(parts)).join(', '),
         markerId: id,
+        near: segCoords,
       });
     });
 
@@ -281,11 +310,15 @@ const MapPage: React.FC = () => {
       activity: GeneratedActivity;
       key: string;
       queries: string[]; // tried in order, first hit wins
+      near?: { lat: number; lng: number };
     }> = [];
     activities.forEach((activity) => {
       const seg = findActivitySegment(activity);
       const actCity = seg?.city?.name || seg?.destination?.name || tripCity;
       const actCountry = seg?.destination?.country || tripCountry;
+      const actCoords = seg?.city?.coordinates || seg?.destination?.coordinates
+        || currentPlan.destination?.coordinates
+        || currentPlan.destinations?.[0]?.coordinates;
       const slug = computeSlug({
         name: activity.name,
         city: actCity,
@@ -310,7 +343,7 @@ const MapPage: React.FC = () => {
       if (cityQuery && cityQuery !== queries[0]) queries.push(cityQuery);
       const nameOnly = activity.name?.trim();
       if (nameOnly && !queries.includes(nameOnly)) queries.push(nameOnly);
-      candidates.push({ activity, key: slug, queries });
+      candidates.push({ activity, key: slug, queries, near: actCoords });
     });
 
     return {
@@ -390,8 +423,8 @@ const MapPage: React.FC = () => {
       // Activity coords from supabase first.
       const slugs = activityCandidates.map((c) => c.key).filter(Boolean);
       const { data: rows } = slugs.length > 0
-        ? await supabase.from('activities').select('slug, lat, lng').in('slug', slugs)
-        : { data: [] };
+        ? await supabase.from('activities').select('id, slug, lat, lng').in('slug', slugs)
+        : { data: [] as Array<{ id: string; slug: string; lat: number | null; lng: number | null }> };
 
       const known = new Map<string, { lat: number; lng: number }>();
       rows?.forEach((row) => {
@@ -401,10 +434,20 @@ const MapPage: React.FC = () => {
       });
 
       const seededActivities: MapPoint[] = [];
-      type ActivityMiss = { activity: GeneratedActivity; key: string; queries: string[]; index: number };
+      type ActivityMiss = {
+        activity: GeneratedActivity;
+        key: string;
+        queries: string[];
+        index: number;
+        near?: { lat: number; lng: number };
+      };
       const activityMisses: ActivityMiss[] = [];
+      const knownIdBySlug = new Map<string, string>();
+      rows?.forEach((row) => {
+        if (row.slug && row.id) knownIdBySlug.set(row.slug, row.id);
+      });
 
-      activityCandidates.forEach(({ activity, key, queries }, i) => {
+      activityCandidates.forEach(({ activity, key, queries, near }, i) => {
         const hit = known.get(key);
         if (hit) {
           seededActivities.push({
@@ -416,9 +459,10 @@ const MapPage: React.FC = () => {
             lat: hit.lat,
             lng: hit.lng,
             activity,
+            dbActivityId: knownIdBySlug.get(key),
           });
         } else {
-          activityMisses.push({ activity, key, queries, index: i });
+          activityMisses.push({ activity, key, queries, index: i, near });
         }
       });
 
@@ -436,15 +480,15 @@ const MapPage: React.FC = () => {
       if (totalPending === 0) return;
 
       // Per-candidate worker pool: each candidate tries its query list in
-      // order, first hit wins. Hotels share the same pool with a single-query
-      // list each.
-      const { geocode } = await import('../services/geocodingService');
+      // order, first hit wins. Stays share the same pool with a single-query
+      // list each. Uses Google Places (much smarter at "find this name in this
+      // city") with city-coordinates as the bias center.
       type Job =
-        | { kind: 'activity'; data: ActivityMiss }
-        | { kind: 'hotel'; data: typeof hotelGeocodeQueue[number] };
+        | { kind: 'activity'; data: ActivityMiss & { near?: { lat: number; lng: number } } }
+        | { kind: 'stay'; data: typeof hotelGeocodeQueue[number] };
       const jobs: Job[] = [
         ...activityMisses.map((m) => ({ kind: 'activity' as const, data: m })),
-        ...hotelGeocodeQueue.map((h) => ({ kind: 'hotel' as const, data: h })),
+        ...hotelGeocodeQueue.map((h) => ({ kind: 'stay' as const, data: h })),
       ];
 
       let nextJobIdx = 0;
@@ -453,10 +497,11 @@ const MapPage: React.FC = () => {
 
       const runJob = async (job: Job) => {
         const queries = job.kind === 'activity' ? job.data.queries : [job.data.query];
+        const near = job.data.near;
         for (const q of queries) {
           if (cancelled) return null;
-          const res = await geocode(q);
-          if (res) return res;
+          const hit = await findPlaceFromText(q, near ? { near } : undefined);
+          if (hit) return { lat: hit.lat, lng: hit.lng, place_id: hit.place_id, formatted_address: hit.formatted_address };
         }
         return null;
       };
@@ -474,6 +519,22 @@ const MapPage: React.FC = () => {
 
           if (job.kind === 'activity') {
             const { activity, key, index } = job.data;
+            // Make sure the activities row exists (some old trips never had
+            // ensureActivity called) and grab its id so the green-check
+            // overlay works after we mark it done.
+            const upsertRow: Record<string, unknown> = {
+              slug: key,
+              name: activity.name,
+              lat: res.lat,
+              lng: res.lng,
+            };
+            if ('place_id' in res && res.place_id) upsertRow.google_place_id = res.place_id;
+            if ('formatted_address' in res && res.formatted_address) upsertRow.address = res.formatted_address;
+            const { data: upserted } = await supabase
+              .from('activities')
+              .upsert(upsertRow, { onConflict: 'slug' })
+              .select('id')
+              .maybeSingle();
             const point: MapPoint = {
               id: `act-${index}`,
               kind: 'activity',
@@ -483,20 +544,18 @@ const MapPage: React.FC = () => {
               lat: res.lat,
               lng: res.lng,
               activity,
+              dbActivityId: upserted?.id,
             };
             setPoints((prev) => {
               if (prev.some((p) => p.id === point.id)) return prev;
               return [...prev, point];
             });
-            if (key) {
-              supabase.from('activities').update({ lat: res.lat, lng: res.lng }).eq('slug', key).then(() => {});
-            }
           } else {
             const { accommodation, markerId } = job.data;
             const display = accommodation.name?.trim() || accommodation.address?.trim() || 'Accommodation';
             const point: MapPoint = {
               id: markerId,
-              kind: 'hotel',
+              kind: 'stay',
               name: display,
               subtitle: accommodation.address || null,
               lat: res.lat,
@@ -529,8 +588,9 @@ const MapPage: React.FC = () => {
     if (points.length === 0) return;
 
     points.forEach((point) => {
-      const el = point.kind === 'hotel' ? makeHotelMarkerEl(point) : makeActivityMarkerEl(point);
-      const offset: [number, number] = point.kind === 'hotel' ? [0, -16] : [0, 0];
+      const isDone = point.kind === 'activity' && !!point.dbActivityId && completedIds.has(point.dbActivityId);
+      const el = point.kind === 'stay' ? makeHotelMarkerEl(point) : makeActivityMarkerEl(point, isDone);
+      const offset: [number, number] = point.kind === 'stay' ? [0, -16] : [0, 0];
       const marker = new maplibregl.Marker({ element: el, offset, anchor: 'center' })
         .setLngLat([point.lng, point.lat])
         .addTo(map);
@@ -548,7 +608,7 @@ const MapPage: React.FC = () => {
       points.forEach((p) => bounds.extend([p.lng, p.lat]));
       map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 });
     }
-  }, [points]);
+  }, [points, completedIds]);
 
   // User location dot.
   useEffect(() => {
@@ -575,7 +635,7 @@ const MapPage: React.FC = () => {
     }
   };
 
-  const hotelPoints = points.filter((p) => p.kind === 'hotel');
+  const hotelPoints = points.filter((p) => p.kind === 'stay');
   const recenterOnAccommodations = () => {
     const map = mapRef.current;
     if (!map || hotelPoints.length === 0) return;
@@ -629,7 +689,7 @@ const MapPage: React.FC = () => {
               background: 'var(--accent)',
               border: '1.5px solid var(--surface-container)',
             }} />
-            Hotel
+            Stay
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span style={{

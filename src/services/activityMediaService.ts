@@ -351,6 +351,40 @@ export async function listUserPhotos(userId: string): Promise<UserPhoto[]> {
   });
 }
 
+// Per-user "I did this" tracker for activities. The map / home dashboard /
+// explore card all read from this.
+
+export async function listMyCompletedActivityIds(userId: string): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('activity_completions')
+    .select('activity_id')
+    .eq('user_id', userId);
+  return new Set((data || []).map((row) => row.activity_id).filter(Boolean));
+}
+
+export async function setActivityCompleted(params: {
+  userId: string;
+  activityId: string;
+  completed: boolean;
+}): Promise<{ error: string | null }> {
+  const { userId, activityId, completed } = params;
+  if (completed) {
+    const { error } = await supabase
+      .from('activity_completions')
+      .upsert(
+        { user_id: userId, activity_id: activityId },
+        { onConflict: 'user_id,activity_id', ignoreDuplicates: true },
+      );
+    return { error: error?.message ?? null };
+  }
+  const { error } = await supabase
+    .from('activity_completions')
+    .delete()
+    .eq('user_id', userId)
+    .eq('activity_id', activityId);
+  return { error: error?.message ?? null };
+}
+
 export interface UserSocialStats {
   postCount: number;
   likesReceived: number;

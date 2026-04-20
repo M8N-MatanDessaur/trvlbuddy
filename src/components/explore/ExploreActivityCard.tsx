@@ -7,12 +7,12 @@ import {
   ChevronDown,
   ExternalLink,
   Clock,
-  Bookmark,
+  Check,
 } from 'lucide-react';
 import { GeneratedActivity } from '../../types/TravelData';
 import { useActivityMedia } from '../../hooks/useActivityMedia';
+import { useCompletedActivities } from '../../hooks/useCompletedActivities';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTravel } from '../../contexts/TravelContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import ImageCarousel from '../ImageCarousel';
@@ -45,10 +45,9 @@ function priceLabel(cost: string): string | null {
 const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onOpenDetails }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { savedActivities, toggleSavedActivity } = useTravel();
+  const { isCompleted, toggle: toggleCompleted } = useCompletedActivities();
   const { toast } = useToast();
   const CategoryIcon = getCategoryIcon(activity.category);
-  const isSaved = savedActivities.includes(activity.name);
   const price = priceLabel(activity.estimatedCost);
 
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -75,7 +74,9 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
     removeImageComment,
     vote,
     setVote,
+    activityId: dbActivityId,
   } = useActivityMedia(activityKey);
+  const isDone = isCompleted(dbActivityId);
 
   // Fall back to the AI-fetched image when there are no user uploads yet so
   // the card never looks empty.
@@ -218,17 +219,38 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
     </a>
   );
 
-  const saveButton = (
+  const handleToggleDone = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user) {
+      toast('Sign in to track what you\'ve done', 'info');
+      return;
+    }
+    if (!dbActivityId) {
+      toast('Activity not ready yet', 'info');
+      return;
+    }
+    const result = await toggleCompleted(dbActivityId);
+    if (!result.ok) {
+      toast('Could not update', 'error');
+      return;
+    }
+    if (result.nextCompleted) toast('Marked as done', 'success');
+  };
+
+  const doneButton = (
     <button
-      onClick={(e) => {
-        e.stopPropagation();
-        toggleSavedActivity(activity.name);
-      }}
+      onClick={handleToggleDone}
       className="transition-all active:scale-90"
-      style={solidCircleStyle(isSaved)}
-      aria-label={isSaved ? 'Remove from saved' : 'Save to trip'}
+      style={{
+        ...solidCircleStyle(isDone),
+        background: isDone ? '#16a34a' : 'var(--surface-container-high)',
+        color: isDone ? '#ffffff' : 'var(--text-primary)',
+      }}
+      aria-label={isDone ? 'Unmark as done' : 'Mark as done'}
+      aria-pressed={isDone}
+      title={isDone ? 'Done' : 'Mark as done'}
     >
-      <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
+      <Check size={16} strokeWidth={3} />
     </button>
   );
 
@@ -329,7 +351,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
 
         <div className="flex items-center justify-between gap-3 mt-3">
           <div className="flex items-center gap-2">
-            {saveButton}
+            {doneButton}
             <UploadPhotoButton
               onFile={upload}
               uploading={uploading}
@@ -439,7 +461,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
           <div className="flex items-center justify-between gap-2 mb-2.5">
             {durationPill || <span />}
             <div className="flex items-center gap-2">
-              {saveButton}
+              {doneButton}
               {votePill}
               {openMapsButton}
             </div>

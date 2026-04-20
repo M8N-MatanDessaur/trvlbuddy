@@ -374,7 +374,10 @@ body {
 .text-primary-color { color: var(--primary); }
 .text-secondary-color { color: var(--secondary); }
 
-h1, h2, h3, h4, h5, h6 {
+/* :where() gives the rule zero specificity so a heading inside a parent that
+   sets color (e.g. an accent-backgrounded button using --on-accent) inherits
+   that color instead of being forced back to --text-primary. */
+:where(h1, h2, h3, h4, h5, h6) {
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.02em;
