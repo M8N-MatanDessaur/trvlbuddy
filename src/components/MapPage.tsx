@@ -219,10 +219,11 @@ const MapPage: React.FC = () => {
   const [initialLoading, setInitialLoading] = useState(true);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(getCachedLocation());
 
-  const { seedHotels, hotelGeocodeQueue, activityCandidates, fallbackCity } = useMemo(() => {
+  const { seedHotels, seedActivities, hotelGeocodeQueue, activityCandidates, fallbackCity } = useMemo(() => {
     if (!currentPlan) {
       return {
         seedHotels: [] as MapPoint[],
+        seedActivities: [] as MapPoint[],
         hotelGeocodeQueue: [] as Array<{ accommodation: Accommodation; query: string }>,
         activityCandidates: [] as Array<{ activity: GeneratedActivity; key: string; query: string }>,
         fallbackCity: null as string | null,
@@ -312,7 +313,11 @@ const MapPage: React.FC = () => {
       queries: string[]; // tried in order, first hit wins
       near?: { lat: number; lng: number };
     }> = [];
-    activities.forEach((activity) => {
+    // Activities with coords already baked in by trip-generation enrichment
+    // bypass everything (no supabase query, no Google call) -- the data is
+    // already in memory.
+    const seedActivitiesFromMemory: MapPoint[] = [];
+    activities.forEach((activity, i) => {
       const seg = findActivitySegment(activity);
       const actCity = seg?.city?.name || seg?.destination?.name || tripCity;
       const actCountry = seg?.destination?.country || tripCountry;
@@ -327,6 +332,22 @@ const MapPage: React.FC = () => {
       });
       if (seenSlugs.has(slug)) return;
       seenSlugs.add(slug);
+
+      // Short-circuit: enrichment already gave us the real coordinates +
+      // place_id at trip generation time. Skip every network call.
+      if (activity.coordinates) {
+        seedActivitiesFromMemory.push({
+          id: `act-${i}`,
+          kind: 'activity',
+          name: activity.name,
+          subtitle: activity.formattedAddress || activity.location || null,
+          category: activity.category,
+          lat: activity.coordinates.lat,
+          lng: activity.coordinates.lng,
+          activity,
+        });
+        return;
+      }
 
       // Multi-step query strategy: try the most specific first, fall back to
       // looser queries so AI-named places that don't match the full address
@@ -362,6 +383,7 @@ const MapPage: React.FC = () => {
 
     return {
       seedHotels: seedH,
+      seedActivities: seedActivitiesFromMemory,
       hotelGeocodeQueue: hotelQueue,
       activityCandidates: candidates,
       fallbackCity: tripCity,
@@ -410,7 +432,10 @@ const MapPage: React.FC = () => {
   // Resolve activity coords and missing hotel coords.
   useEffect(() => {
     let cancelled = false;
-    setPoints(seedHotels);
+    // Seed with everything we already know in memory: hotels with coords +
+    // activities whose coords were baked in by trip-generation enrichment.
+    // Zero network calls for these.
+    setPoints([...seedHotels, ...seedActivities]);
     setPendingCount(0);
     setInitialLoading(true);
 
@@ -601,7 +626,7 @@ const MapPage: React.FC = () => {
     })();
 
     return () => { cancelled = true; };
-  }, [seedHotels, hotelGeocodeQueue, activityCandidates, fallbackCity]);
+  }, [seedHotels, seedActivities, hotelGeocodeQueue, activityCandidates, fallbackCity]);
 
   // Re-render markers + auto-fit on point change.
   useEffect(() => {
@@ -687,7 +712,7 @@ const MapPage: React.FC = () => {
     );
   }
 
-  const totalExpected = activityCandidates.length + seedHotels.length + hotelGeocodeQueue.length;
+  const totalExpected = activityCandidates.length + seedActivities.length + seedHotels.length + hotelGeocodeQueue.length;
   const isStillLoading = initialLoading || pendingCount > 0;
   const [placesBlocked, setPlacesBlocked] = useState<PlacesBlocked | null>(null);
   useEffect(() => {

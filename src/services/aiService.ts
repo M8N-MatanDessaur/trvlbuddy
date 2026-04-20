@@ -777,26 +777,31 @@ async function enrichActivitiesWithPlaces(
   const { findPlaceFromText } = await import('./googlePlacesService');
 
   // Index activities by their place context so the query lands on the right city.
+  // Skip activities that already have coords + placeId -- nothing to enrich,
+  // and re-running burns quota for no value (e.g. partial re-enrichment of
+  // a trip that was already processed).
   const queries: Array<{
     activity: GeneratedActivity;
     query: string;
     near?: { lat: number; lng: number };
-  }> = activities.map((activity) => {
-    const seg = travelPlan.segments?.find(
-      (s) => s.city?.id === activity.cityId || s.destination.id === activity.destinationId,
-    );
-    const dest = seg?.destination
-      || travelPlan.destinations?.find((d) => d.id === activity.destinationId)
-      || travelPlan.destination
-      || travelPlan.destinations?.[0];
-    const city = seg?.city?.name || dest?.name || '';
-    const country = dest?.country || '';
-    const parts = [activity.name, city, country].filter(Boolean);
-    const near = seg?.city?.coordinates
-      || dest?.coordinates
-      || undefined;
-    return { activity, query: parts.join(', '), near };
-  });
+  }> = activities
+    .filter((activity) => !(activity.coordinates && activity.placeId))
+    .map((activity) => {
+      const seg = travelPlan.segments?.find(
+        (s) => s.city?.id === activity.cityId || s.destination.id === activity.destinationId,
+      );
+      const dest = seg?.destination
+        || travelPlan.destinations?.find((d) => d.id === activity.destinationId)
+        || travelPlan.destination
+        || travelPlan.destinations?.[0];
+      const city = seg?.city?.name || dest?.name || '';
+      const country = dest?.country || '';
+      const parts = [activity.name, city, country].filter(Boolean);
+      const near = seg?.city?.coordinates
+        || dest?.coordinates
+        || undefined;
+      return { activity, query: parts.join(', '), near };
+    });
 
   // Lower concurrency keeps quota burn predictable. ONE call per activity.
   const concurrency = 4;
