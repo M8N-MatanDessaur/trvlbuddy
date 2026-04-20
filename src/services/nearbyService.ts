@@ -389,9 +389,12 @@ export class NearbyFeedCursor {
   ): Promise<NearbyPlace[] | null> {
     try {
       const useTextSearch = Boolean(cat.noTypeSearch && this.globalKeyword);
+      // URL-encode the ":" so Netlify's :param syntax doesn't trip on it
+      // when matching the redirect rule. Google decodes %3A back to ":"
+      // server-side so the actual API endpoint is the same.
       const endpoint = useTextSearch
-        ? '/api/placesv1/places:searchText'
-        : '/api/placesv1/places:searchNearby';
+        ? '/api/placesv1/places%3AsearchText'
+        : '/api/placesv1/places%3AsearchNearby';
 
       const body: Record<string, unknown> = { maxResultCount: 20 };
       if (useTextSearch) {
