@@ -8,7 +8,7 @@
 // "searchNearby" or "searchText") and forwards the POST + headers + body to
 // "https://places.googleapis.com/v1/places:<method>".
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
