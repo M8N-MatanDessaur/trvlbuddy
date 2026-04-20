@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, Plane } from 'lucide-react';
+import { Plane } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useTravel } from '../contexts/TravelContext';
@@ -160,10 +160,13 @@ const Header: React.FC<Props> = ({ pages }) => {
     touchStart.current = null;
     swiping.current = false;
     if (wasSwipe) {
+      // Suppress the synthetic click that would otherwise fire after the
+      // swipe and double-trigger openSwitcher.
+      e.preventDefault();
       void cycleBy(dx < 0 ? 1 : -1);
-    } else {
-      openSwitcher();
     }
+    // Plain taps fall through to onClick -> openSwitcher (single source of
+    // truth so we don't open the modal twice on touch devices).
   };
 
   return (
@@ -211,7 +214,6 @@ const Header: React.FC<Props> = ({ pages }) => {
               {label}
             </motion.span>
           </AnimatePresence>
-          <ChevronDown size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
         </button>
 
         <button
