@@ -2,8 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTravel } from '../contexts/TravelContext';
 import { getSmartSuggestion } from '../services/aiService';
-import { tripExists } from '../services/tripsService';
+import { saveTrip, tripExists } from '../services/tripsService';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { useCompletedActivities } from '../hooks/useCompletedActivities';
+import { computeSlug } from '../services/activityMediaService';
 import TripGoneScreen from './TripGoneScreen';
+import { Cloud, CheckCircle2 } from 'lucide-react';
 import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb, Heart, RefreshCw, Loader2, Pencil, X as XIcon, Cloud, Sun, CloudRain } from 'lucide-react';
 import DayDebrief from './trip/DayDebrief';
 import TripMembersStrip from './TripMembersStrip';
@@ -28,7 +33,10 @@ const DynamicDashboard: React.FC = () => {
   const {
     currentPlan,
     activities,
+    translations,
+    emergencyContacts,
     savedActivities,
+    journalEntries,
     setCurrentPlan,
     currentTripId,
     setActivities,
@@ -36,9 +44,13 @@ const DynamicDashboard: React.FC = () => {
     setEmergencyContacts,
     setCurrentTripId,
   } = useTravel();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const { completedSlugs } = useCompletedActivities();
   const navigate = useNavigate();
   const [tripGone, setTripGone] = useState(false);
   const [goneTripTitle, setGoneTripTitle] = useState<string | null>(null);
+  const [savingToCloud, setSavingToCloud] = useState(false);
 
   // Verify the loaded trip still exists in supabase. If the owner deleted it,
   // wipe the local cached plan and show TripGoneScreen so the user isn't
@@ -187,6 +199,28 @@ const DynamicDashboard: React.FC = () => {
 
   const transportIcon = (m?: string) => ({ flight: Plane, train: Train, car: Car, ferry: Ship, bus: Bus }[m || ''] || Plane);
 
+  const handleSaveToCloud = async () => {
+    if (!user || !currentPlan || savingToCloud) return;
+    setSavingToCloud(true);
+    const { data, error } = await saveTrip({
+      ownerId: user.id,
+      bundle: {
+        currentPlan,
+        activities,
+        translations,
+        emergencyContacts,
+        savedActivities,
+        journalEntries,
+      },
+    });
+    setSavingToCloud(false);
+    if (error || !data) {
+      toast(error || 'Could not save trip', 'error');
+      return;
+    }
+    setCurrentTripId(data.id);
+  };
+
   const segments = (() => {
     if (!currentPlan.segments) return [];
     const s = currentPlan.tripType === 'full-trip'
@@ -235,14 +269,24 @@ const DynamicDashboard: React.FC = () => {
   };
 
   const tripDay = getTripDayInfo();
-  // Dedupe: the same activity can appear in multiple AI sections (e.g. both
-  // "Food & Dining" and "Recommended for you"); we only want one entry per
-  // saved name on the dashboard.
-  const savedActivityList = (() => {
+  // "Done" list: activities the user has marked as completed (supabase-backed).
+  // We compute the slug for each activity to match against completedSlugs.
+  // Dedupe by name since the same activity can appear in multiple AI sections.
+  const cityForSlug = segments[0]?.city?.name
+    || segments[0]?.destination?.name
+    || dest?.name
+    || null;
+  const doneList = (() => {
     const seen = new Set<string>();
     const out: typeof activities = [];
     for (const a of activities) {
-      if (!savedActivities.includes(a.name)) continue;
+      const slug = computeSlug({
+        name: a.name,
+        city: cityForSlug,
+        address: a.formattedAddress || a.location || null,
+        googlePlaceId: a.placeId || null,
+      });
+      if (!completedSlugs.has(slug)) continue;
       if (seen.has(a.name)) continue;
       seen.add(a.name);
       out.push(a);
@@ -281,6 +325,35 @@ const DynamicDashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Save-to-cloud CTA: only when the trip isn't backed by a supabase row yet. */}
+      {user && !currentTripId && (
+        <button
+          onClick={handleSaveToCloud}
+          disabled={savingToCloud}
+          className="w-full flex items-center gap-3 p-4 rounded-2xl transition-transform active:scale-[0.99] disabled:opacity-60"
+          style={{
+            background: 'var(--accent-container)',
+            border: '0.5px solid var(--outline)',
+            minHeight: 0,
+          }}
+        >
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+          >
+            <Cloud size={18} />
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            <div className="text-[14px] font-extrabold" style={{ color: 'var(--accent)' }}>
+              {savingToCloud ? 'Saving to cloud...' : 'Save trip to cloud'}
+            </div>
+            <div className="text-[11.5px]" style={{ color: 'var(--text-secondary)' }}>
+              Sync this trip across devices and invite friends.
+            </div>
+          </div>
+        </button>
+      )}
 
       {/* Weather */}
       {weatherLocations.length > 0 && (
@@ -356,15 +429,15 @@ const DynamicDashboard: React.FC = () => {
         </button>
       </div>
 
-      {/* Saved Activities */}
-      {savedActivityList.length > 0 && (
+      {/* Done Activities */}
+      {doneList.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-1.5 px-1">
-            <Heart size={12} style={{ color: 'var(--accent)' }} fill="var(--accent)" />
-            <span className="text-[11px] font-bold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Saved ({savedActivityList.length})</span>
+            <CheckCircle2 size={12} style={{ color: '#16a34a' }} fill="#16a34a" />
+            <span className="text-[11px] font-bold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Done ({doneList.length})</span>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-            {savedActivityList.slice(0, 8).map((a, i) => (
+            {doneList.slice(0, 8).map((a, i) => (
               <button
                 key={i}
                 onClick={() => navigate('/explore')}
@@ -486,15 +559,16 @@ const DynamicDashboard: React.FC = () => {
                       </div>
                       {acc.address && (
                         <a
-                          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(acc.address)}`}
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(acc.address)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center justify-center"
                           style={{ height: '32px', aspectRatio: '1', borderRadius: '50%', background: 'var(--accent-container)', color: 'var(--accent)' }}
-                          title="Directions"
+                          title="Open in Maps"
+                          aria-label="Open accommodation in Google Maps"
                           onClick={e => e.stopPropagation()}
                         >
-                          <NavIcon size={14} />
+                          <MapPin size={14} />
                         </a>
                       )}
                     </div>
