@@ -83,17 +83,55 @@ export async function saveTrip(params: {
   return { data, error: errorMsg };
 }
 
-export async function listMyTrips(ownerId: string): Promise<Trip[]> {
-  const { data, error } = await supabase
+export async function listMyTrips(userId: string): Promise<Trip[]> {
+  // Owner-side: trips you own.
+  const ownedPromise = supabase
     .from('trips')
     .select('*')
-    .eq('owner_id', ownerId)
+    .eq('owner_id', userId)
     .order('updated_at', { ascending: false });
-  if (error) {
-    console.error('listMyTrips failed', error);
-    return [];
-  }
-  return data || [];
+
+  // Member-side: trips you've joined via share_token. trip_members has the
+  // join row; the FK is to trips.id.
+  const memberPromise = supabase
+    .from('trip_members')
+    .select('trip_id, trips(*)')
+    .eq('user_id', userId);
+
+  const [{ data: owned, error: ownedErr }, { data: memberRows, error: memberErr }] = await Promise.all([
+    ownedPromise,
+    memberPromise,
+  ]);
+
+  if (ownedErr) console.error('listMyTrips owned query failed', ownedErr);
+  if (memberErr) console.error('listMyTrips member query failed', memberErr);
+
+  const all: Trip[] = [...(owned || [])];
+  (memberRows || []).forEach((row) => {
+    const trip = (row as unknown as { trips: Trip | null }).trips;
+    if (!trip) return;
+    if (all.some((t) => t.id === trip.id)) return; // already in owned
+    all.push(trip);
+  });
+
+  // Sort newest-updated first across both sources.
+  all.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+  return all;
+}
+
+/**
+ * Cheap existence check for a trip. Distinguishes "trip is gone" from
+ * "couldn't talk to supabase" so callers can decide whether to surface a
+ * TripGoneScreen or quietly retry.
+ */
+export async function tripExists(tripId: string): Promise<'present' | 'gone' | 'error'> {
+  const { data, error } = await supabase
+    .from('trips')
+    .select('id')
+    .eq('id', tripId)
+    .maybeSingle();
+  if (error) return 'error';
+  return data ? 'present' : 'gone';
 }
 
 export async function loadTrip(tripId: string): Promise<SavedTripRow | null> {
