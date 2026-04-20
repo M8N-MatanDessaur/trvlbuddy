@@ -798,7 +798,8 @@ async function enrichActivitiesWithPlaces(
     return { activity, query: parts.join(', '), near };
   });
 
-  const concurrency = 8;
+  // Lower concurrency keeps quota burn predictable. ONE call per activity.
+  const concurrency = 4;
   let next = 0;
 
   async function worker() {
