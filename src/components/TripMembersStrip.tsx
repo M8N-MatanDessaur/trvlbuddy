@@ -58,7 +58,6 @@ const TripMembersStrip: React.FC<Props> = ({ tripId, onInvite, max = 5 }) => {
               marginLeft: i === 0 ? '-6px' : '-8px',
               zIndex: visible.length - i,
               borderRadius: '9999px',
-              boxShadow: '0 0 0 2px var(--bg-primary)',
             }}
           >
             <Avatar profile={m.profile} size={28} />
@@ -79,7 +78,6 @@ const TripMembersStrip: React.FC<Props> = ({ tripId, onInvite, max = 5 }) => {
               justifyContent: 'center',
               fontSize: '10px',
               fontWeight: 800,
-              boxShadow: '0 0 0 2px var(--bg-primary)',
             }}
           >
             +{overflow}
