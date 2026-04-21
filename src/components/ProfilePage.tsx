@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Award,
   ChevronLeft,
@@ -27,7 +27,11 @@ import TripsCarousel from './TripsCarousel';
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
-  const params = useParams<{ userId?: string }>();
+  const location = useLocation();
+  const routeUserId = useMemo(() => {
+    const match = location.pathname.match(/^\/profile\/([^/]+)/);
+    return match ? decodeURIComponent(match[1]) : undefined;
+  }, [location.pathname]);
   const { user, profile: ownProfile, signOut } = useAuth();
   const { toast } = useToast();
   const {
@@ -40,8 +44,8 @@ const ProfilePage: React.FC = () => {
     setCurrentTripId,
   } = useTravel();
 
-  const isOwn = !params.userId || (user?.id ? params.userId === user.id : false);
-  const targetId = isOwn ? user?.id ?? null : params.userId ?? null;
+  const isOwn = !routeUserId || (user?.id ? routeUserId === user.id : false);
+  const targetId = isOwn ? user?.id ?? null : routeUserId ?? null;
 
   const [profile, setProfile] = useState<Profile | null>(isOwn ? ownProfile : null);
   const [profileLoading, setProfileLoading] = useState(!isOwn);
@@ -58,14 +62,14 @@ const ProfilePage: React.FC = () => {
   }, [isOwn, ownProfile]);
 
   useEffect(() => {
-    if (isOwn || !params.userId) return;
+    if (isOwn || !routeUserId) return;
     setProfileLoading(true);
     let alive = true;
     (async () => {
       const { data } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', params.userId!)
+        .eq('id', routeUserId!)
         .maybeSingle();
       if (!alive) return;
       setProfile(data ?? null);
@@ -74,7 +78,7 @@ const ProfilePage: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [isOwn, params.userId]);
+  }, [isOwn, routeUserId]);
 
   useEffect(() => {
     if (!targetId) return;
