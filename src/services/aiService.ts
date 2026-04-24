@@ -1649,9 +1649,10 @@ Keep it concise and personal. Do not use emojis. Return only the journal text, n
   }
 }
 
-// ---- OpenAI Whisper transcription ----
+// ---- Whisper transcription (via Supabase Edge Function proxy) ----
 
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 // ---- Local-mode chat (no trip context) ----
 
@@ -1740,21 +1741,23 @@ Begin your answer now.
 }
 
 export async function transcribeAudio(blob: Blob, filename = 'audio.webm'): Promise<string> {
-  if (!OPENAI_API_KEY) {
-    throw new Error('VITE_OPENAI_API_KEY is not set');
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error('Supabase env vars are not set');
   }
   const form = new FormData();
   form.append('file', blob, filename);
-  form.append('model', 'whisper-1');
 
-  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/transcribe`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}` },
+    headers: {
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      apikey: SUPABASE_ANON_KEY,
+    },
     body: form,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`Whisper transcription failed (${res.status}): ${text}`);
+    throw new Error(`Transcription failed (${res.status}): ${text}`);
   }
   const data = await res.json();
   return (data.text || '').trim();
