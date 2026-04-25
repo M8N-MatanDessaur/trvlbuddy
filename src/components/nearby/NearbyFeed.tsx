@@ -26,6 +26,7 @@ import { fetchDynamicChips } from '../../services/nearbyChipsService';
 import { iconFor } from '../../services/nearbyIconRegistry';
 import { useToast } from '../../contexts/ToastContext';
 import { getActivityScoresBySlug } from '../../services/activityMediaService';
+import PullToRefresh from '../PullToRefresh';
 
 const CHIP_SCAN_RADIUS_BY_MODE: Record<TransportMode, number> = {
   foot: 1500,
@@ -383,6 +384,7 @@ const NearbyFeed: React.FC = () => {
   }, [uniquePlaces, scoreBySlug]);
 
   return (
+    <PullToRefresh onRefresh={requestLocation} disabled={status === 'locating' || status === 'loading'}>
     <section className="page" ref={sectionRef}>
       {/* Page header */}
       <div className="flex items-center justify-between mb-4">
@@ -802,6 +804,7 @@ const NearbyFeed: React.FC = () => {
         )}
       </AnimatePresence>
     </section>
+    </PullToRefresh>
   );
 };
 

@@ -174,7 +174,8 @@ const Header: React.FC<Props> = ({ pages }) => {
       <header
         className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5"
         style={{
-          height: '3.25rem',
+          height: 'calc(3.25rem + env(safe-area-inset-top))',
+          paddingTop: 'env(safe-area-inset-top)',
           background: 'var(--bg-primary)',
           borderBottom: '0.33px solid var(--outline)',
         }}
