@@ -31,6 +31,10 @@ export function warmImageCache(urls: Iterable<string | null | undefined>): void 
     img.onerror = onFailure;
     img.decoding = 'async';
     img.loading = 'eager';
+    // CORS so this populates the same cache bucket as the rendered <img>s
+    // (which all set crossOrigin="anonymous"). Without matching CORS modes
+    // the browser keeps separate cache entries and the warming has no effect.
+    img.crossOrigin = 'anonymous';
     img.src = url;
   }
 }
