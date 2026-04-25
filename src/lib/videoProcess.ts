@@ -84,6 +84,13 @@ export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> 
   const { file, startSec, durationSec, maxHeight = TARGET_HEIGHT, onProgress } = params;
   const ff = await loadFFmpeg();
 
+  // Compute the 4:5 (Instagram portrait) crop window in JS so the ffmpeg
+  // filter graph stays free of comma-bearing min() expressions, which
+  // ffmpeg.wasm's parser can mis-tokenise as filterchain separators even
+  // when single-quoted.
+  const sourceMeta = await readVideoMeta(file);
+  const { cropW, cropH, targetH } = computeCropDimensions(sourceMeta, maxHeight);
+
   const inputName = 'input' + inferExtension(file);
   const outputName = 'output.mp4';
   const posterName = 'poster.jpg';
@@ -97,18 +104,17 @@ export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> 
     const buf = new Uint8Array(await file.arrayBuffer());
     await ff.writeFile(inputName, buf);
 
-    // Trim + center-crop to 4:5 (Instagram portrait) + downscale. -ss before
-    // -i seeks fast (keyframe-based), after -i is accurate; we use
-    // after-input for accuracy on mobile captures. The crop expression
-    // takes the largest 4:5 rectangle that fits inside the source — works
-    // for landscape (16:9), square, and portrait (9:16) inputs alike.
-    // scale=-2 keeps width even-numbered for H.264.
-    await ff.exec([
+    // Trim + center-crop to 4:5 + downscale. -ss before -i seeks fast
+    // (keyframe-based), after -i is accurate; we use after-input for
+    // accuracy on mobile captures. cropW/cropH are precomputed integers
+    // (even, for yuv420p), so the filter graph has no expressions to
+    // escape. scale=-2 keeps width even-numbered for H.264.
+    const code = await ff.exec([
       '-y',
       '-i', inputName,
       '-ss', startSec.toFixed(3),
       '-t', durationSec.toFixed(3),
-      '-vf', `crop='min(iw,ih*4/5)':'min(ih,iw*5/4)',scale=-2:'min(${maxHeight},ih)'`,
+      '-vf', `crop=${cropW}:${cropH},scale=-2:${targetH}`,
       '-c:v', 'libx264',
       '-preset', 'veryfast',
       '-crf', '23',
@@ -121,15 +127,21 @@ export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> 
       '-pix_fmt', 'yuv420p',
       outputName,
     ]);
+    if (code !== 0) {
+      throw new Error(`Video encode failed (ffmpeg exit ${code})`);
+    }
 
     // Poster frame at t=0 of the trimmed clip.
-    await ff.exec([
+    const posterCode = await ff.exec([
       '-y',
       '-i', outputName,
       '-vframes', '1',
       '-q:v', String(POSTER_QUALITY),
       posterName,
     ]);
+    if (posterCode !== 0) {
+      throw new Error(`Poster extract failed (ffmpeg exit ${posterCode})`);
+    }
 
     const videoData = await ff.readFile(outputName);
     const posterData = await ff.readFile(posterName);
@@ -147,8 +159,15 @@ export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> 
       lastModified: Date.now(),
     });
 
-    // Best-effort width/height via the poster's dimensions.
-    const posterMeta = await readImageMeta(poster);
+    // Best-effort width/height via the poster's dimensions; fall back to
+    // the precomputed crop/scale target if the browser refuses to decode
+    // the poster (rare, but a poster failure shouldn't fail the upload).
+    const fallbackHeight = targetH;
+    const fallbackWidth = roundEven((cropW / cropH) * targetH);
+    const posterMeta = await readImageMeta(poster).catch(() => ({
+      width: fallbackWidth,
+      height: fallbackHeight,
+    }));
 
     return {
       video,
@@ -179,6 +198,26 @@ function inferExtension(file: File): string {
   if (file.type === 'video/quicktime') return '.mov';
   if (file.type === 'video/webm') return '.webm';
   return '.mp4';
+}
+
+// Largest 4:5 (portrait) rectangle that fits in the source, rounded to
+// even integers so libx264 + yuv420p is happy. targetH is the encode
+// height, capped by maxHeight and the cropped source height.
+function computeCropDimensions(
+  meta: VideoMeta,
+  maxHeight: number,
+): { cropW: number; cropH: number; targetH: number } {
+  const srcW = meta.width > 0 ? meta.width : 720;
+  const srcH = meta.height > 0 ? meta.height : 1280;
+  const cropW = roundEven(Math.min(srcW, (srcH * 4) / 5));
+  const cropH = roundEven(Math.min(srcH, (srcW * 5) / 4));
+  const targetH = roundEven(Math.min(maxHeight, cropH));
+  return { cropW, cropH, targetH };
+}
+
+function roundEven(n: number): number {
+  const r = Math.max(2, Math.round(n));
+  return r % 2 === 0 ? r : r - 1;
 }
 
 function readImageMeta(file: File): Promise<{ width: number; height: number }> {
