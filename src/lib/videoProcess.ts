@@ -10,13 +10,13 @@ export const TARGET_HEIGHT = 720;
 export const TARGET_VIDEO_BITRATE = '1200k';
 export const POSTER_QUALITY = 4; // 1-31 (lower = higher quality)
 
-const FFMPEG_CORE_VERSION = '0.12.10';
+// 0.12.6 is the version pinned by the ffmpeg.wasm 0.12.15 playground/docs.
+// 0.12.10's UMD build doesn't expose self.createFFmpegCore in the shape the
+// worker expects, so importScripts succeeds but the load step then throws
+// the opaque "failed to import ffmpeg-core.js".
+const FFMPEG_CORE_VERSION = '0.12.6';
 // Ordered fallback list. unpkg occasionally serves a 403/HTML error page for
-// scoped packages (CDN edge issues) — when that happens the bytes still come
-// back with a 2xx-or-not status that the default toBlobURL ignores, the HTML
-// gets wrapped as text/javascript, and the worker fails with the opaque
-// "failed to import ffmpeg-core.js". Trying jsdelivr next gives us a clean
-// recovery path without requiring an app reload.
+// scoped packages (CDN edge issues); jsdelivr is a clean recovery path.
 const FFMPEG_CORE_BASES = [
   `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`,
   `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`,
@@ -70,6 +70,16 @@ async function fetchAsBlobURL(url: string, mimeType: string): Promise<string> {
     const head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
     if (head[0] !== 0x00 || head[1] !== 0x61 || head[2] !== 0x73 || head[3] !== 0x6d) {
       throw new Error(`Invalid wasm magic from ${url}`);
+    }
+  } else if (mimeType === 'text/javascript') {
+    // Reject HTML error pages so they can't be wrapped into a JS blob and then
+    // surface inside the worker as the opaque "failed to import ffmpeg-core.js".
+    const head = new TextDecoder('utf-8', { fatal: false })
+      .decode(new Uint8Array(buf, 0, Math.min(256, buf.byteLength)))
+      .trimStart()
+      .toLowerCase();
+    if (head.startsWith('<!doctype') || head.startsWith('<html') || head.startsWith('<')) {
+      throw new Error(`Expected JS, got HTML from ${url}`);
     }
   }
   return URL.createObjectURL(new Blob([buf], { type: mimeType }));
