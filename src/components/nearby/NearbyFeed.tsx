@@ -44,6 +44,41 @@ function readStoredTransportMode(): TransportMode {
   return stored === 'car' ? 'car' : 'foot';
 }
 
+// Tokens shorter than this never count toward a name-match. Stops noise
+// like "a"/"i"/"on" from inflating the match score for unrelated places.
+const MIN_TOKEN_LEN = 2;
+// Anything at this score or above is treated as a "top match" and
+// pinned above the separator.
+const NAME_MATCH_TOP_THRESHOLD = 50;
+
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .split(/[^a-z0-9]+/g)
+    .filter((tok) => tok.length >= MIN_TOKEN_LEN);
+}
+
+// Heuristic relevance: 100 if the place name contains the full query
+// phrase, 75 if every query token appears in the name, 25 per token
+// that appears (capped at 49 so partial matches stay below the
+// "top match" threshold). Returns 0 when nothing connects, so the
+// place falls into the "related" section below the separator.
+function nameMatchScore(name: string, query: string): number {
+  const cleanName = name.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
+  const cleanQuery = query.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').trim();
+  if (!cleanQuery) return 0;
+  if (cleanName.includes(cleanQuery)) return 100;
+  const queryTokens = tokenize(query);
+  if (queryTokens.length === 0) return 0;
+  const nameTokens = new Set(tokenize(name));
+  const hits = queryTokens.filter((tok) => nameTokens.has(tok)).length;
+  if (hits === 0) return 0;
+  if (hits === queryTokens.length) return 75;
+  return Math.min(49, hits * 25);
+}
+
 const NearbyFeed: React.FC = () => {
   const [status, setStatus] = useState<Status>('idle');
   const [userLocation, setUserLocation] = useState<UserLocation | null>(getCachedLocation());
@@ -373,12 +408,43 @@ const NearbyFeed: React.FC = () => {
   // re-sorts the entire list and items already on screen visibly jump.
   // New arrivals are slotted in score-then-distance order against the
   // tail of the locked list, then frozen.
+  //
+  // Free-text search bypasses the lock: when the user typed a specific
+  // query (e.g. "Bee Bagels"), name-match relevance has to override
+  // arrival order or the searched place would sink below earlier-loaded
+  // category sweeps that scored 0. We sort the whole list by
+  // (nameMatchScore desc, vote score desc, distance asc) and emit the
+  // separator between exact matches and the broader keyword feed.
   const orderRef = useRef<string[]>([]);
-  const sortedPlaces = useMemo(() => {
+  const { sortedPlaces, separatorAfterId, topMatchCount } = useMemo(() => {
     if (uniquePlaces.length === 0) {
       orderRef.current = [];
-      return uniquePlaces;
+      return { sortedPlaces: uniquePlaces, separatorAfterId: null as string | null, topMatchCount: 0 };
     }
+
+    if (aiKeyword) {
+      const decorated = uniquePlaces.map((p) => ({
+        place: p,
+        match: nameMatchScore(p.name, aiKeyword),
+        score: scoreBySlug.get(`gpid-${p.placeId}`) ?? 0,
+      }));
+      decorated.sort((a, b) => {
+        if (b.match !== a.match) return b.match - a.match;
+        if (b.score !== a.score) return b.score - a.score;
+        return a.place.distance - b.place.distance;
+      });
+      const topCount = decorated.filter((d) => d.match >= NAME_MATCH_TOP_THRESHOLD).length;
+      const separator = topCount > 0 && topCount < decorated.length
+        ? decorated[topCount - 1].place.placeId
+        : null;
+      orderRef.current = decorated.map((d) => d.place.placeId);
+      return {
+        sortedPlaces: decorated.map((d) => d.place),
+        separatorAfterId: separator,
+        topMatchCount: topCount,
+      };
+    }
+
     const byId = new Map(uniquePlaces.map((p) => [p.placeId, p]));
     const lockedIds = orderRef.current.filter((id) => byId.has(id));
     const lockedSet = new Set(lockedIds);
@@ -391,8 +457,12 @@ const NearbyFeed: React.FC = () => {
     });
     const nextOrder = [...lockedIds, ...newcomers.map((p) => p.placeId)];
     orderRef.current = nextOrder;
-    return nextOrder.map((id) => byId.get(id)!).filter(Boolean);
-  }, [uniquePlaces, scoreBySlug]);
+    return {
+      sortedPlaces: nextOrder.map((id) => byId.get(id)!).filter(Boolean),
+      separatorAfterId: null as string | null,
+      topMatchCount: 0,
+    };
+  }, [uniquePlaces, scoreBySlug, aiKeyword]);
 
   // Reset the lock whenever the feed identity changes (new location,
   // transport mode, filter, or AI prompt), so a fresh search isn't
@@ -685,9 +755,34 @@ const NearbyFeed: React.FC = () => {
 
           {sortedPlaces.map((place, idx) => {
             const isSentinel = idx === Math.max(0, sortedPlaces.length - PREFETCH_AHEAD);
+            const showSeparator = separatorAfterId === place.placeId;
             return (
               <React.Fragment key={place.placeId}>
                 <NearbyPost place={place} />
+                {showSeparator && (
+                  <div
+                    role="separator"
+                    aria-label="More results related to your search"
+                    className="flex items-center gap-3 my-4 px-1"
+                    style={{ color: 'var(--text-tertiary)' }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="flex-1"
+                      style={{ height: '0.5px', background: 'var(--outline)' }}
+                    />
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em]">
+                      {topMatchCount === 1
+                        ? `No more "${aiPrompt ?? ''}" — related places below`
+                        : `More related to "${aiPrompt ?? ''}"`}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className="flex-1"
+                      style={{ height: '0.5px', background: 'var(--outline)' }}
+                    />
+                  </div>
+                )}
                 {isSentinel && <div ref={sentinelRef} style={{ height: 1 }} />}
               </React.Fragment>
             );

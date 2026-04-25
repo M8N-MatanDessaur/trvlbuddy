@@ -254,7 +254,7 @@ const NearbyPromptBar = forwardRef<NearbyPromptBarHandle, Props>(function Nearby
             width: '36px',
             height: '36px',
             background: sendDisabled ? 'var(--surface-container-high)' : 'var(--accent)',
-            color: sendDisabled ? 'var(--text-tertiary)' : 'white',
+            color: sendDisabled ? 'var(--text-tertiary)' : 'var(--on-accent)',
             opacity: sendDisabled ? 0.6 : 1,
           }}
         >

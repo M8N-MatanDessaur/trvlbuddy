@@ -27,6 +27,7 @@ import Avatar from './Avatar';
 import CachedImage from './CachedImage';
 import ProfileMediaViewer, { type MediaItem } from './ProfileMediaViewer';
 import TripsCarousel from './TripsCarousel';
+import VideoThumbnail from './VideoThumbnail';
 import { warmImageCache } from '../lib/imagePrefetch';
 import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 
@@ -403,11 +404,11 @@ const ProfilePage: React.FC = () => {
                       }}
                       aria-label={`Open video from ${video.activity_name}`}
                     >
-                      <CachedImage
-                        src={video.posterUrl}
+                      <VideoThumbnail
+                        videoUrl={video.url}
+                        posterUrl={video.posterUrl}
                         alt={video.activity_name}
                         loading="lazy"
-                        decoding="async"
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                       {/* Play badge top-right */}

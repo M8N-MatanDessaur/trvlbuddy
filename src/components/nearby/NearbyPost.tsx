@@ -10,7 +10,7 @@ import {
 import { NearbyPlace, formatDistance, priceLevelLabel } from '../../services/nearbyService';
 import { useActivityMedia } from '../../hooks/useActivityMedia';
 import { useAuth } from '../../contexts/AuthContext';
-import ImageCarousel from '../ImageCarousel';
+import MediaCarousel, { type MediaSlide } from '../MediaCarousel';
 import UploadMediaButton from '../UploadMediaButton';
 import Avatar from '../Avatar';
 import { useToast } from '../../contexts/ToastContext';
@@ -48,7 +48,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
 
   const {
     images,
-    imageUrls,
+    mediaItems,
     uploading,
     upload,
     uploadVideo,
@@ -58,8 +58,39 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
     vote,
     setVote,
   } = useActivityMedia(activityKey);
-  const activeImage = images[activeImageIndex] || images[0] || null;
-  const poster = activeImage?.poster ?? null;
+
+  // The carousel mixes images + videos. activeImageIndex maps into
+  // mediaItems; only image slides expose like + comment affordances
+  // (videos own their own viewer-only flow inside the player).
+  const slides: MediaSlide[] = useMemo(
+    () =>
+      mediaItems.map((item) => (
+        item.kind === 'image'
+          ? {
+              kind: 'image' as const,
+              src: item.data.url,
+              thumbhash: item.data.thumbhash ?? null,
+            }
+          : {
+              kind: 'video' as const,
+              src: item.data.url,
+              posterUrl: item.data.posterUrl,
+              thumbhash: item.data.thumbhash ?? null,
+              startMs: item.data.start_ms,
+              durationMs: item.data.duration_ms,
+            }
+      )),
+    [mediaItems],
+  );
+  const activeMediaItem = mediaItems[activeImageIndex] || mediaItems[0] || null;
+  const activeImage =
+    activeMediaItem && activeMediaItem.kind === 'image'
+      ? activeMediaItem.data
+      : null;
+  // Poster (uploader avatar) sticks to whichever uploader's media is on
+  // screen so the avatar matches the slide. Falls back to the first
+  // image's poster when a video slide doesn't carry one.
+  const poster = activeImage?.poster ?? images[0]?.poster ?? null;
 
   const handleLike = async () => {
     if (!activeImage) return;
@@ -252,7 +283,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
   );
 
   // ---------- No-image variant (compact) ----------
-  if (images.length === 0) {
+  if (mediaItems.length === 0) {
     return (
       <article
         className="w-full overflow-hidden"
@@ -341,9 +372,8 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
           className="relative w-full"
           style={{ aspectRatio: '4 / 5', background: 'var(--surface-container-high)' }}
         >
-          <ImageCarousel
-            images={imageUrls}
-            thumbhashes={images.map((img) => img.thumbhash)}
+          <MediaCarousel
+            items={slides}
             className="absolute inset-0"
             eagerCount={2}
             onIndexChange={setActiveImageIndex}
