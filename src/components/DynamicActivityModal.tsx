@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { GeneratedActivity } from '../types/TravelData';
 import { getCategoryIcon } from '../utils/categoryIcons';
 import ImageCarousel from './ImageCarousel';
-import UploadPhotoButton from './UploadPhotoButton';
+import UploadMediaButton from './UploadMediaButton';
 import { useActivityMedia } from '../hooks/useActivityMedia';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -29,7 +29,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
     [activity?.name, activity?.location, activity?.placeId]
   );
 
-  const { imageUrls, uploading, upload, vote, setVote } = useActivityMedia(isOpen ? activityKey : null);
+  const { imageUrls, uploading, upload, uploadVideo, vote, setVote } = useActivityMedia(isOpen ? activityKey : null);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -98,8 +98,9 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                   <X size={18} />
                 </button>
 
-                <UploadPhotoButton
-                  onFile={upload}
+                <UploadMediaButton
+                  onPhotoFile={upload}
+                  onVideoResult={uploadVideo}
                   uploading={uploading}
                   className="absolute top-3 left-4 z-10 transition-all active:scale-90 flex items-center justify-center"
                   style={{
@@ -149,12 +150,13 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
                       )}
                     </div>
                   </div>
-                  <UploadPhotoButton
-                    onFile={upload}
+                  <UploadMediaButton
+                    onPhotoFile={upload}
+                    onVideoResult={uploadVideo}
                     uploading={uploading}
                     className="flex items-center justify-center flex-shrink-0"
                     style={{ background: 'var(--surface-container-high)', color: 'var(--accent)', height: '36px', aspectRatio: '1', borderRadius: '50%' }}
-                    ariaLabel="Add a photo"
+                    ariaLabel="Add a photo or video"
                   />
                   <button
                     onClick={onClose}
