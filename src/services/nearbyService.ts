@@ -79,6 +79,14 @@ const RADIUS_STEPS_BY_MODE: Record<TransportMode, number[]> = {
   car: [3000, 6000, 12000, 25000],
 };
 
+// Free-text search runs against Google's `searchText` with a city-scale
+// bias circle so a specific place name (e.g. "Bee Bagels") or a phrase
+// (e.g. "best brunch") still surfaces when it sits a couple km outside
+// the nearby category-sweep radius. The hard cap below prevents the
+// occasional same-named match from another city from leaking in.
+const TEXT_SEARCH_BIAS_RADIUS_M = 50_000;
+const TEXT_SEARCH_MAX_DISTANCE_M = 50_000;
+
 // Place types that are not real "things to go do" and should never appear
 // in the feed, even when Google tags a result with e.g. both "restaurant"
 // and "gas_station". Any result that carries one of these types is dropped.
@@ -397,15 +405,20 @@ export class NearbyFeedCursor {
 
       const body: Record<string, unknown> = { maxResultCount: 20 };
       if (useTextSearch) {
+        // Free-text searches (e.g. a specific place name like "Bee Bagels"
+        // or a phrase like "best ramen") need a much wider net than a
+        // category sweep. Bias toward the user but don't restrict to the
+        // tight nearby radius -- otherwise a place 3km away vanishes.
+        // We still rank by Haversine distance below so far results sink.
+        const biasRadius = Math.max(radius, TEXT_SEARCH_BIAS_RADIUS_M);
         body.textQuery = this.globalKeyword;
-        body.openNow = true;
         body.locationBias = {
           circle: {
             center: {
               latitude: this.userLocation.lat,
               longitude: this.userLocation.lng,
             },
-            radius,
+            radius: biasRadius,
           },
         };
       } else {
@@ -446,9 +459,13 @@ export class NearbyFeedCursor {
       }
 
       const raw: PlacesV1Place[] = data.places || [];
+      // Free-text searches keep closed places (you may still want to find
+      // a specific spot even if it's currently closed); category sweeps
+      // continue to require open-now so the feed stays actionable.
       return raw
         .filter(r => r.id && r.location?.latitude != null && r.location?.longitude != null)
         .filter(r => {
+          if (useTextSearch) return true;
           const openNow =
             r.currentOpeningHours?.openNow ?? r.regularOpeningHours?.openNow;
           return openNow !== false;
@@ -459,7 +476,10 @@ export class NearbyFeedCursor {
           const lat = r.location?.latitude;
           const lng = r.location?.longitude;
           if (lat == null || lng == null) return false;
-          return haversineMeters(this.userLocation, { lat, lng }) <= radius;
+          // Soft cap: ignore wildly distant matches so a query like "bee
+          // bagels" doesn't pull in a same-name shop in another country.
+          // Within that cap, Google's relevance + our distance sort wins.
+          return haversineMeters(this.userLocation, { lat, lng }) <= TEXT_SEARCH_MAX_DISTANCE_M;
         })
         .map(r => this.toPlace(r));
     } catch (err) {
@@ -475,12 +495,18 @@ export class NearbyFeedCursor {
     try {
       const useTextSearch = Boolean(cat.noTypeSearch && this.globalKeyword);
       const endpoint = useTextSearch ? 'textsearch' : 'nearbysearch';
+      // Legacy textsearch uses `radius` only as a bias hint when paired
+      // with `location`. Widening it for free-text matches the same
+      // city-scale net we use on the v1 endpoint.
+      const effectiveRadius = useTextSearch
+        ? Math.max(radius, TEXT_SEARCH_BIAS_RADIUS_M)
+        : radius;
       const params = new URLSearchParams({
         location: `${this.userLocation.lat},${this.userLocation.lng}`,
-        radius: String(radius),
-        opennow: 'true',
+        radius: String(effectiveRadius),
         key: GOOGLE_PLACES_API_KEY,
       });
+      if (!useTextSearch) params.set('opennow', 'true');
       if (useTextSearch) {
         params.set('query', this.globalKeyword!);
       } else {
@@ -497,13 +523,13 @@ export class NearbyFeedCursor {
       const raw: LegacyApiResult[] = data.results || [];
       return raw
         .filter(r => r.place_id && r.geometry?.location)
-        .filter(r => r.opening_hours?.open_now !== false)
+        .filter(r => useTextSearch || r.opening_hours?.open_now !== false)
         .filter(r => !(r.types || []).some(t => EXCLUDED_PLACE_TYPES.has(t)))
         .filter(r => {
           if (!useTextSearch) return true;
           const loc = r.geometry?.location;
           if (!loc) return false;
-          return haversineMeters(this.userLocation, loc) <= radius;
+          return haversineMeters(this.userLocation, loc) <= TEXT_SEARCH_MAX_DISTANCE_M;
         })
         .map(r => this.toLegacyPlace(r));
     } catch (err) {

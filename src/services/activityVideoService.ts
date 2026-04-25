@@ -1,5 +1,6 @@
 import { supabase, publicImageUrl } from '../lib/supabase';
 import { computeThumbhashFromFile } from '../lib/thumbhash';
+import { extractMentionedUserIds } from '../lib/mentions';
 
 export interface ActivityVideoMedia {
   id: string;
@@ -267,6 +268,115 @@ function pickVideoExtAndMime(file: File): { ext: string; mime: string } {
     return { ext: 'mp4', mime: 'video/mp4' };
   }
   return { ext: 'mp4', mime: 'video/mp4' };
+}
+
+export async function isVideoLikedByViewer(videoId: string, viewerId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('activity_video_likes')
+    .select('video_id')
+    .eq('video_id', videoId)
+    .eq('user_id', viewerId)
+    .maybeSingle();
+  return !!data;
+}
+
+export interface ActivityVideoComment {
+  id: string;
+  video_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
+  parent_comment_id: string | null;
+}
+
+export async function listActivityVideoComments(videoId: string): Promise<ActivityVideoComment[]> {
+  const { data, error } = await supabase
+    .from('activity_video_comments')
+    .select('id, video_id, user_id, body, created_at, updated_at, deleted_at, parent_comment_id')
+    .eq('video_id', videoId)
+    .order('created_at', { ascending: true });
+  if (error || !data) return [];
+  return data;
+}
+
+export async function addActivityVideoComment(params: {
+  videoId: string;
+  userId: string;
+  body: string;
+  parentCommentId?: string | null;
+}): Promise<{ comment: ActivityVideoComment | null; error: string | null }> {
+  const body = params.body.trim();
+  if (!body) return { comment: null, error: 'Comment cannot be empty' };
+
+  const { data, error } = await supabase
+    .from('activity_video_comments')
+    .insert({
+      video_id: params.videoId,
+      user_id: params.userId,
+      body,
+      parent_comment_id: params.parentCommentId ?? null,
+    })
+    .select('id, video_id, user_id, body, created_at, updated_at, deleted_at, parent_comment_id')
+    .maybeSingle();
+
+  if (!error && data) {
+    const mentioned = extractMentionedUserIds(body).filter((id) => id !== params.userId);
+    if (mentioned.length > 0) {
+      void supabase
+        .from('comment_mentions')
+        .insert(mentioned.map((uid) => ({ comment_id: data.id, user_id: uid })))
+        .then(({ error: mErr }) => {
+          if (mErr) console.warn('mention insert failed', mErr);
+        });
+    }
+  }
+
+  return {
+    comment: data ?? null,
+    error: error?.message ?? null,
+  };
+}
+
+export async function updateActivityVideoComment(params: {
+  commentId: string;
+  userId: string;
+  body: string;
+}): Promise<{ comment: ActivityVideoComment | null; error: string | null }> {
+  const body = params.body.trim();
+  if (!body) return { comment: null, error: 'Comment cannot be empty' };
+
+  const { data, error } = await supabase
+    .from('activity_video_comments')
+    .update({ body })
+    .eq('id', params.commentId)
+    .eq('user_id', params.userId)
+    .is('deleted_at', null)
+    .select('id, video_id, user_id, body, created_at, updated_at, deleted_at, parent_comment_id')
+    .maybeSingle();
+
+  return {
+    comment: data ?? null,
+    error: error?.message ?? null,
+  };
+}
+
+export async function deleteActivityVideoComment(params: {
+  commentId: string;
+  userId: string;
+}): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('activity_video_comments')
+    .update({
+      body: 'This comment was deleted.',
+      deleted_at: new Date().toISOString(),
+    })
+    .eq('id', params.commentId)
+    .eq('user_id', params.userId)
+    .is('deleted_at', null);
+
+  return { error: error?.message ?? null };
 }
 
 export async function setActivityVideoLiked(params: {
