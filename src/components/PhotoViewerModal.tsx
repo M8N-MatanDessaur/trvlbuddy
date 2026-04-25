@@ -801,11 +801,11 @@ const PhotoViewerModal: React.FC<Props> = ({
             </div>
           )}
           <div
-            className="flex items-center gap-2 rounded-full pl-4 pr-2"
+            className="flex items-center gap-2 rounded-full pl-4 pr-0"
             style={{
               background: 'var(--bg-primary)',
               border: '1px solid var(--outline)',
-              height: '44px',
+              height: '50px',
             }}
           >
             <input
