@@ -5,18 +5,30 @@
 // request survives garbage collection.
 
 const warmed = new Set<string>();
+const inFlight = new Set<string>();
 const pool = new Set<HTMLImageElement>();
 
 export function warmImageCache(urls: Iterable<string | null | undefined>): void {
   if (typeof window === 'undefined') return;
   for (const url of urls) {
-    if (!url || warmed.has(url)) continue;
-    warmed.add(url);
+    if (!url || warmed.has(url) || inFlight.has(url)) continue;
+    inFlight.add(url);
     const img = new Image();
     pool.add(img);
-    const done = () => { pool.delete(img); };
-    img.onload = done;
-    img.onerror = done;
+    const onSuccess = () => {
+      warmed.add(url);
+      inFlight.delete(url);
+      pool.delete(img);
+    };
+    // On failure (transient network, navigation abort, etc.) drop the URL
+    // from inFlight without marking it warmed — the next call retries
+    // instead of permanently treating a broken URL as cached.
+    const onFailure = () => {
+      inFlight.delete(url);
+      pool.delete(img);
+    };
+    img.onload = onSuccess;
+    img.onerror = onFailure;
     img.decoding = 'async';
     img.loading = 'eager';
     img.src = url;
