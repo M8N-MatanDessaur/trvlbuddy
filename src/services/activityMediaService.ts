@@ -1,6 +1,7 @@
 import { supabase, publicImageUrl, type Activity, type ActivityImage } from '../lib/supabase';
 import { compressForUpload } from '../lib/imageCompress';
 import { computeThumbhashFromFile } from '../lib/thumbhash';
+import { extractMentionedUserIds } from '../lib/mentions';
 
 export interface PosterProfile {
   id: string;
@@ -555,6 +556,21 @@ export async function addActivityImageComment(params: {
     })
     .select('id, image_id, user_id, body, created_at, updated_at, deleted_at, parent_comment_id')
     .maybeSingle();
+
+  if (!error && data) {
+    // Record mentions so the trigger fires one notification per mentioned
+    // user. Failures here are non-fatal — the comment itself is saved;
+    // missing mention rows just mean the notification doesn't go out.
+    const mentioned = extractMentionedUserIds(body).filter((id) => id !== params.userId);
+    if (mentioned.length > 0) {
+      void supabase
+        .from('comment_mentions')
+        .insert(mentioned.map((uid) => ({ comment_id: data.id, user_id: uid })))
+        .then(({ error: mErr }) => {
+          if (mErr) console.warn('mention insert failed', mErr);
+        });
+    }
+  }
 
   return {
     comment: data ?? null,
