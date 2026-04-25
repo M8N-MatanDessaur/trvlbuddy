@@ -6,13 +6,21 @@ import { tap as hapticTap, impact as hapticImpact } from '../lib/haptics';
 interface Props {
   source: File;
   onCancel: () => void;
-  onConfirm: (result: TrimResult) => void;
+  // The trimmer awaits this promise so the screen stays mounted (with
+  // real upload-progress %) for the whole prepare → upload pipeline,
+  // instead of vanishing the moment the poster is ready and leaving the
+  // user staring at the feed for several seconds with no feedback.
+  onConfirm: (
+    result: TrimResult,
+    onProgress?: (progress: number) => void,
+  ) => Promise<{ ok: boolean; error?: string | null }>;
 }
 
 // Mobile-first trim UI. A single draggable 7-second window slides along
-// the full-length preview. The video element scrubs live as the user
-// drags so they see exactly what will be kept. Confirming kicks off the
-// ffmpeg.wasm trim + downscale and returns the result to the caller.
+// the full-length preview; the video element scrubs live as the user
+// drags so they see exactly what will be kept. Confirming runs the
+// poster-extract step (~instant) and then awaits the upload, with the
+// confirm button reflecting real progress the entire time.
 
 const FRAME_THUMB_COUNT = 8;
 const WINDOW_SEC = MAX_CLIP_SECONDS;
@@ -28,6 +36,7 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [phase, setPhase] = useState<'idle' | 'preparing' | 'uploading'>('idle');
   const [error, setError] = useState<string | null>(null);
 
   // Release the blob URL on unmount.
@@ -131,16 +140,33 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
     setError(null);
     setProcessing(true);
     setProgress(0);
+    setPhase('preparing');
     try {
+      // Pause the preview so the canvas grab in trimAndDownscale doesn't
+      // race the playing element.
+      try { videoRef.current?.pause(); } catch { /* noop */ }
+      setPlaying(false);
+
       const result = await trimAndDownscale({
         file: source,
         startSec: start,
         durationSec: effectiveWindow,
         onProgress: (p) => setProgress(p),
       });
-      onConfirm(result);
+
+      setPhase('uploading');
+      setProgress(0);
+      const res = await onConfirm(result, (p) => setProgress(p));
+      if (!res.ok) {
+        // Stay on screen with a retry-able error; parent's toast already
+        // surfaced the user-facing copy.
+        setError(res.error || 'Upload failed. Please try again.');
+        setProcessing(false);
+        setPhase('idle');
+      }
+      // On success the parent unmounts us; nothing else to do.
     } catch (err) {
-      console.error('[VideoTrimmer] prepare failed', err);
+      console.error('[VideoTrimmer] confirm failed', err);
       const detail = err instanceof Error
         ? err.message
         : typeof err === 'string'
@@ -150,6 +176,7 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
             : '';
       setError(detail || 'Could not prepare the clip. Please try again.');
       setProcessing(false);
+      setPhase('idle');
     }
   };
 
@@ -192,7 +219,9 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
           }}
         >
           {processing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-          {processing ? `${Math.round(progress * 100)}%` : 'Next'}
+          {phase === 'preparing' && 'Preparing'}
+          {phase === 'uploading' && `${Math.round(progress * 100)}%`}
+          {phase === 'idle' && 'Share'}
         </button>
       </header>
 
@@ -357,6 +386,54 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
           )}
         </div>
       </div>
+
+      {/* Full-surface progress overlay during prepare/upload. The
+          underlying trim UI stays mounted so a failure leaves the
+          user's chosen window intact for retry. */}
+      {(phase === 'preparing' || phase === 'uploading') && (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center"
+          style={{
+            background: 'rgba(0,0,0,0.78)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            color: 'white',
+            paddingTop: 'env(safe-area-inset-top)',
+            paddingBottom: 'env(safe-area-inset-bottom)',
+            zIndex: 10,
+          }}
+        >
+          <div className="flex flex-col items-center gap-4 px-8" style={{ width: '100%', maxWidth: 320 }}>
+            <Loader2 size={36} className="animate-spin" />
+            <div className="text-[15px] font-extrabold tracking-tight text-center">
+              {phase === 'preparing' ? 'Preparing your clip…' : 'Uploading your clip…'}
+            </div>
+            {phase === 'uploading' && (
+              <>
+                <div
+                  className="w-full rounded-full overflow-hidden"
+                  style={{ background: 'rgba(255,255,255,0.15)', height: 6 }}
+                >
+                  <div
+                    style={{
+                      width: `${Math.round(progress * 100)}%`,
+                      height: '100%',
+                      background: 'var(--accent)',
+                      transition: 'width 120ms linear',
+                    }}
+                  />
+                </div>
+                <div className="text-[12px]" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                  {Math.round(progress * 100)}%
+                </div>
+              </>
+            )}
+            <div className="text-[11.5px] text-center" style={{ color: 'rgba(255,255,255,0.55)' }}>
+              Keep this screen open until it finishes.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
