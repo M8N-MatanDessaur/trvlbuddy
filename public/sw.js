@@ -4,8 +4,10 @@
 //   trvlbuddy-imgs-v1     supabase storage objects (activity photos, avatars) — cache-first, 30d LRU
 //   trvlbuddy-rest-v1     supabase REST reads — stale-while-revalidate
 
-const CACHE_NAME = 'trvlbuddy-v5';
-const IMG_CACHE = 'trvlbuddy-imgs-v1';
+const CACHE_NAME = 'trvlbuddy-v6';
+// v2 — v1 stored opaque image responses as empty 0-status bodies. Bumping
+// the name forces the activate step to drop those broken entries.
+const IMG_CACHE = 'trvlbuddy-imgs-v2';
 const REST_CACHE = 'trvlbuddy-rest-v1';
 
 const IMG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -66,37 +68,43 @@ function storePendingFile(text) {
 
 // ── Runtime-cache helpers ────────────────────────────────────────────────
 
-// Cache-first with a timestamp stamped in a custom header so we can expire
-// entries. Trims the cache to MAX_ENTRIES after every write (FIFO, which is
-// close enough to LRU since we also delete on expiry).
+// Cache-first with TTL. The previous version of this function rebuilt the
+// response by reading .blob() and wrapping it in a new Response — that
+// quietly broke for opaque cross-origin responses (img tags without
+// crossOrigin), whose body is unreadable so we cached an empty status-0
+// shell. We now store the ORIGINAL response clone and keep the timestamp
+// in a sidecar cache entry under a fragment-keyed URL so opaque bytes
+// survive intact.
 async function cacheFirstWithExpiry(request, cacheName, maxAgeMs, maxEntries) {
   const cache = await caches.open(cacheName);
+  const tsKey = request.url + '#__sw_ts__';
   const cached = await cache.match(request);
   if (cached) {
-    const stamp = cached.headers.get('sw-cached-at');
-    const cachedAt = stamp ? parseInt(stamp, 10) : 0;
-    if (Date.now() - cachedAt < maxAgeMs) {
+    const tsResp = await cache.match(tsKey);
+    let cachedAt = 0;
+    if (tsResp) {
+      try { cachedAt = parseInt(await tsResp.clone().text(), 10) || 0; } catch (_) {}
+    }
+    if (cachedAt > 0 && Date.now() - cachedAt < maxAgeMs) {
       return cached;
     }
+    // Either expired or no timestamp — refresh.
     cache.delete(request).catch(() => {});
+    cache.delete(tsKey).catch(() => {});
   }
   try {
     const response = await fetch(request);
-    if (response && (response.ok || response.type === 'opaque')) {
-      const headers = new Headers(response.headers);
-      headers.set('sw-cached-at', String(Date.now()));
-      const body = await response.clone().blob();
-      const timestamped = new Response(body, {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-      });
-      cache.put(request, timestamped).then(() => trimCache(cacheName, maxEntries)).catch(() => {});
+    const cacheable =
+      response &&
+      (response.type === 'opaque' || (response.status >= 200 && response.status < 400));
+    if (cacheable) {
+      cache.put(request, response.clone())
+        .then(() => cache.put(tsKey, new Response(String(Date.now()))))
+        .then(() => trimCache(cacheName, maxEntries))
+        .catch(() => {});
     }
     return response;
   } catch (err) {
-    // Offline and nothing cached — return the stale entry if we have one,
-    // otherwise let the caller see the network error.
     if (cached) return cached;
     throw err;
   }
