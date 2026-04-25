@@ -198,6 +198,7 @@ export type Database = {
           height: number | null
           id: string
           storage_path: string
+          thumbhash: string | null
           uploaded_by: string
           width: number | null
         }
@@ -207,6 +208,7 @@ export type Database = {
           height?: number | null
           id?: string
           storage_path: string
+          thumbhash?: string | null
           uploaded_by: string
           width?: number | null
         }
@@ -216,6 +218,7 @@ export type Database = {
           height?: number | null
           id?: string
           storage_path?: string
+          thumbhash?: string | null
           uploaded_by?: string
           width?: number | null
         }

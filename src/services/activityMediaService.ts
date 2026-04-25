@@ -1,4 +1,6 @@
 import { supabase, publicImageUrl, type Activity, type ActivityImage } from '../lib/supabase';
+import { compressForUpload } from '../lib/imageCompress';
+import { computeThumbhashFromFile } from '../lib/thumbhash';
 
 export interface PosterProfile {
   id: string;
@@ -185,10 +187,18 @@ export async function uploadActivityImage(params: {
   uploaderId: string;
   file: File;
 }): Promise<{ image: ActivityImageMedia | null; error: string | null }> {
-  const { activityId, uploaderId, file } = params;
+  const { activityId, uploaderId } = params;
 
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-  const safeExt = /^(jpg|jpeg|png|webp|heic|heif)$/.test(ext) ? ext : 'jpg';
+  // Compress + compute thumbhash from the ORIGINAL file (before recompression)
+  // so the placeholder matches the true image colors. Run in parallel — the
+  // compression is the long pole, the hash takes <50ms.
+  const [{ file: compressed }, thumbhash] = await Promise.all([
+    compressForUpload(params.file),
+    computeThumbhashFromFile(params.file),
+  ]);
+
+  const ext = (compressed.name.split('.').pop() || 'webp').toLowerCase();
+  const safeExt = /^(jpg|jpeg|png|webp|heic|heif)$/.test(ext) ? ext : 'webp';
   const path = `${activityId}/${uploaderId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
 
   // Storage paths embed a random suffix and are never reused, so the bytes at
@@ -196,10 +206,10 @@ export async function uploadActivityImage(params: {
   // and CDN can avoid re-fetching them on every session.
   const { error: uploadError } = await supabase.storage
     .from('activity-images')
-    .upload(path, file, {
+    .upload(path, compressed, {
       cacheControl: '31536000',
       upsert: false,
-      contentType: file.type || `image/${safeExt === 'jpg' ? 'jpeg' : safeExt}`,
+      contentType: compressed.type || `image/${safeExt === 'jpg' ? 'jpeg' : safeExt}`,
     });
 
   if (uploadError) return { image: null, error: uploadError.message };
@@ -210,6 +220,7 @@ export async function uploadActivityImage(params: {
       activity_id: activityId,
       uploaded_by: uploaderId,
       storage_path: path,
+      thumbhash: thumbhash ?? null,
     })
     .select('*')
     .maybeSingle();
@@ -298,6 +309,7 @@ export interface UserPhoto {
   id: string;
   url: string;
   storage_path: string;
+  thumbhash: string | null;
   created_at: string;
   activity_id: string;
   activity_name: string;
@@ -312,7 +324,7 @@ export interface UserPhoto {
 export async function listUserPhotos(userId: string): Promise<UserPhoto[]> {
   const { data: rows } = await supabase
     .from('activity_images')
-    .select('id, storage_path, created_at, activity_id, activities!inner(name, slug, address, google_place_id, google_maps_url)')
+    .select('id, storage_path, thumbhash, created_at, activity_id, activities!inner(name, slug, address, google_place_id, google_maps_url)')
     .eq('uploaded_by', userId)
     .order('created_at', { ascending: false });
 
@@ -340,6 +352,7 @@ export async function listUserPhotos(userId: string): Promise<UserPhoto[]> {
     return {
       id: row.id,
       storage_path: row.storage_path,
+      thumbhash: row.thumbhash ?? null,
       created_at: row.created_at,
       activity_id: row.activity_id,
       activity_name: activity.name,

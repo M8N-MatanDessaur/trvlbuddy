@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { warmImageCache } from '../lib/imagePrefetch';
+import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 
 interface Props {
   images: string[];
+  thumbhashes?: (string | null | undefined)[];
   className?: string;
   style?: React.CSSProperties;
   eagerCount?: number;
   onIndexChange?: (index: number) => void;
 }
 
-const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount = 2, onIndexChange }) => {
+const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style, eagerCount = 2, onIndexChange }) => {
   const [index, setIndex] = useState(0);
   const [loaded, setLoaded] = useState<Set<number>>(new Set());
   const [errored, setErrored] = useState<Set<number>>(new Set());
@@ -96,12 +98,22 @@ const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount =
         );
       })}
 
-      {!loaded.has(0) && (
-        <div
-          className="absolute inset-0 activity-card-shimmer"
-          style={{ background: 'var(--surface-container-high)' }}
-        />
-      )}
+      {!loaded.has(index) && (() => {
+        const activeEntry = valid[index];
+        const placeholder = activeEntry && thumbhashes
+          ? thumbhashToCssDataUrl(thumbhashes[activeEntry.originalIndex])
+          : null;
+        return (
+          <div
+            className={placeholder ? 'absolute inset-0' : 'absolute inset-0 activity-card-shimmer'}
+            style={{
+              background: placeholder
+                ? `center / cover no-repeat url(${placeholder})`
+                : 'var(--surface-container-high)',
+            }}
+          />
+        );
+      })()}
 
       {count > 1 && (
         <div className="absolute bottom-3 left-4 flex items-center gap-1.5 z-10">
