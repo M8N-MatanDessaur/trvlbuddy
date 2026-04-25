@@ -9,6 +9,7 @@ export interface ActivityVideoMedia {
   poster_path: string;
   thumbhash: string | null;
   duration_ms: number | null;
+  start_ms: number | null; // playback offset into the source clip
   width: number | null;
   height: number | null;
   created_at: string;
@@ -76,25 +77,27 @@ export interface UploadActivityVideoParams {
   video: File;
   poster: File;
   durationMs: number;
+  startMs: number;
   width: number;
   height: number;
 }
 
-// Uploads both the transcoded video AND its extracted poster frame in
-// parallel, computes a thumbhash from the poster for the placeholder,
-// then writes the activity_videos row pointing at both storage paths.
+// Uploads the source video bytes as-is (no transcoding) plus the
+// extracted poster frame in parallel, computes a thumbhash from the
+// poster for the placeholder, then writes the activity_videos row
+// with the trim window so the player can scope playback.
 export async function uploadActivityVideo(
   params: UploadActivityVideoParams,
 ): Promise<{ video: ActivityVideoMedia | null; error: string | null }> {
-  const { activityId, uploaderId, video, poster, durationMs, width, height } = params;
+  const { activityId, uploaderId, video, poster, durationMs, startMs, width, height } = params;
 
   const ts = Date.now();
   const stub = `${uploaderId}-${ts}-${Math.random().toString(36).slice(2, 8)}`;
-  // The encoder picks .mp4 on Safari/recent Chrome and .webm on Chrome/Firefox.
-  // Match storage path + Content-Type to whatever was actually produced so the
-  // bytes are served with a header browsers will play.
-  const videoExt = video.type.includes('webm') ? 'webm' : 'mp4';
-  const videoMime = video.type.includes('webm') ? 'video/webm' : 'video/mp4';
+  // We upload the source as-is, so storage path + Content-Type follow the
+  // file the user picked. Most phone clips are .mp4 (H.264) or .mov (HEVC);
+  // both modern Safari and Chrome handle both. We default to mp4 if the
+  // file's MIME is missing/odd so the upload still succeeds.
+  const { ext: videoExt, mime: videoMime } = pickVideoExtAndMime(video);
   const videoPath = `${activityId}/${stub}.${videoExt}`;
   const posterPath = `${activityId}/${stub}.jpg`;
 
@@ -129,6 +132,7 @@ export async function uploadActivityVideo(
       poster_path: posterPath,
       thumbhash: thumbhash ?? null,
       duration_ms: durationMs,
+      start_ms: startMs,
       width,
       height,
     })
@@ -175,6 +179,27 @@ export async function deleteActivityVideo(params: {
   } catch { /* best-effort */ }
 
   return { error: null };
+}
+
+// Picks an extension + MIME from the source file. The browser fills in
+// `file.type` for picker uploads; for camera-captured clips it's usually
+// "video/quicktime" (.mov on iOS) or "video/mp4". Anything we don't
+// recognise falls back to mp4 so the upload still has a valid header.
+function pickVideoExtAndMime(file: File): { ext: string; mime: string } {
+  const t = (file.type || '').toLowerCase();
+  if (t.includes('quicktime') || t.includes('mov')) return { ext: 'mov', mime: 'video/quicktime' };
+  if (t.includes('webm')) return { ext: 'webm', mime: 'video/webm' };
+  if (t.includes('mp4') || t.includes('mpeg-4')) return { ext: 'mp4', mime: 'video/mp4' };
+  // Fall back to the file extension if MIME is unhelpful.
+  const m = file.name.match(/\.(mov|mp4|webm|m4v)$/i);
+  if (m) {
+    const ext = m[1].toLowerCase();
+    if (ext === 'mov') return { ext: 'mov', mime: 'video/quicktime' };
+    if (ext === 'webm') return { ext: 'webm', mime: 'video/webm' };
+    if (ext === 'm4v') return { ext: 'm4v', mime: 'video/mp4' };
+    return { ext: 'mp4', mime: 'video/mp4' };
+  }
+  return { ext: 'mp4', mime: 'video/mp4' };
 }
 
 export async function setActivityVideoLiked(params: {
