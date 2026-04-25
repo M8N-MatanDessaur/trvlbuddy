@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { purgeCachedImage } from '../lib/purgeImage';
 
 interface CachedImageProps {
   src: string;
@@ -19,19 +20,11 @@ interface CachedImageProps {
   crossOrigin?: 'anonymous' | 'use-credentials' | '';
 }
 
-// An <img> request can be aborted mid-flight when its parent unmounts during
-// a route change, and some browsers (and intermediate caches) hold onto the
-// aborted/partial response. The next mount with the same URL then reads that
-// poisoned entry from cache, fires onError, and shows a broken placeholder
-// that survives full page reloads. Retrying the same URL with a throwaway
-// query param forces a fresh fetch from origin and replaces the bad entry.
+// On error we ask the SW to drop the cached entry, then remount the same
+// <img> via a key bump. The fresh fetch fully replaces the bad cache entry
+// on success — unlike a `?_r=N` cachebuster, which leaves the original URL
+// poisoned forever and just creates a parallel cache entry.
 const MAX_RETRIES = 2;
-
-const cacheBust = (url: string, attempt: number): string => {
-  if (attempt <= 0) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}_r=${attempt}`;
-};
 
 const CachedImage: React.FC<CachedImageProps> = ({
   src,
@@ -50,14 +43,13 @@ const CachedImage: React.FC<CachedImageProps> = ({
 }) => {
   const [attempt, setAttempt] = useState(0);
 
-  // Reset retry count when the underlying URL changes, otherwise a fresh
-  // image inherits the previous URL's attempt counter.
   useEffect(() => {
     setAttempt(0);
   }, [src]);
 
   const handleError = () => {
     if (attempt < MAX_RETRIES) {
+      purgeCachedImage(src);
       setAttempt(attempt + 1);
       return;
     }
@@ -67,7 +59,7 @@ const CachedImage: React.FC<CachedImageProps> = ({
   return (
     <img
       key={`${src}|${attempt}`}
-      src={cacheBust(src, attempt)}
+      src={src}
       alt={alt}
       className={className}
       style={style}

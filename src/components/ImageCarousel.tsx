@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { warmImageCache } from '../lib/imagePrefetch';
+import { purgeCachedImage } from '../lib/purgeImage';
 import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 
 interface Props {
@@ -11,21 +12,11 @@ interface Props {
   onIndexChange?: (index: number) => void;
 }
 
-// One image fetch can be aborted mid-flight when the component unmounts
-// during a route change — and some browsers (and intermediate caches) hold
-// onto that aborted/partial response, so the next mount with the same URL
-// reads the broken entry from cache, fires onError, and shows a broken
-// placeholder that survives full page reloads. Retrying the same URL with a
-// throwaway query param forces a fresh fetch from origin and replaces the
-// poisoned cache entry. We cap retries so a genuinely-dead URL still gets
-// marked errored eventually.
+// On error we ask the SW to drop the cached entry, then remount the <img>
+// via the key. The fresh fetch fully replaces the bad cache entry on
+// success — unlike a `?_r=N` cachebuster, which leaves the original URL
+// poisoned and just creates a parallel cache entry that fills the bucket.
 const MAX_RETRIES = 2;
-
-const cacheBust = (url: string, attempt: number): string => {
-  if (attempt <= 0) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}_r=${attempt}`;
-};
 
 const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style, eagerCount = 2, onIndexChange }) => {
   const [index, setIndex] = useState(0);
@@ -58,6 +49,7 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
       });
       return;
     }
+    purgeCachedImage(src);
     setRetryByUrl((prev) => {
       const next = new Map(prev);
       next.set(src, attempts + 1);
@@ -130,7 +122,7 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
         return (
           <img
             key={`${src}|${attempt}`}
-            src={cacheBust(src, attempt)}
+            src={src}
             alt=""
             className="absolute inset-0 w-full h-full object-cover"
             style={{
