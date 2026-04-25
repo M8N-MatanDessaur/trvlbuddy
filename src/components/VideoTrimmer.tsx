@@ -140,8 +140,15 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
       });
       onConfirm(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Trim failed';
-      setError(message);
+      console.error('[VideoTrimmer] trim failed', err);
+      const detail = err instanceof Error
+        ? err.message
+        : typeof err === 'string'
+          ? err
+          : err && typeof err === 'object' && 'message' in err
+            ? String((err as { message: unknown }).message)
+            : '';
+      setError(detail ? `Trim failed: ${detail}` : 'Trim failed. Please try again.');
       setProcessing(false);
     }
   };
