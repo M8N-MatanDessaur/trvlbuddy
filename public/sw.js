@@ -186,6 +186,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // OpenStreetMap raster tiles for the trip map — cache-first, 30 days.
+  // Tile bytes are immutable for a given z/x/y, so a hit is always safe.
+  if (/\.tile\.openstreetmap\.org$/.test(url.hostname)) {
+    event.respondWith(
+      cacheFirstWithExpiry(event.request, IMG_CACHE, IMG_MAX_AGE_MS, IMG_MAX_ENTRIES),
+    );
+    return;
+  }
+
   if (url.hostname !== self.location.hostname) return;
 
   const isHashedAsset = url.pathname.startsWith('/assets/');
