@@ -367,20 +367,39 @@ const NearbyFeed: React.FC = () => {
     };
   }, [uniquePlaces]);
 
+  // Stable insertion order: once a place has been placed in the feed it
+  // keeps that slot for the rest of the session, even when later batches
+  // arrive or the score map fills in. Without this lock, every new batch
+  // re-sorts the entire list and items already on screen visibly jump.
+  // New arrivals are slotted in score-then-distance order against the
+  // tail of the locked list, then frozen.
+  const orderRef = useRef<string[]>([]);
   const sortedPlaces = useMemo(() => {
-    if (uniquePlaces.length === 0) return uniquePlaces;
-    const decorated = uniquePlaces.map((p, idx) => ({
-      place: p,
-      idx,
-      score: scoreBySlug.get(`gpid-${p.placeId}`) ?? 0,
-    }));
-    decorated.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      if (a.place.distance !== b.place.distance) return a.place.distance - b.place.distance;
-      return a.idx - b.idx;
+    if (uniquePlaces.length === 0) {
+      orderRef.current = [];
+      return uniquePlaces;
+    }
+    const byId = new Map(uniquePlaces.map((p) => [p.placeId, p]));
+    const lockedIds = orderRef.current.filter((id) => byId.has(id));
+    const lockedSet = new Set(lockedIds);
+    const newcomers = uniquePlaces.filter((p) => !lockedSet.has(p.placeId));
+    newcomers.sort((a, b) => {
+      const sa = scoreBySlug.get(`gpid-${a.placeId}`) ?? 0;
+      const sb = scoreBySlug.get(`gpid-${b.placeId}`) ?? 0;
+      if (sb !== sa) return sb - sa;
+      return a.distance - b.distance;
     });
-    return decorated.map((d) => d.place);
+    const nextOrder = [...lockedIds, ...newcomers.map((p) => p.placeId)];
+    orderRef.current = nextOrder;
+    return nextOrder.map((id) => byId.get(id)!).filter(Boolean);
   }, [uniquePlaces, scoreBySlug]);
+
+  // Reset the lock whenever the feed identity changes (new location,
+  // transport mode, filter, or AI prompt), so a fresh search isn't
+  // anchored to a stale order.
+  useEffect(() => {
+    orderRef.current = [];
+  }, [userLocation, transportMode, selectedTypes, aiKeyword]);
 
   return (
     <section className="page" ref={sectionRef}>
