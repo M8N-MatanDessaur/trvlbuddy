@@ -1,22 +1,23 @@
 // Service worker — shell + runtime cache.
 // Three buckets:
-//   trvlbuddy-v5          shell (icons, manifest, fallback document)
-//   trvlbuddy-imgs-v1     supabase storage objects (activity photos, avatars) — cache-first, 30d LRU
+//   trvlbuddy-v6          shell (icons, manifest, fallback document)
+//   trvlbuddy-imgs-v5     supabase storage objects (activity photos, avatars) — stale-while-revalidate
 //   trvlbuddy-rest-v1     supabase REST reads — stale-while-revalidate
 
 const CACHE_NAME = 'trvlbuddy-v6';
-// v4 — Android back-gesture aborts in-flight image streams. The browser's
-// HTTP cache (sitting below the SW) sometimes persists that partial response;
-// the SW's `fetch(request)` then reads the poisoned bytes from browser cache,
-// the CORS HEAD probe to origin still returns 200, and we cache the broken
-// response for 30 days. Two changes: the GET now uses `cache: 'reload'` to
-// bypass the browser HTTP cache, and only validated CORS responses are
-// stored — opaque responses are passed straight through. Bumping the name
-// evicts the poisoned v3 entries.
-const IMG_CACHE = 'trvlbuddy-imgs-v4';
+// v5 — switched from cache-first-with-TTL to stale-while-revalidate for
+// images. The previous strategy had a race in the expiry path: cache.delete
+// and cache.put both ran fire-and-forget, so on slow Android devices the
+// delete could resolve after the put and silently remove a fresh entry. It
+// also had no cached fallback when the SW's own re-fetch failed (mobile
+// network blip, SW killed while backgrounded), leaving users with a broken
+// icon that survived reloads. SWR returns the cached entry immediately and
+// refreshes in the background, so a transient fetch failure can't break a
+// previously-working image. The page can also send {type:'PURGE_IMAGE',url}
+// to evict a known-bad entry on its own. Bumping the name evicts v4.
+const IMG_CACHE = 'trvlbuddy-imgs-v5';
 const REST_CACHE = 'trvlbuddy-rest-v1';
 
-const IMG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const IMG_MAX_ENTRIES = 500;
 const REST_MAX_ENTRIES = 200;
 
@@ -74,69 +75,39 @@ function storePendingFile(text) {
 
 // ── Runtime-cache helpers ────────────────────────────────────────────────
 
-// Cache-first with TTL. Two failure modes guided this implementation:
-//   1. The browser HTTP cache (below the SW) can persist partial bytes from
-//      requests aborted mid-stream by Android back-gesture / route changes.
-//      We pass `cache: 'reload'` on the upstream GET to bypass it.
-//   2. Opaque (no-cors) responses don't expose status, so we can't tell an
-//      error from success — a CORS HEAD heuristic was unreliable. The page
-//      now sets crossOrigin="anonymous" on every Supabase image, so we
-//      receive validated CORS responses here and cache only response.ok.
-//      Opaque responses are passed straight through, never persisted.
-async function cacheFirstWithExpiry(request, cacheName, maxAgeMs, maxEntries) {
+// Stale-while-revalidate. Returns the cached response immediately (if any)
+// and refreshes it in the background. Image fetches use this so a transient
+// network failure or an SW termination mid-revalidate can never turn a
+// previously-working image into a broken icon — the cached copy keeps
+// serving until a fresh response fully replaces it.
+//
+// Caching contract: only basic/cors responses with response.ok are stored.
+// Opaque responses pass through untouched. The page sets
+// crossOrigin="anonymous" on every Supabase image so we always see a
+// typed CORS response we can validate.
+//
+// The cache.put is awaited inside the background revalidation so the put
+// either fully completes or the entry is left untouched — no half-written
+// entries that masquerade as valid on a later read.
+async function staleWhileRevalidate(request, cacheName, maxEntries, { requireOk = true } = {}) {
   const cache = await caches.open(cacheName);
-  const tsKey = request.url + '#__sw_ts__';
   const cached = await cache.match(request);
-  if (cached) {
-    const tsResp = await cache.match(tsKey);
-    let cachedAt = 0;
-    if (tsResp) {
-      try { cachedAt = parseInt(await tsResp.clone().text(), 10) || 0; } catch (_) {}
-    }
-    if (cachedAt > 0 && Date.now() - cachedAt < maxAgeMs) {
-      return cached;
-    }
-    cache.delete(request).catch(() => {});
-    cache.delete(tsKey).catch(() => {});
-  }
-  try {
-    // Build a fresh request that bypasses the browser HTTP cache. Using
-    // `cache: 'reload'` here prevents reading aborted/partial responses that
-    // an earlier navigation may have left in the browser's HTTP cache.
-    const upstream = new Request(request, { cache: 'reload' });
-    const response = await fetch(upstream);
+  const networkPromise = fetch(request.clone()).then(async (response) => {
     const cacheable =
       response &&
       (response.type === 'basic' || response.type === 'cors') &&
-      response.ok;
+      (!requireOk || response.ok);
     if (cacheable) {
-      cache.put(request, response.clone())
-        .then(() => cache.put(tsKey, new Response(String(Date.now()))))
-        .then(() => trimCache(cacheName, maxEntries))
-        .catch(() => {});
-    }
-    return response;
-  } catch (err) {
-    if (cached) return cached;
-    throw err;
-  }
-}
-
-// Stale-while-revalidate: return cached immediately (if any), kick off a
-// background fetch to refresh. Used for Supabase REST GETs so feed / profile
-// data pops up instantly from the last visit and updates silently.
-async function staleWhileRevalidate(request, cacheName, maxEntries) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-  const networkPromise = fetch(request.clone()).then((response) => {
-    if (response && response.ok) {
-      cache.put(request, response.clone())
-        .then(() => trimCache(cacheName, maxEntries))
-        .catch(() => {});
+      try {
+        await cache.put(request, response.clone());
+        await trimCache(cacheName, maxEntries);
+      } catch (_) {}
     }
     return response;
   }).catch(() => null);
-  return cached || (await networkPromise) || Response.error();
+  if (cached) return cached;
+  const network = await networkPromise;
+  return network || Response.error();
 }
 
 async function trimCache(cacheName, maxEntries) {
@@ -179,10 +150,13 @@ self.addEventListener('fetch', (event) => {
   // ── Supabase cross-origin caching ──────────────────────────────────────
   // Keyed by hostname ending in .supabase.co so any project id matches.
   if (url.hostname.endsWith('.supabase.co')) {
-    // Public storage objects (activity photos, avatars): cache-first 30 days.
+    // Public storage objects (activity photos, avatars): stale-while-
+    // revalidate so a previously-loaded image keeps serving even if the
+    // background refresh fails. Bad entries can be evicted by the page via
+    // a {type:'PURGE_IMAGE',url} message.
     if (url.pathname.startsWith('/storage/v1/object/public/')) {
       event.respondWith(
-        cacheFirstWithExpiry(event.request, IMG_CACHE, IMG_MAX_AGE_MS, IMG_MAX_ENTRIES),
+        staleWhileRevalidate(event.request, IMG_CACHE, IMG_MAX_ENTRIES),
       );
       return;
     }
@@ -254,8 +228,20 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+  if (!event.data) return;
+  if (event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+    return;
+  }
+  // Page-driven eviction. When an <img> errors against a cached entry the
+  // page asks the SW to drop it before re-requesting, so the next fetch
+  // bypasses the bad cached body and the freshly-fetched response replaces
+  // it on success.
+  if (event.data.type === 'PURGE_IMAGE' && typeof event.data.url === 'string') {
+    const url = event.data.url;
+    event.waitUntil(
+      caches.open(IMG_CACHE).then((cache) => cache.delete(url)).catch(() => {}),
+    );
   }
 });
 
