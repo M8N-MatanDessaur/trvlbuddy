@@ -13,23 +13,28 @@ interface Props {
 
 const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style, eagerCount = 2, onIndexChange }) => {
   const [index, setIndex] = useState(0);
-  const [loaded, setLoaded] = useState<Set<number>>(new Set());
-  const [errored, setErrored] = useState<Set<number>>(new Set());
+  // Track loaded/errored state by URL, not by index. Parents may hand back a
+  // fresh array on every state update with the same URLs, and surviving
+  // <img> elements (stable key={src}) won't remount or refire onLoad — so
+  // index-keyed state would falsely mark them as not-yet-loaded and hide
+  // them at opacity 0 forever.
+  const [loadedUrls, setLoadedUrls] = useState<Set<string>>(new Set());
+  const [erroredUrls, setErroredUrls] = useState<Set<string>>(new Set());
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const swiping = useRef(false);
 
+  const imagesKey = useMemo(() => images.join(' '), [images]);
   useEffect(() => {
     setIndex(0);
-    setLoaded(new Set());
-    setErrored(new Set());
     warmImageCache(images);
-  }, [images]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imagesKey]);
 
   const valid = useMemo(
     () => images
       .map((src, originalIndex) => ({ src, originalIndex }))
-      .filter((entry) => !errored.has(entry.originalIndex)),
-    [images, errored],
+      .filter((entry) => !erroredUrls.has(entry.src)),
+    [images, erroredUrls],
   );
   const count = valid.length;
 
@@ -68,6 +73,9 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
 
   if (count === 0) return null;
 
+  const activeSrc = valid[index]?.src;
+  const activeLoaded = activeSrc ? loadedUrls.has(activeSrc) : false;
+
   return (
     <div
       className={className}
@@ -77,7 +85,7 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
       onTouchEnd={onTouchEnd}
     >
       {images.map((src, i) => {
-        if (errored.has(i)) return null;
+        if (erroredUrls.has(src)) return null;
         const validIdx = valid.findIndex((entry) => entry.originalIndex === i);
         const isActive = validIdx === index;
         return (
@@ -87,18 +95,28 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
             alt=""
             className="absolute inset-0 w-full h-full object-cover"
             style={{
-              opacity: isActive && loaded.has(i) ? 1 : 0,
+              opacity: isActive && loadedUrls.has(src) ? 1 : 0,
               transition: 'opacity 0.35s ease',
             }}
-            onLoad={() => setLoaded((prev) => new Set(prev).add(i))}
-            onError={() => setErrored((prev) => new Set(prev).add(i))}
+            onLoad={() => setLoadedUrls((prev) => {
+              if (prev.has(src)) return prev;
+              const next = new Set(prev);
+              next.add(src);
+              return next;
+            })}
+            onError={() => setErroredUrls((prev) => {
+              if (prev.has(src)) return prev;
+              const next = new Set(prev);
+              next.add(src);
+              return next;
+            })}
             loading={i < eagerCount ? 'eager' : 'lazy'}
             decoding="async"
           />
         );
       })}
 
-      {!loaded.has(index) && (() => {
+      {!activeLoaded && (() => {
         const activeEntry = valid[index];
         const placeholder = activeEntry && thumbhashes
           ? thumbhashToCssDataUrl(thumbhashes[activeEntry.originalIndex])
