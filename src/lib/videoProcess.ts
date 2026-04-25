@@ -176,19 +176,23 @@ export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> 
     const buf = new Uint8Array(await file.arrayBuffer());
     await ff.writeFile(inputName, buf);
 
-    // Trim + center-crop to 4:5 + downscale. -ss BEFORE -i is a fast
-    // keyframe-based seek that lets the demuxer skip past most of the
-    // input without decoding it — this matters because the entire source
-    // file lives in ffmpeg's wasm heap, and decoding from t=0 of a long
-    // clip can blow the ~2GB single-threaded memory budget. cropW/cropH
-    // are precomputed integers (even, for yuv420p), so the filter graph
-    // has no expressions to escape. scale=-2 keeps width even-numbered.
+    // Trim + center-crop to 4:5 + downscale. -ss BEFORE -i lets the
+    // demuxer skip past most of the input without decoding it, which
+    // keeps the working set small for clips trimmed from late in a long
+    // source. The explicit `format=yuv420p` step in the filter chain (in
+    // addition to the -pix_fmt output flag) forces an early conversion
+    // of 10-bit / HDR HEVC sources — modern iPhone captures default to
+    // hvc1 in yuv420p10le, and skipping this conversion lets libx264
+    // hit unsupported pixel formats and trap with "memory access out of
+    // bounds" mid-encode on otherwise tiny clips. cropW/cropH are
+    // precomputed even integers so the filter graph has no expressions
+    // to escape; scale=-2 keeps width even-numbered for H.264.
     const code = await runFFmpeg(ff, [
       '-y',
       '-ss', startSec.toFixed(3),
       '-i', inputName,
       '-t', durationSec.toFixed(3),
-      '-vf', `crop=${cropW}:${cropH},scale=-2:${targetH}`,
+      '-vf', `crop=${cropW}:${cropH},scale=-2:${targetH},format=yuv420p`,
       '-c:v', 'libx264',
       '-preset', 'veryfast',
       '-crf', '23',
@@ -259,26 +263,29 @@ export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> 
   }
 }
 
-// Wraps ff.exec so a wasm trap (typically OOM on a large input) surfaces as
-// a message that tells the user what they can do, instead of the bare
-// "RuntimeError: memory access out of bounds" / "abort" that ffmpeg-core
-// re-throws when its fixed memory pool runs out.
+// Wraps ff.exec so wasm traps surface with the underlying error attached
+// instead of the bare "RuntimeError: memory access out of bounds" that
+// ffmpeg-core throws on most fatal conditions (genuine OOM, codec bugs on
+// malformed input, unsupported pixel formats, etc.). For OOM specifically
+// we add a hint about source size; otherwise we just pass the message
+// through so the user sees something actionable.
 async function runFFmpeg(ff: FFmpeg, args: string[], inputBytes: number): Promise<number> {
   try {
     return await ff.exec(args);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (
-      msg.includes('memory access out of bounds') ||
-      msg.includes('Out of memory') ||
-      msg.toLowerCase().includes('abort')
-    ) {
+    console.error('[videoProcess] ffmpeg exec failed', { args, msg, error: e });
+    // Only treat the explicit OOM strings as memory pressure. "abort" and
+    // "memory access out of bounds" alone get raised for plenty of
+    // non-memory failures too (codec quirks, malformed streams), so they
+    // need the source size context but should also keep the raw message.
+    if (msg.includes('Out of memory') && inputBytes > 100 * 1024 * 1024) {
       throw new Error(
         `Video too large to process in-browser (source ${formatMB(inputBytes)}). ` +
           `Try a shorter capture or one that's not 4K.`,
       );
     }
-    throw e instanceof Error ? e : new Error(msg);
+    throw new Error(`ffmpeg failed: ${msg}`);
   }
 }
 
