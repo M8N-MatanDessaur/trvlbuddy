@@ -5,9 +5,12 @@
 //   trvlbuddy-rest-v1     supabase REST reads — stale-while-revalidate
 
 const CACHE_NAME = 'trvlbuddy-v6';
-// v2 — v1 stored opaque image responses as empty 0-status bodies. Bumping
-// the name forces the activate step to drop those broken entries.
-const IMG_CACHE = 'trvlbuddy-imgs-v2';
+// v3 — v2 cached every opaque response unconditionally. That meant 404s and
+// 5xx errors from Supabase Storage (also opaque under no-cors) got persisted
+// for 30 days, and users saw broken-image icons that survived reloads and
+// app restarts. v3 probes opaque responses with a CORS HEAD before caching;
+// bumping the name evicts the bad entries left behind by v2.
+const IMG_CACHE = 'trvlbuddy-imgs-v3';
 const REST_CACHE = 'trvlbuddy-rest-v1';
 
 const IMG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -94,9 +97,28 @@ async function cacheFirstWithExpiry(request, cacheName, maxAgeMs, maxEntries) {
   }
   try {
     const response = await fetch(request);
-    const cacheable =
-      response &&
-      (response.type === 'opaque' || (response.status >= 200 && response.status < 400));
+    let cacheable = false;
+    if (response) {
+      if (response.type === 'basic' || response.type === 'cors') {
+        cacheable = response.status >= 200 && response.status < 400;
+      } else if (response.type === 'opaque') {
+        // Status is unreadable for opaque responses, so probe with a CORS
+        // HEAD before persisting. Without this, a 404/500 (also opaque
+        // under no-cors) gets cached for 30 days and the user sees a
+        // broken-image icon that survives reloads and app restarts.
+        try {
+          const probe = await fetch(request.url, {
+            method: 'HEAD',
+            mode: 'cors',
+            credentials: 'omit',
+            cache: 'no-store',
+          });
+          cacheable = probe.ok;
+        } catch (_) {
+          cacheable = false;
+        }
+      }
+    }
     if (cacheable) {
       cache.put(request, response.clone())
         .then(() => cache.put(tsKey, new Response(String(Date.now()))))
