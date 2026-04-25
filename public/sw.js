@@ -177,6 +177,15 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Trip-intelligence read-only APIs: cache aggressively so weather +
+  // exchange rates work offline on the trip page. Both are same-origin
+  // via public internet — SWR keeps the UI snappy while background
+  // revalidation keeps data fresh when online.
+  if (url.hostname === 'api.open-meteo.com' || url.hostname === 'api.exchangerate.host') {
+    event.respondWith(staleWhileRevalidate(event.request, REST_CACHE, REST_MAX_ENTRIES));
+    return;
+  }
+
   if (url.hostname !== self.location.hostname) return;
 
   const isHashedAsset = url.pathname.startsWith('/assets/');

@@ -13,6 +13,7 @@ import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavI
 import DayDebrief from './trip/DayDebrief';
 import TripMembersStrip from './TripMembersStrip';
 import ShareTripModal from './ShareTripModal';
+import SegmentBrief from './SegmentBrief';
 
 interface WeatherData {
   temp: number;
@@ -507,6 +508,13 @@ const DynamicDashboard: React.FC = () => {
                       <Phone size={13} /> {emergency}
                     </a>
                   </div>
+
+                  <SegmentBrief
+                    city={cityName}
+                    country={country}
+                    currency={currency}
+                    coordinates={segment.city?.coordinates || segment.destination?.coordinates || null}
+                  />
                 </div>
 
                 {/* Accommodations */}
