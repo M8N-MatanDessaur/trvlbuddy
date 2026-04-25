@@ -1,6 +1,8 @@
-// exchangerate.host — free, no key, reasonably reliable. We fetch the full
-// table once per 24h keyed on the base currency so every (base -> target)
-// pair is served from the same cache entry.
+// open.er-api.com — free, no API key, CORS-friendly, ~160 currencies from
+// ECB + fallbacks. We fetch the full table once per 24h keyed on the base
+// currency so every (base -> target) pair is served from the same cache
+// entry. exchangerate.host used to work keyless but now requires an API
+// key, which is why we switched.
 
 const CACHE_PREFIX = 'trvlbuddy-fx:';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -39,10 +41,10 @@ export async function fetchRates(base: string): Promise<ExchangeRates | null> {
   if (cached) return cached;
 
   try {
-    const res = await fetch(`https://api.exchangerate.host/latest?base=${upper}`);
-    if (!res.ok) throw new Error(`exchangerate.host ${res.status}`);
+    const res = await fetch(`https://open.er-api.com/v6/latest/${upper}`);
+    if (!res.ok) throw new Error(`open.er-api.com ${res.status}`);
     const body = await res.json();
-    if (!body.rates) throw new Error('No rates returned');
+    if (body.result !== 'success' || !body.rates) throw new Error('No rates returned');
     const snapshot: ExchangeRates = {
       base: upper,
       fetchedAt: Date.now(),

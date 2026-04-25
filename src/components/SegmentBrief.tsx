@@ -30,6 +30,8 @@ const SegmentBrief: React.FC<Props> = ({ city, country, currency, coordinates })
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [rates, setRates] = useState<ExchangeRates | null>(null);
+  const [ratesLoading, setRatesLoading] = useState(false);
+  const [ratesFailed, setRatesFailed] = useState(false);
   const [facts] = useState<QuickFact>(() => factsFor(country));
   const homeCurrency = guessHomeCurrency();
 
@@ -47,9 +49,15 @@ const SegmentBrief: React.FC<Props> = ({ city, country, currency, coordinates })
 
   useEffect(() => {
     if (!currency) return;
+    if (currency.toUpperCase() === homeCurrency) return;
     let alive = true;
+    setRatesLoading(true);
+    setRatesFailed(false);
     fetchRates(homeCurrency).then((snapshot) => {
-      if (alive) setRates(snapshot);
+      if (!alive) return;
+      setRatesLoading(false);
+      if (snapshot) setRates(snapshot);
+      else setRatesFailed(true);
     });
     return () => { alive = false; };
   }, [currency, homeCurrency]);
@@ -74,7 +82,19 @@ const SegmentBrief: React.FC<Props> = ({ city, country, currency, coordinates })
   const currencyTile = (() => {
     if (!currency) return null;
     if (currency.toUpperCase() === homeCurrency) return null;
-    if (!rates) return <Loader2 size={14} className="animate-spin" />;
+    // Spin only while we're actively fetching for the first time.
+    if (ratesLoading && !rates) {
+      return (
+        <div className="flex items-center gap-1.5" style={{ color: 'var(--text-tertiary)' }}>
+          <Coins size={14} />
+          <Loader2 size={12} className="animate-spin" />
+          <span>Loading exchange rate...</span>
+        </div>
+      );
+    }
+    // Network hiccup — drop the tile silently rather than loader-forever.
+    if (ratesFailed && !rates) return null;
+    if (!rates) return null;
     const value = convert(1, rates, currency);
     if (value === null) return null;
     const fmt = value < 1 ? value.toFixed(3) : value.toFixed(2);
@@ -132,6 +152,7 @@ const SegmentBrief: React.FC<Props> = ({ city, country, currency, coordinates })
         <div key={i}>{cell}</div>
       ))}
       <div className="text-[10.5px] leading-snug mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+        <span className="font-bold" style={{ color: 'var(--text-secondary)' }}>Tipping: </span>
         {facts.tipping}
       </div>
     </div>

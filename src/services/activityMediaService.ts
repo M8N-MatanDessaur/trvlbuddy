@@ -323,11 +323,24 @@ export interface UserPhoto {
 }
 
 export async function listUserPhotos(userId: string): Promise<UserPhoto[]> {
-  const { data: rows } = await supabase
+  // Try with thumbhash first; if the column doesn't exist yet (migration
+  // hasn't been applied), retry without it so the grid still renders.
+  let rows: Array<{ id: string; storage_path: string; thumbhash?: string | null; created_at: string; activity_id: string; activities: unknown }> | null = null;
+  const withThumb = await supabase
     .from('activity_images')
     .select('id, storage_path, thumbhash, created_at, activity_id, activities!inner(name, slug, address, google_place_id, google_maps_url)')
     .eq('uploaded_by', userId)
     .order('created_at', { ascending: false });
+  if (withThumb.error) {
+    const fallback = await supabase
+      .from('activity_images')
+      .select('id, storage_path, created_at, activity_id, activities!inner(name, slug, address, google_place_id, google_maps_url)')
+      .eq('uploaded_by', userId)
+      .order('created_at', { ascending: false });
+    rows = fallback.data as typeof rows;
+  } else {
+    rows = withThumb.data as typeof rows;
+  }
 
   if (!rows || rows.length === 0) return [];
 
@@ -353,7 +366,7 @@ export async function listUserPhotos(userId: string): Promise<UserPhoto[]> {
     return {
       id: row.id,
       storage_path: row.storage_path,
-      thumbhash: row.thumbhash ?? null,
+      thumbhash: (row as { thumbhash?: string | null }).thumbhash ?? null,
       created_at: row.created_at,
       activity_id: row.activity_id,
       activity_name: activity.name,
