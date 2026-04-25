@@ -14,13 +14,27 @@ import {
   type ActivityVoteState,
 } from '../services/activityMediaService';
 import { warmImageCache } from '../lib/imagePrefetch';
-import { uploadActivityVideo } from '../services/activityVideoService';
+import {
+  uploadActivityVideo,
+  listActivityVideos,
+  type ActivityVideoMedia,
+} from '../services/activityVideoService';
 import type { TrimResult } from '../lib/videoProcess';
+
+// Unified carousel/grid item. Either an image (from activity_images) or a
+// video (from activity_videos). The two tables have distinct shapes; the
+// `kind` discriminator lets the UI render each correctly without forcing
+// one schema to pretend to be the other.
+export type ActivityMediaItem =
+  | { kind: 'image'; createdAt: string; data: ActivityImageMedia }
+  | { kind: 'video'; createdAt: string; data: ActivityVideoMedia };
 
 interface State {
   loading: boolean;
   images: ActivityImageMedia[];
   imageUrls: string[];
+  videos: ActivityVideoMedia[];
+  mediaItems: ActivityMediaItem[];
   activityId: string | null;
   error: string | null;
   uploading: boolean;
@@ -46,12 +60,29 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     loading: false,
     images: [],
     imageUrls: [],
+    videos: [],
+    mediaItems: [],
     activityId: null,
     error: null,
     uploading: false,
     vote: ZERO_VOTE_STATE,
   });
   const resolvedKeyRef = useRef<string>('');
+
+  // Merge images + videos into one chronological list so the carousel
+  // can render them interleaved by upload time, matching what users
+  // expect from a feed.
+  const mergeMedia = (
+    images: ActivityImageMedia[],
+    videos: ActivityVideoMedia[],
+  ): ActivityMediaItem[] => {
+    const items: ActivityMediaItem[] = [
+      ...images.map<ActivityMediaItem>((data) => ({ kind: 'image', createdAt: data.created_at, data })),
+      ...videos.map<ActivityMediaItem>((data) => ({ kind: 'video', createdAt: data.created_at, data })),
+    ];
+    items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+    return items;
+  };
 
   const load = useCallback(async (k: ActivityKey) => {
     const sig = JSON.stringify({ key: k, viewerId: user?.id ?? null });
@@ -65,18 +96,43 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         setState({ loading: false, images: [], imageUrls: [], activityId: null, error: 'Could not ensure activity', uploading: false, vote: ZERO_VOTE_STATE });
         return;
       }
-      // Run images + vote independently so a vote-table miss (e.g. a view
-      // that isn't migrated yet) can't wipe the images the feed renders.
-      const [imagesResult, voteResult] = await Promise.allSettled([
+      // Run images + videos + vote independently so a single-table miss
+      // (e.g. a view that isn't migrated yet) can't wipe the others.
+      const [imagesResult, videosResult, voteResult] = await Promise.allSettled([
         listActivityImages(activity.id, user?.id ?? null),
+        listActivityVideos(activity.id, user?.id ?? null),
         getActivityVoteState(activity.id, user?.id ?? null),
       ]);
       const images = imagesResult.status === 'fulfilled' ? imagesResult.value : [];
+      const videos = videosResult.status === 'fulfilled' ? videosResult.value : [];
       const vote = voteResult.status === 'fulfilled' ? voteResult.value : ZERO_VOTE_STATE;
-      warmImageCache(images.map((image) => image.url));
-      setState({ loading: false, images, imageUrls: images.map((image) => image.url), activityId: activity.id, error: null, uploading: false, vote });
+      warmImageCache([
+        ...images.map((image) => image.url),
+        ...videos.map((video) => video.posterUrl),
+      ]);
+      setState({
+        loading: false,
+        images,
+        imageUrls: images.map((image) => image.url),
+        videos,
+        mediaItems: mergeMedia(images, videos),
+        activityId: activity.id,
+        error: null,
+        uploading: false,
+        vote,
+      });
     } catch (err: unknown) {
-      setState({ loading: false, images: [], imageUrls: [], activityId: null, error: err instanceof Error ? err.message : String(err), uploading: false, vote: ZERO_VOTE_STATE });
+      setState({
+        loading: false,
+        images: [],
+        imageUrls: [],
+        videos: [],
+        mediaItems: [],
+        activityId: null,
+        error: err instanceof Error ? err.message : String(err),
+        uploading: false,
+        vote: ZERO_VOTE_STATE,
+      });
     }
   }, [user?.id]);
 
@@ -106,6 +162,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         uploading: false,
         images: [image, ...s.images],
         imageUrls: [image.url, ...s.imageUrls],
+        mediaItems: mergeMedia([image, ...s.images], s.videos),
       }));
       refreshProfile().catch(() => {});
       return { ok: true };
@@ -118,7 +175,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       if (!user) return { ok: false, error: 'Sign in required' };
       if (!state.activityId) return { ok: false, error: 'Activity not ready yet' };
       setState((s) => ({ ...s, uploading: true, error: null }));
-      const { error } = await uploadActivityVideo({
+      const { video, error } = await uploadActivityVideo({
         activityId: state.activityId,
         uploaderId: user.id,
         video: result.video,
@@ -129,8 +186,16 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         height: result.height,
         onProgress,
       });
-      setState((s) => ({ ...s, uploading: false, error }));
-      if (error) return { ok: false, error };
+      if (error || !video) {
+        setState((s) => ({ ...s, uploading: false, error }));
+        return { ok: false, error };
+      }
+      setState((s) => ({
+        ...s,
+        uploading: false,
+        videos: [video, ...s.videos],
+        mediaItems: mergeMedia(s.images, [video, ...s.videos]),
+      }));
       refreshProfile().catch(() => {});
       return { ok: true };
     },
@@ -249,12 +314,23 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
 
   const refresh = useCallback(async () => {
     if (!state.activityId) return;
-    const [images, vote] = await Promise.all([
+    const [images, videos, vote] = await Promise.all([
       listActivityImages(state.activityId, user?.id ?? null),
+      listActivityVideos(state.activityId, user?.id ?? null),
       getActivityVoteState(state.activityId, user?.id ?? null),
     ]);
-    warmImageCache(images.map((image) => image.url));
-    setState((s) => ({ ...s, images, imageUrls: images.map((image) => image.url), vote }));
+    warmImageCache([
+      ...images.map((image) => image.url),
+      ...videos.map((video) => video.posterUrl),
+    ]);
+    setState((s) => ({
+      ...s,
+      images,
+      imageUrls: images.map((image) => image.url),
+      videos,
+      mediaItems: mergeMedia(images, videos),
+      vote,
+    }));
   }, [state.activityId, user?.id]);
 
   return { ...state, upload, uploadVideo: uploadVideoFn, setImageLiked, addImageComment, removeImageComment, setVote, refresh };

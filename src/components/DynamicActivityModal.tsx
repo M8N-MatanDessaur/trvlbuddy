@@ -3,7 +3,7 @@ import { X, MapPin, Lightbulb, Navigation, ExternalLink, ChevronUp, ChevronDown 
 import { motion, AnimatePresence } from 'framer-motion';
 import { GeneratedActivity } from '../types/TravelData';
 import { getCategoryIcon } from '../utils/categoryIcons';
-import ImageCarousel from './ImageCarousel';
+import MediaCarousel, { type MediaSlide } from './MediaCarousel';
 import UploadMediaButton from './UploadMediaButton';
 import { useActivityMedia } from '../hooks/useActivityMedia';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,7 +29,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
     [activity?.name, activity?.location, activity?.placeId]
   );
 
-  const { imageUrls, uploading, upload, uploadVideo, vote, setVote } = useActivityMedia(isOpen ? activityKey : null);
+  const { mediaItems, uploading, upload, uploadVideo, vote, setVote } = useActivityMedia(isOpen ? activityKey : null);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -37,7 +37,22 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
 
   const CategoryIcon = getCategoryIcon(activity.category);
   const locationQuery = encodeURIComponent(activity.location);
-  const hasImages = imageUrls.length > 0;
+  const slides: MediaSlide[] = useMemo(
+    () => mediaItems.map((item) => (
+      item.kind === 'image'
+        ? { kind: 'image' as const, src: item.data.url, thumbhash: item.data.thumbhash ?? null }
+        : {
+            kind: 'video' as const,
+            src: item.data.url,
+            posterUrl: item.data.posterUrl,
+            thumbhash: item.data.thumbhash ?? null,
+            startMs: item.data.start_ms ?? null,
+            durationMs: item.data.duration_ms ?? null,
+          }
+    )),
+    [mediaItems],
+  );
+  const hasImages = slides.length > 0;
 
   const handleVote = async (target: 1 | -1) => {
     if (!user) {
@@ -72,7 +87,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
           >
             {hasImages ? (
               <div className="relative" style={{ height: '220px' }}>
-                <ImageCarousel images={imageUrls} className="absolute inset-0" eagerCount={2} />
+                <MediaCarousel items={slides} className="absolute inset-0" eagerCount={2} />
                 <div
                   className="absolute inset-0 pointer-events-none"
                   style={{ background: 'linear-gradient(to top, var(--surface-container) 0%, rgba(0,0,0,0.2) 60%, transparent 100%)' }}

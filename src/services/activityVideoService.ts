@@ -289,3 +289,88 @@ export async function setActivityVideoLiked(params: {
     .eq('user_id', userId);
   return { error: error?.message ?? null };
 }
+
+// Profile-grid representation of a video — parallels UserPhoto so the
+// profile page can mix the two arrays into one chronological grid.
+export interface UserVideo {
+  id: string;
+  url: string;
+  posterUrl: string;
+  storage_path: string;
+  poster_path: string;
+  thumbhash: string | null;
+  duration_ms: number | null;
+  start_ms: number | null;
+  width: number | null;
+  height: number | null;
+  created_at: string;
+  activity_id: string;
+  activity_name: string;
+  activity_slug: string;
+  activity_address: string | null;
+  google_place_id: string | null;
+  google_maps_url: string | null;
+  likeCount: number;
+  commentCount: number;
+}
+
+export async function listUserVideos(userId: string): Promise<UserVideo[]> {
+  const { data: rows, error } = await supabase
+    .from('activity_videos')
+    .select(
+      'id, storage_path, poster_path, thumbhash, duration_ms, start_ms, width, height, created_at, activity_id, activities!inner(name, slug, address, google_place_id, google_maps_url)',
+    )
+    .eq('uploaded_by', userId)
+    .order('created_at', { ascending: false });
+  if (error || !rows || rows.length === 0) return [];
+
+  const ids = rows.map((row) => row.id);
+  const likeCounts = new Map<string, number>();
+  const commentCounts = new Map<string, number>();
+
+  const [{ data: likes }, { data: comments }] = await Promise.all([
+    supabase.from('activity_video_likes').select('video_id').in('video_id', ids),
+    supabase.from('activity_video_comments').select('video_id, deleted_at').in('video_id', ids),
+  ]);
+
+  likes?.forEach((row) => {
+    likeCounts.set(row.video_id, (likeCounts.get(row.video_id) || 0) + 1);
+  });
+  comments?.forEach((row) => {
+    if (row.deleted_at) return;
+    commentCounts.set(row.video_id, (commentCounts.get(row.video_id) || 0) + 1);
+  });
+
+  return rows.map((row) => {
+    const activity = (row as unknown as {
+      activities: {
+        name: string;
+        slug: string;
+        address: string | null;
+        google_place_id: string | null;
+        google_maps_url: string | null;
+      };
+    }).activities;
+    return {
+      id: row.id,
+      storage_path: row.storage_path,
+      poster_path: row.poster_path,
+      thumbhash: row.thumbhash ?? null,
+      duration_ms: row.duration_ms,
+      start_ms: row.start_ms,
+      width: row.width,
+      height: row.height,
+      created_at: row.created_at,
+      activity_id: row.activity_id,
+      activity_name: activity.name,
+      activity_slug: activity.slug,
+      activity_address: activity.address,
+      google_place_id: activity.google_place_id,
+      google_maps_url: activity.google_maps_url,
+      url: publicVideoUrl(row.storage_path),
+      posterUrl: publicImageUrl(row.poster_path),
+      likeCount: likeCounts.get(row.id) || 0,
+      commentCount: commentCounts.get(row.id) || 0,
+    };
+  });
+}

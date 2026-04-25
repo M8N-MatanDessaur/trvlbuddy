@@ -16,7 +16,7 @@ import { useCompletedActivities } from '../../hooks/useCompletedActivities';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getCategoryIcon } from '../../utils/categoryIcons';
-import ImageCarousel from '../ImageCarousel';
+import MediaCarousel, { type MediaSlide } from '../MediaCarousel';
 import UploadMediaButton from '../UploadMediaButton';
 import Avatar from '../Avatar';
 import ImageCommentsSheet from '../nearby/ImageCommentsSheet';
@@ -67,7 +67,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
 
   const {
     images,
-    imageUrls,
+    mediaItems,
     uploading,
     upload,
     uploadVideo,
@@ -80,22 +80,45 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
   } = useActivityMedia(activityKey);
   const isDone = isCompleted(dbActivityId);
 
-  // Fall back to the AI-fetched image when there are no user uploads yet so
-  // the card never looks empty.
-  const carouselUrls = images.length > 0
-    ? imageUrls
-    : (activity.imageUrls?.length ? activity.imageUrls : (activity.imageUrl ? [activity.imageUrl] : []));
-  const hasCarousel = carouselUrls.length > 0;
-  const activeImage = images[activeImageIndex] || images[0] || null;
-  const poster = activeImage?.poster ?? null;
+  // Build the carousel item list from real uploads (mixed images + videos),
+  // falling back to AI-fetched still images so the card never looks empty.
+  const slides: MediaSlide[] = useMemo(() => {
+    if (mediaItems.length > 0) {
+      return mediaItems.map((item) => (
+        item.kind === 'image'
+          ? { kind: 'image' as const, src: item.data.url, thumbhash: item.data.thumbhash ?? null }
+          : {
+              kind: 'video' as const,
+              src: item.data.url,
+              posterUrl: item.data.posterUrl,
+              thumbhash: item.data.thumbhash ?? null,
+              startMs: item.data.start_ms ?? null,
+              durationMs: item.data.duration_ms ?? null,
+            }
+      ));
+    }
+    const fallback = activity.imageUrls?.length
+      ? activity.imageUrls
+      : (activity.imageUrl ? [activity.imageUrl] : []);
+    return fallback.map((src) => ({ kind: 'image' as const, src }));
+  }, [mediaItems, activity.imageUrls, activity.imageUrl]);
+  const hasCarousel = slides.length > 0;
+  // Like/comment overlays still operate on image rows only — the active
+  // index maps into mediaItems, but if the active slide is a video we
+  // don't show an image-specific actor for it.
+  const activeMediaItem = mediaItems[activeImageIndex] || mediaItems[0] || null;
+  const activeImage = activeMediaItem?.kind === 'image' ? activeMediaItem.data : null;
+  const fallbackImage = images[0] || null;
+  const effectiveActiveImage = activeImage || fallbackImage;
+  const poster = effectiveActiveImage?.poster ?? null;
 
   const handleLike = async () => {
-    if (!activeImage) {
+    if (!effectiveActiveImage) {
       toast('Be the first to share a photo here', 'info');
       return;
     }
-    const nextLiked = !activeImage.likedByViewer;
-    const result = await setImageLiked(activeImage, nextLiked);
+    const nextLiked = !effectiveActiveImage.likedByViewer;
+    const result = await setImageLiked(effectiveActiveImage, nextLiked);
     if (result.ignored) {
       toast('Your own photo does not earn Influence', 'info');
     } else if (!result.ok) {
@@ -391,8 +414,8 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
           style={{ aspectRatio: '4 / 5', background: 'var(--surface-container-high)' }}
           onClick={(e) => e.stopPropagation()}
         >
-          <ImageCarousel
-            images={carouselUrls}
+          <MediaCarousel
+            items={slides}
             className="absolute inset-0"
             eagerCount={2}
             onIndexChange={setActiveImageIndex}
@@ -427,15 +450,15 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
               }}
               className="transition-all active:scale-90 disabled:opacity-50"
               style={{
-                ...overlayCircleStyle(false, activeImage?.likedByViewer),
+                ...overlayCircleStyle(false, effectiveActiveImage?.likedByViewer),
                 flexDirection: 'column',
                 gap: '1px',
               }}
-              aria-label={activeImage?.likedByViewer ? 'Unlike photo' : 'Like photo'}
-              disabled={!activeImage}
+              aria-label={effectiveActiveImage?.likedByViewer ? 'Unlike photo' : 'Like photo'}
+              disabled={!effectiveActiveImage}
             >
-              <Heart size={15} fill={activeImage?.likedByViewer ? 'currentColor' : 'none'} />
-              <span className="text-[10px] font-extrabold leading-none">{activeImage?.likeCount ?? 0}</span>
+              <Heart size={15} fill={effectiveActiveImage?.likedByViewer ? 'currentColor' : 'none'} />
+              <span className="text-[10px] font-extrabold leading-none">{effectiveActiveImage?.likeCount ?? 0}</span>
             </button>
             <button
               onClick={(e) => {
@@ -449,10 +472,10 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
                 gap: '1px',
               }}
               aria-label="Open photo comments"
-              disabled={!activeImage}
+              disabled={!effectiveActiveImage}
             >
               <MessageCircle size={15} />
-              <span className="text-[10px] font-extrabold leading-none">{activeImage?.commentCount ?? 0}</span>
+              <span className="text-[10px] font-extrabold leading-none">{effectiveActiveImage?.commentCount ?? 0}</span>
             </button>
           </div>
 
