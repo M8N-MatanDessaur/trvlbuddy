@@ -11,6 +11,7 @@ import {
   NearbyPlace,
   CATEGORIES,
   TransportMode,
+  findSpecificPlace,
 } from '../../services/nearbyService';
 import {
   FeedCacheContext,
@@ -50,6 +51,11 @@ const MIN_TOKEN_LEN = 2;
 // Anything at this score or above is treated as a "top match" and
 // pinned above the separator.
 const NAME_MATCH_TOP_THRESHOLD = 50;
+// Sentinel score for the place Google's "find place from text" decided the
+// user actually meant. Strictly greater than any nameMatchScore output so
+// it always lands at the very top, regardless of whether its display name
+// happens to contain the raw query string.
+const SPECIFIC_PLACE_MATCH = 200;
 
 function tokenize(value: string): string[] {
   return value
@@ -94,6 +100,7 @@ const NearbyFeed: React.FC = () => {
   const [dynamicChips, setDynamicChips] = useState<NearbyChipSuggestion[]>([]);
   const [chipsLoading, setChipsLoading] = useState(false);
   const [activeChipLabel, setActiveChipLabel] = useState<string | null>(null);
+  const [specificPlace, setSpecificPlace] = useState<NearbyPlace | null>(null);
   const { toast } = useToast();
 
   const cursorRef = useRef<NearbyFeedCursor | null>(null);
@@ -295,6 +302,29 @@ const NearbyFeed: React.FC = () => {
     };
   }, [userLocation, transportMode]);
 
+  // Ask Google "what place did the user mean?" with the raw prompt, not the
+  // AI-rewritten keyword. Google's text search forgives typos ("bbagel" ->
+  // "bbagels") and partial matches better than any local heuristic — the
+  // result gets pinned to the very top of the feed below.
+  useEffect(() => {
+    setSpecificPlace(null);
+    if (!userLocation || !aiPrompt) return;
+    const trimmed = aiPrompt.trim();
+    if (trimmed.length < 2) return;
+    let cancelled = false;
+    findSpecificPlace(trimmed, userLocation)
+      .then(place => {
+        if (cancelled) return;
+        setSpecificPlace(place);
+      })
+      .catch(() => {
+        // Already logged by the service.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aiPrompt, userLocation]);
+
   const selectDynamicChip = useCallback((chip: NearbyChipSuggestion) => {
     // Apply the chip's pre-interpreted types/keyword directly — no extra
     // Gemini round-trip needed since suggestNearbyChips already resolved them.
@@ -422,10 +452,24 @@ const NearbyFeed: React.FC = () => {
       return { sortedPlaces: uniquePlaces, separatorAfterId: null as string | null, topMatchCount: 0 };
     }
 
-    if (aiKeyword) {
-      const decorated = uniquePlaces.map((p) => ({
+    // The raw user prompt is the truest signal of intent — fall back to the
+    // AI-extracted keyword for chip selections (which never set aiPrompt).
+    const queryForMatch = aiPrompt || aiKeyword;
+    if (queryForMatch) {
+      // Merge the Google-identified specific place into the candidate list
+      // so it can be ranked alongside the keyword sweep results. If Google
+      // pointed at a place the cursor already loaded, we keep the existing
+      // copy and just boost its match score below.
+      const specificId = specificPlace?.placeId;
+      const candidates = specificPlace && !uniquePlaces.some(p => p.placeId === specificId)
+        ? [specificPlace, ...uniquePlaces]
+        : uniquePlaces;
+
+      const decorated = candidates.map((p) => ({
         place: p,
-        match: nameMatchScore(p.name, aiKeyword),
+        match: p.placeId === specificId
+          ? SPECIFIC_PLACE_MATCH
+          : nameMatchScore(p.name, queryForMatch),
         score: scoreBySlug.get(`gpid-${p.placeId}`) ?? 0,
       }));
       decorated.sort((a, b) => {
@@ -462,7 +506,7 @@ const NearbyFeed: React.FC = () => {
       separatorAfterId: null as string | null,
       topMatchCount: 0,
     };
-  }, [uniquePlaces, scoreBySlug, aiKeyword]);
+  }, [uniquePlaces, scoreBySlug, aiKeyword, aiPrompt, specificPlace]);
 
   // Reset the lock whenever the feed identity changes (new location,
   // transport mode, filter, or AI prompt), so a fresh search isn't
