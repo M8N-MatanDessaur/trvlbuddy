@@ -11,6 +11,22 @@ interface Props {
   onIndexChange?: (index: number) => void;
 }
 
+// One image fetch can be aborted mid-flight when the component unmounts
+// during a route change — and some browsers (and intermediate caches) hold
+// onto that aborted/partial response, so the next mount with the same URL
+// reads the broken entry from cache, fires onError, and shows a broken
+// placeholder that survives full page reloads. Retrying the same URL with a
+// throwaway query param forces a fresh fetch from origin and replaces the
+// poisoned cache entry. We cap retries so a genuinely-dead URL still gets
+// marked errored eventually.
+const MAX_RETRIES = 2;
+
+const cacheBust = (url: string, attempt: number): string => {
+  if (attempt <= 0) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}_r=${attempt}`;
+};
+
 const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style, eagerCount = 2, onIndexChange }) => {
   const [index, setIndex] = useState(0);
   // Track loaded/errored state by URL, not by index. Parents may hand back a
@@ -20,6 +36,7 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
   // them at opacity 0 forever.
   const [loadedUrls, setLoadedUrls] = useState<Set<string>>(new Set());
   const [erroredUrls, setErroredUrls] = useState<Set<string>>(new Set());
+  const [retryByUrl, setRetryByUrl] = useState<Map<string, number>>(new Map());
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const swiping = useRef(false);
 
@@ -29,6 +46,24 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
     warmImageCache(images);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imagesKey]);
+
+  const handleImageError = (src: string) => {
+    const attempts = retryByUrl.get(src) ?? 0;
+    if (attempts >= MAX_RETRIES) {
+      setErroredUrls((prev) => {
+        if (prev.has(src)) return prev;
+        const next = new Set(prev);
+        next.add(src);
+        return next;
+      });
+      return;
+    }
+    setRetryByUrl((prev) => {
+      const next = new Map(prev);
+      next.set(src, attempts + 1);
+      return next;
+    });
+  };
 
   const valid = useMemo(
     () => images
@@ -88,10 +123,14 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
         if (erroredUrls.has(src)) return null;
         const validIdx = valid.findIndex((entry) => entry.originalIndex === i);
         const isActive = validIdx === index;
+        const attempt = retryByUrl.get(src) ?? 0;
+        // Key includes the retry count so a fresh <img> element is created
+        // each retry — without that, the browser would re-use the cached
+        // (poisoned) response for the same DOM node.
         return (
           <img
-            key={src}
-            src={src}
+            key={`${src}|${attempt}`}
+            src={cacheBust(src, attempt)}
             alt=""
             className="absolute inset-0 w-full h-full object-cover"
             style={{
@@ -104,12 +143,7 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
               next.add(src);
               return next;
             })}
-            onError={() => setErroredUrls((prev) => {
-              if (prev.has(src)) return prev;
-              const next = new Set(prev);
-              next.add(src);
-              return next;
-            })}
+            onError={() => handleImageError(src)}
             loading={i < eagerCount ? 'eager' : 'lazy'}
             decoding="async"
           />

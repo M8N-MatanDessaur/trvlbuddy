@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import CachedImage from './CachedImage';
 
 export interface AvatarProfile {
   display_name?: string | null;
@@ -47,7 +48,7 @@ const Avatar: React.FC<Props> = ({ profile, size = 32, className, style }) => {
   return (
     <span className={className} style={baseStyle}>
       {showImage ? (
-        <img
+        <CachedImage
           src={profile!.avatar_url!}
           alt=""
           width={size}
