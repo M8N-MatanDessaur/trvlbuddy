@@ -3,8 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Download,
   ExternalLink,
   Heart,
@@ -138,6 +136,55 @@ const PhotoViewerModal: React.FC<Props> = ({
     };
   }, [photo?.id, user?.id]);
 
+  // Instagram-style horizontal snap gallery. Scrolling and swipe physics are
+  // native; we just observe scrollLeft to keep `index` in sync and provide
+  // programmatic scrolls for chevron / keyboard nav.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+  const suppressScrollSyncRef = useRef(false);
+
+  const scrollToIndex = (target: number, behavior: ScrollBehavior = 'smooth') => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const clamped = Math.max(0, Math.min(photos.length - 1, target));
+    suppressScrollSyncRef.current = behavior === 'auto';
+    el.scrollTo({ left: clamped * el.clientWidth, behavior });
+  };
+
+  const goPrev = () => scrollToIndex(index - 1);
+  const goNext = () => scrollToIndex(index + 1);
+
+  // Jump to the starting photo instantly when the modal opens on a new index.
+  useEffect(() => {
+    if (initialIndex === null) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      const node = scrollRef.current;
+      if (!node) return;
+      suppressScrollSyncRef.current = true;
+      node.scrollTo({ left: initialIndex * node.clientWidth, behavior: 'auto' });
+      requestAnimationFrame(() => {
+        suppressScrollSyncRef.current = false;
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialIndex, photos.length]);
+
+  const handleGalleryScroll = () => {
+    if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current);
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      if (suppressScrollSyncRef.current) return;
+      const el = scrollRef.current;
+      if (!el || el.clientWidth === 0) return;
+      const next = Math.round(el.scrollLeft / el.clientWidth);
+      if (next !== index && next >= 0 && next < photos.length) {
+        setIndex(next);
+      }
+    });
+  };
+
   // Keyboard navigation.
   useEffect(() => {
     if (!open) return;
@@ -150,37 +197,6 @@ const PhotoViewerModal: React.FC<Props> = ({
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, photos.length, index]);
-
-  // Touch-swipe handling for the image area.
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const swiping = useRef(false);
-
-  const goPrev = () => setIndex((i) => Math.max(0, i - 1));
-  const goNext = () => setIndex((i) => Math.min(photos.length - 1, i + 1));
-
-  const onTouchStart = (e: React.TouchEvent) => {
-    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    swiping.current = false;
-  };
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (!touchStart.current) return;
-    const dx = e.touches[0].clientX - touchStart.current.x;
-    const dy = e.touches[0].clientY - touchStart.current.y;
-    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) swiping.current = true;
-  };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStart.current || !swiping.current) {
-      touchStart.current = null;
-      return;
-    }
-    const dx = e.changedTouches[0].clientX - touchStart.current.x;
-    if (Math.abs(dx) > 40) {
-      if (dx < 0) goNext();
-      else goPrev();
-    }
-    touchStart.current = null;
-    swiping.current = false;
-  };
 
   // Double-tap on the image likes it (matches social-app convention).
   // Declared here so the hook order stays stable across renders.
@@ -487,21 +503,6 @@ const PhotoViewerModal: React.FC<Props> = ({
   const mapsUrl = photo.google_maps_url
     || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${photo.activity_name} ${photo.activity_address || ''}`.trim())}`;
 
-  const navButtonStyle: React.CSSProperties = {
-    width: '36px',
-    height: '36px',
-    borderRadius: '50%',
-    background: 'rgba(0,0,0,0.55)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    color: 'white',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: 'none',
-    padding: 0,
-  };
-
   return (
     <div
       className="fixed inset-0 z-[80] flex flex-col"
@@ -555,34 +556,55 @@ const PhotoViewerModal: React.FC<Props> = ({
           </a>
         </header>
 
-        {/* Square image, cover-cropped. Capped at ~half the viewport so the
-            comment section is always visible without scrolling the modal. */}
+        {/* Horizontal snap gallery. Native scroll gives Instagram-style
+            momentum + snap; index stays in sync via scroll observer. Square
+            container, capped at 50dvh so comments always stay in view. */}
         <div
-          className="relative w-full flex items-center justify-center select-none overflow-hidden"
+          className="relative w-full select-none"
           style={{
             aspectRatio: '1 / 1',
             maxHeight: '50dvh',
             background: 'black',
             flexShrink: 0,
           }}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
         >
-          <img
-            key={photo.id}
-            src={photo.url}
-            alt={photo.activity_name}
-            draggable={false}
-            onClick={handleImageTap}
+          <div
+            ref={scrollRef}
+            onScroll={handleGalleryScroll}
+            className="absolute inset-0 flex overflow-x-auto overflow-y-hidden photo-gallery-scroll"
             style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              cursor: 'pointer',
+              scrollSnapType: 'x mandatory',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              WebkitOverflowScrolling: 'touch',
+              overscrollBehaviorX: 'contain',
             }}
-          />
-          {/* Heart burst on double-tap */}
+          >
+            {photos.map((p, i) => (
+              <div
+                key={p.id}
+                className="relative flex-shrink-0 w-full h-full"
+                style={{ scrollSnapAlign: 'center', scrollSnapStop: 'always' }}
+                onClick={() => { if (i === index) handleImageTap(); }}
+              >
+                <img
+                  src={p.url}
+                  alt={p.activity_name}
+                  draggable={false}
+                  loading={Math.abs(i - index) <= 1 ? 'eager' : 'lazy'}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    cursor: 'pointer',
+                    pointerEvents: 'none',
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Heart burst on double-tap, overlays the centered slide */}
           <AnimatePresence>
             {heartBurst > 0 && (
               <motion.div
@@ -606,28 +628,12 @@ const PhotoViewerModal: React.FC<Props> = ({
               </motion.div>
             )}
           </AnimatePresence>
-          {hasPrev && (
-            <button
-              onClick={goPrev}
-              className="absolute left-2 top-1/2 -translate-y-1/2 transition-transform active:scale-90"
-              style={navButtonStyle}
-              aria-label="Previous photo"
-            >
-              <ChevronLeft size={20} />
-            </button>
-          )}
-          {hasNext && (
-            <button
-              onClick={goNext}
-              className="absolute right-2 top-1/2 -translate-y-1/2 transition-transform active:scale-90"
-              style={navButtonStyle}
-              aria-label="Next photo"
-            >
-              <ChevronRight size={20} />
-            </button>
-          )}
+
           {photos.length > 1 && (
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5">
+            <div
+              className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 pointer-events-none"
+              style={{ zIndex: 4 }}
+            >
               {photos.map((_, i) => (
                 <span
                   key={i}
