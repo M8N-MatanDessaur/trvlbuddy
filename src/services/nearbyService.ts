@@ -560,44 +560,95 @@ export class NearbyFeedCursor {
   }
 
   private toPlace(raw: PlacesV1Place): NearbyPlace {
-    const lat = raw.location!.latitude!;
-    const lng = raw.location!.longitude!;
-    const imageUrls: string[] = [];
+    return convertV1Place(raw, this.userLocation);
+  }
+}
 
-    const primaryType = raw.primaryType;
-    const types = raw.types || [];
+function convertV1Place(raw: PlacesV1Place, userLocation: UserLocation): NearbyPlace {
+  const lat = raw.location!.latitude!;
+  const lng = raw.location!.longitude!;
+  const imageUrls: string[] = [];
 
-    // Label is 100% dynamic from Google — the exact phrase Google Maps shows
-    // ("Fresh food market"). Only fall back to a title-cased primaryType or
-    // types[0] if the API omits the display name, which is rare.
-    const categoryLabel =
-      raw.primaryTypeDisplayName?.text?.trim() ||
-      (primaryType ? titleCaseType(primaryType) : '') ||
-      (types[0] ? titleCaseType(types[0]) : 'Place');
+  const primaryType = raw.primaryType;
+  const types = raw.types || [];
 
-    const category = primaryType || types[0] || 'place';
-    const categoryIcon = iconForPrimaryType(primaryType, types);
+  const categoryLabel =
+    raw.primaryTypeDisplayName?.text?.trim() ||
+    (primaryType ? titleCaseType(primaryType) : '') ||
+    (types[0] ? titleCaseType(types[0]) : 'Place');
 
-    const priceLevel =
-      raw.priceLevel && raw.priceLevel in PRICE_LEVEL_MAP
-        ? PRICE_LEVEL_MAP[raw.priceLevel]
-        : undefined;
+  const category = primaryType || types[0] || 'place';
+  const categoryIcon = iconForPrimaryType(primaryType, types);
 
-    return {
-      placeId: raw.id!,
-      name: raw.displayName?.text || '',
-      category,
-      categoryLabel,
-      categoryIcon,
-      address: raw.shortFormattedAddress || raw.formattedAddress || '',
-      location: { lat, lng },
-      distance: haversineMeters(this.userLocation, { lat, lng }),
-      rating: raw.rating,
-      userRatingsTotal: raw.userRatingCount,
-      priceLevel,
-      openNow: raw.currentOpeningHours?.openNow ?? raw.regularOpeningHours?.openNow,
-      imageUrls,
+  const priceLevel =
+    raw.priceLevel && raw.priceLevel in PRICE_LEVEL_MAP
+      ? PRICE_LEVEL_MAP[raw.priceLevel]
+      : undefined;
+
+  return {
+    placeId: raw.id!,
+    name: raw.displayName?.text || '',
+    category,
+    categoryLabel,
+    categoryIcon,
+    address: raw.shortFormattedAddress || raw.formattedAddress || '',
+    location: { lat, lng },
+    distance: haversineMeters(userLocation, { lat, lng }),
+    rating: raw.rating,
+    userRatingsTotal: raw.userRatingCount,
+    priceLevel,
+    openNow: raw.currentOpeningHours?.openNow ?? raw.regularOpeningHours?.openNow,
+    imageUrls,
+  };
+}
+
+// Google Places "what did the user mean?" lookup. Used by the Nearby feed to
+// pin the searched-for place at the top — Google handles typos and partial
+// names ("bbagel" -> "bbagels") far better than a category sweep ever can.
+// Returns null when the user's API key is missing, the proxy fails, or the
+// top hit is filtered out (excluded type or beyond the 50km soft cap).
+export async function findSpecificPlace(
+  query: string,
+  userLocation: UserLocation,
+): Promise<NearbyPlace | null> {
+  if (!GOOGLE_PLACES_API_KEY) return null;
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+
+  try {
+    const body: Record<string, unknown> = {
+      textQuery: trimmed,
+      maxResultCount: 1,
+      locationBias: {
+        circle: {
+          center: { latitude: userLocation.lat, longitude: userLocation.lng },
+          radius: TEXT_SEARCH_BIAS_RADIUS_M,
+        },
+      },
     };
+    const res = await fetch('/api/placesv1/searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+        'X-Goog-FieldMask': PLACES_V1_FIELD_MASK,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    const data: PlacesV1Response = await res.json();
+    const raw = data.places?.[0];
+    if (!raw?.id || raw.location?.latitude == null || raw.location?.longitude == null) {
+      return null;
+    }
+    if ((raw.types || []).some(t => EXCLUDED_PLACE_TYPES.has(t))) return null;
+    const lat = raw.location.latitude;
+    const lng = raw.location.longitude;
+    if (haversineMeters(userLocation, { lat, lng }) > TEXT_SEARCH_MAX_DISTANCE_M) return null;
+    return convertV1Place(raw, userLocation);
+  } catch (err) {
+    console.error('[nearby] findSpecificPlace failed', err);
+    return null;
   }
 }
 
