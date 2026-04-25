@@ -191,10 +191,13 @@ export async function uploadActivityImage(params: {
   const safeExt = /^(jpg|jpeg|png|webp|heic|heif)$/.test(ext) ? ext : 'jpg';
   const path = `${activityId}/${uploaderId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
 
+  // Storage paths embed a random suffix and are never reused, so the bytes at
+  // a given path are effectively immutable. Cache for a year so the browser
+  // and CDN can avoid re-fetching them on every session.
   const { error: uploadError } = await supabase.storage
     .from('activity-images')
     .upload(path, file, {
-      cacheControl: '3600',
+      cacheControl: '31536000',
       upsert: false,
       contentType: file.type || `image/${safeExt === 'jpg' ? 'jpeg' : safeExt}`,
     });

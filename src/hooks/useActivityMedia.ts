@@ -13,6 +13,7 @@ import {
   type ActivityImageMedia,
   type ActivityVoteState,
 } from '../services/activityMediaService';
+import { warmImageCache } from '../lib/imagePrefetch';
 
 interface State {
   loading: boolean;
@@ -62,6 +63,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         listActivityImages(activity.id, user?.id ?? null),
         getActivityVoteState(activity.id, user?.id ?? null),
       ]);
+      warmImageCache(images.map((image) => image.url));
       setState({ loading: false, images, imageUrls: images.map((image) => image.url), activityId: activity.id, error: null, uploading: false, vote });
     } catch (err: unknown) {
       setState({ loading: false, images: [], imageUrls: [], activityId: null, error: err instanceof Error ? err.message : String(err), uploading: false, vote: ZERO_VOTE_STATE });
@@ -217,6 +219,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       listActivityImages(state.activityId, user?.id ?? null),
       getActivityVoteState(state.activityId, user?.id ?? null),
     ]);
+    warmImageCache(images.map((image) => image.url));
     setState((s) => ({ ...s, images, imageUrls: images.map((image) => image.url), vote }));
   }, [state.activityId, user?.id]);
 

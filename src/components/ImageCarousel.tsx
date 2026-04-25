@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { warmImageCache } from '../lib/imagePrefetch';
 
 interface Props {
   images: string[];
@@ -8,7 +9,7 @@ interface Props {
   onIndexChange?: (index: number) => void;
 }
 
-const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount = 1, onIndexChange }) => {
+const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount = 2, onIndexChange }) => {
   const [index, setIndex] = useState(0);
   const [loaded, setLoaded] = useState<Set<number>>(new Set());
   const [errored, setErrored] = useState<Set<number>>(new Set());
@@ -19,6 +20,7 @@ const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount =
     setIndex(0);
     setLoaded(new Set());
     setErrored(new Set());
+    warmImageCache(images);
   }, [images]);
 
   const valid = useMemo(
@@ -89,6 +91,7 @@ const ImageCarousel: React.FC<Props> = ({ images, className, style, eagerCount =
             onLoad={() => setLoaded((prev) => new Set(prev).add(i))}
             onError={() => setErrored((prev) => new Set(prev).add(i))}
             loading={i < eagerCount ? 'eager' : 'lazy'}
+            decoding="async"
           />
         );
       })}

@@ -24,6 +24,7 @@ import { listMyTrips, loadTrip } from '../services/tripsService';
 import Avatar from './Avatar';
 import PhotoViewerModal from './PhotoViewerModal';
 import TripsCarousel from './TripsCarousel';
+import { warmImageCache } from '../lib/imagePrefetch';
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -90,6 +91,7 @@ const ProfilePage: React.FC = () => {
       setStats(s);
       setPhotos(p);
       setPhotosLoading(false);
+      warmImageCache(p.map((photo) => photo.url));
     });
 
     return () => {
@@ -312,6 +314,7 @@ const ProfilePage: React.FC = () => {
                       src={photo.url}
                       alt={photo.activity_name}
                       loading="lazy"
+                      decoding="async"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                     <div

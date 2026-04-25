@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useTravel } from '../contexts/TravelContext';
 import { useAuth } from '../contexts/AuthContext';
 import { ensureActivity, listActivityImageUrls } from '../services/activityMediaService';
+import { warmImageCache } from '../lib/imagePrefetch';
 
 export function useActivityPhotos() {
   const { activities, setActivities, currentPlan } = useTravel();
@@ -46,6 +47,7 @@ export function useActivityPhotos() {
         );
         if (!dbActivity) continue;
         const urls = await listActivityImageUrls(dbActivity.id);
+        warmImageCache(urls);
         pending.push({ index, urls, dbActivityId: dbActivity.id });
       }
 
