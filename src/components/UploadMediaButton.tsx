@@ -24,7 +24,10 @@ interface Props {
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
 const VIDEO_ACCEPT = 'video/mp4,video/quicktime,video/webm,video/x-m4v';
-const CAMERA_ACCEPT = `${IMAGE_ACCEPT},${VIDEO_ACCEPT}`;
+// iOS Safari falls back to the Photo Library when `capture` is paired with an
+// explicit MIME list — only the wildcard form ("image/*,video/*") triggers the
+// native camera with a Photo/Video toggle.
+const CAMERA_ACCEPT = 'image/*,video/*';
 
 const UploadMediaButton: React.FC<Props> = ({
   onPhotoFile,
