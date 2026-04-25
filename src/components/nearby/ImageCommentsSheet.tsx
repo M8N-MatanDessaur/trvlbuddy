@@ -372,45 +372,53 @@ const ImageCommentsSheet: React.FC<Props> = ({
         <div className="px-4 py-3 border-t" style={{ borderColor: 'var(--outline)' }}>
           {replyingTo && (
             <div
-              className="mb-2 flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-[12px]"
+              className="mb-2 flex items-center justify-between gap-2 rounded-full px-3 py-1.5 text-[12px]"
               style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
             >
-              <span className="min-w-0 truncate">
+              <span className="min-w-0 truncate font-bold">
                 Replying to {commentAuthor(replyingTo, user?.id)}
               </span>
               <button
                 type="button"
                 onClick={() => setReplyingTo(null)}
-                className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: 'transparent', border: 'none', color: 'var(--accent)', minHeight: 0, minWidth: 0, padding: 0 }}
                 aria-label="Cancel reply"
               >
-                <X size={14} />
+                <X size={13} />
               </button>
             </div>
           )}
           <div
-            className="flex items-end gap-2 rounded-lg p-2"
+            className="flex items-center gap-2 rounded-full pl-4 pr-2"
             style={{
               background: 'var(--bg-primary)',
               border: '1px solid var(--outline)',
+              height: '44px',
             }}
           >
-            <textarea
+            <input
+              type="text"
               value={body}
               onChange={(event) => setBody(event.target.value.slice(0, 500))}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  submit();
+                }
+              }}
               placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
-              className="flex-1 resize-none bg-transparent px-1 py-1.5 text-[14px] outline-none"
-              rows={1}
+              className="flex-1 bg-transparent text-[14px] outline-none"
               style={{ color: 'var(--text-primary)' }}
             />
             <button
               onClick={submit}
               disabled={submitting || body.trim().length === 0}
-              className="w-10 h-10 rounded-lg flex items-center justify-center disabled:opacity-50"
+              className="w-9 h-9 rounded-full flex items-center justify-center disabled:opacity-50 flex-shrink-0"
               style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
               aria-label={replyingTo ? 'Post reply' : 'Post comment'}
             >
-              {submitting ? <Loader2 size={17} className="animate-spin" /> : <SendHorizontal size={18} />}
+              {submitting ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={16} />}
             </button>
           </div>
         </div>

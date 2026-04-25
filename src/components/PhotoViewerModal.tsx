@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle,
+  Check,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -10,6 +11,8 @@ import {
   Loader2,
   MessageCircle,
   MoreHorizontal,
+  Pencil,
+  Reply,
   SendHorizontal,
   Trash2,
   X,
@@ -17,14 +20,34 @@ import {
 import {
   addActivityImageComment,
   deleteActivityImage,
+  deleteActivityImageComment,
   isImageLikedByViewer,
   listActivityImageComments,
   setActivityImageLiked,
+  updateActivityImageComment,
   type ActivityImageComment,
   type UserPhoto,
 } from '../services/activityMediaService';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+
+interface CommentNode extends ActivityImageComment {
+  replies: CommentNode[];
+}
+
+function buildCommentTree(comments: ActivityImageComment[]): CommentNode[] {
+  const nodes = new Map<string, CommentNode>();
+  comments.forEach((comment) => {
+    nodes.set(comment.id, { ...comment, replies: [] });
+  });
+  const roots: CommentNode[] = [];
+  nodes.forEach((node) => {
+    const parent = node.parent_comment_id ? nodes.get(node.parent_comment_id) : null;
+    if (parent && parent.id !== node.id) parent.replies.push(node);
+    else roots.push(node);
+  });
+  return roots;
+}
 
 interface Props {
   photos: UserPhoto[];
@@ -69,6 +92,10 @@ const PhotoViewerModal: React.FC<Props> = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
+  const [replyingTo, setReplyingTo] = useState<ActivityImageComment | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState('');
+  const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
 
   const open = initialIndex !== null && photos.length > 0;
   const photo = open ? photos[Math.max(0, Math.min(index, photos.length - 1))] : null;
@@ -89,6 +116,10 @@ const PhotoViewerModal: React.FC<Props> = ({
     setComments([]);
     setMenuOpen(false);
     setConfirmDeleteOpen(false);
+    setReplyingTo(null);
+    setEditingId(null);
+    setEditingBody('');
+    setBusyCommentId(null);
     setLoadingComments(true);
 
     let alive = true;
@@ -155,9 +186,11 @@ const PhotoViewerModal: React.FC<Props> = ({
   // Declared here so the hook order stays stable across renders.
   const lastTapRef = useRef(0);
 
+  const commentTree = useMemo(() => buildCommentTree(comments), [comments]);
+  const visibleCommentCount = comments.filter((c) => !c.deleted_at).length;
+
   if (!photo) return null;
 
-  const visibleComments = comments.filter((c) => !c.deleted_at);
   const hasPrev = index > 0;
   const hasNext = index < photos.length - 1;
 
@@ -254,6 +287,7 @@ const PhotoViewerModal: React.FC<Props> = ({
       imageId: photo.id,
       userId: user.id,
       body: trimmed,
+      parentCommentId: replyingTo?.id ?? null,
     });
     setSubmitting(false);
     if (error || !comment) {
@@ -262,7 +296,192 @@ const PhotoViewerModal: React.FC<Props> = ({
     }
     setComments((rows) => [...rows, comment]);
     setBody('');
+    setReplyingTo(null);
     onCommentAdded?.(photo.id);
+  };
+
+  const startEdit = (comment: ActivityImageComment) => {
+    setEditingId(comment.id);
+    setEditingBody(comment.body);
+  };
+
+  const saveEdit = async (comment: ActivityImageComment) => {
+    if (!user) return;
+    const trimmed = editingBody.trim();
+    if (!trimmed) return;
+
+    setBusyCommentId(comment.id);
+    const result = await updateActivityImageComment({
+      commentId: comment.id,
+      userId: user.id,
+      body: trimmed,
+    });
+    setBusyCommentId(null);
+
+    if (result.error || !result.comment) {
+      toast(result.error || 'Could not update comment', 'error');
+      return;
+    }
+
+    setComments((rows) => rows.map((row) => (row.id === comment.id ? result.comment! : row)));
+    setEditingId(null);
+    setEditingBody('');
+  };
+
+  const removeComment = async (comment: ActivityImageComment) => {
+    if (!user || comment.deleted_at) return;
+
+    setBusyCommentId(comment.id);
+    const result = await deleteActivityImageComment({
+      commentId: comment.id,
+      userId: user.id,
+    });
+    setBusyCommentId(null);
+
+    if (result.error) {
+      toast(result.error || 'Could not delete comment', 'error');
+      return;
+    }
+
+    const deletedAt = new Date().toISOString();
+    setComments((rows) => rows.map((row) => (
+      row.id === comment.id
+        ? { ...row, body: 'This comment was deleted.', deleted_at: deletedAt, updated_at: deletedAt }
+        : row
+    )));
+    if (replyingTo?.id === comment.id) setReplyingTo(null);
+    if (editingId === comment.id) {
+      setEditingId(null);
+      setEditingBody('');
+    }
+  };
+
+  const renderComment = (comment: CommentNode, depth = 0): React.ReactNode => {
+    const isOwn = comment.user_id === user?.id;
+    const isDeleted = Boolean(comment.deleted_at);
+    const isEditing = editingId === comment.id;
+    const author = isOwn ? 'You' : 'Traveler';
+    const canAct = Boolean(user) && !isDeleted;
+
+    return (
+      <div key={comment.id} className={depth > 0 ? 'ml-9 mt-3' : ''}>
+        <div className="flex gap-2.5">
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-extrabold"
+            style={{
+              background: isDeleted ? 'var(--surface-container-high)' : 'var(--accent-container)',
+              color: isDeleted ? 'var(--text-tertiary)' : 'var(--accent)',
+            }}
+          >
+            {isDeleted ? '-' : author.slice(0, 1)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] font-bold">{isDeleted ? 'Deleted' : author}</span>
+              <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                {formatCommentTime(comment.created_at)}
+              </span>
+              {!isDeleted && comment.updated_at && comment.updated_at !== comment.created_at && (
+                <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                  edited
+                </span>
+              )}
+            </div>
+
+            {isEditing ? (
+              <div className="mt-1.5">
+                <textarea
+                  value={editingBody}
+                  onChange={(event) => setEditingBody(event.target.value.slice(0, 500))}
+                  rows={2}
+                  className="w-full resize-none rounded-lg px-3 py-2 text-[13px] outline-none"
+                  style={{
+                    background: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--outline)',
+                  }}
+                />
+                <div className="flex items-center gap-2 mt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => saveEdit(comment)}
+                    disabled={busyCommentId === comment.id || !editingBody.trim()}
+                    className="h-8 px-2.5 rounded-lg flex items-center gap-1 text-[12px] font-bold disabled:opacity-50"
+                    style={{ background: 'var(--accent)', color: 'var(--on-accent)', border: 'none', minHeight: 0 }}
+                  >
+                    {busyCommentId === comment.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingId(null);
+                      setEditingBody('');
+                    }}
+                    className="h-8 px-2.5 rounded-lg text-[12px] font-bold"
+                    style={{ background: 'var(--surface-container-high)', color: 'var(--text-secondary)', border: 'none', minHeight: 0 }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p
+                className="text-[13px] leading-relaxed break-words mt-0.5"
+                style={{
+                  color: isDeleted ? 'var(--text-tertiary)' : 'var(--text-secondary)',
+                  fontStyle: isDeleted ? 'italic' : undefined,
+                }}
+              >
+                {comment.body}
+              </p>
+            )}
+
+            {!isEditing && canAct && (
+              <div className="flex items-center gap-3 mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setReplyingTo(comment)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold"
+                  style={{ color: 'var(--text-tertiary)', background: 'transparent', border: 'none', padding: 0, minHeight: 0, minWidth: 0 }}
+                >
+                  <Reply size={12} />
+                  Reply
+                </button>
+                {isOwn && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(comment)}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold"
+                      style={{ color: 'var(--text-tertiary)', background: 'transparent', border: 'none', padding: 0, minHeight: 0, minWidth: 0 }}
+                    >
+                      <Pencil size={12} />
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeComment(comment)}
+                      disabled={busyCommentId === comment.id}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold disabled:opacity-50"
+                      style={{ color: '#dc2626', background: 'transparent', border: 'none', padding: 0, minHeight: 0, minWidth: 0 }}
+                    >
+                      {busyCommentId === comment.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                      Delete
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {comment.replies.length > 0 && (
+          <div className="mt-1">
+            {comment.replies.map((reply) => renderComment(reply, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const mapsUrl = photo.google_maps_url
@@ -357,7 +576,7 @@ const PhotoViewerModal: React.FC<Props> = ({
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'contain',
+              objectFit: 'cover',
               cursor: 'pointer',
             }}
           />
@@ -457,7 +676,7 @@ const PhotoViewerModal: React.FC<Props> = ({
             }}
           >
             <MessageCircle size={16} />
-            <span className="text-[13px] font-bold leading-none">{visibleComments.length}</span>
+            <span className="text-[13px] font-bold leading-none">{visibleCommentCount}</span>
           </div>
 
           {ownPhoto && (
@@ -541,12 +760,12 @@ const PhotoViewerModal: React.FC<Props> = ({
         </div>
 
         {/* Comments scroll */}
-        <div className="flex-1 overflow-y-auto px-4 py-3">
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
           {loadingComments ? (
             <div className="flex items-center justify-center py-8" style={{ color: 'var(--text-secondary)' }}>
               <Loader2 size={18} className="animate-spin" />
             </div>
-          ) : visibleComments.length === 0 ? (
+          ) : comments.length === 0 ? (
             <div className="py-8 text-center">
               <p className="text-[13px] font-bold">No comments yet.</p>
               <p className="text-[12px] mt-1" style={{ color: 'var(--text-secondary)' }}>
@@ -554,40 +773,31 @@ const PhotoViewerModal: React.FC<Props> = ({
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {visibleComments.map((comment) => {
-                const isOwn = comment.user_id === user?.id;
-                return (
-                  <div key={comment.id} className="flex gap-2.5">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-extrabold"
-                      style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
-                    >
-                      {(isOwn ? 'You' : 'T').slice(0, 1)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-bold">{isOwn ? 'You' : 'Traveler'}</span>
-                        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
-                          {formatCommentTime(comment.created_at)}
-                        </span>
-                      </div>
-                      <p
-                        className="text-[13px] leading-relaxed break-words mt-0.5"
-                        style={{ color: 'var(--text-secondary)' }}
-                      >
-                        {comment.body}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            commentTree.map((comment) => renderComment(comment))
           )}
         </div>
 
         {/* Comment input */}
         <div className="px-4 py-3" style={{ borderTop: '0.33px solid var(--outline)', flexShrink: 0 }}>
+          {replyingTo && (
+            <div
+              className="mb-2 flex items-center justify-between gap-2 rounded-full px-3 py-1.5 text-[12px]"
+              style={{ background: 'var(--accent-container)', color: 'var(--accent)' }}
+            >
+              <span className="min-w-0 truncate font-bold">
+                Replying to {replyingTo.user_id === user?.id ? 'yourself' : 'Traveler'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setReplyingTo(null)}
+                className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: 'transparent', border: 'none', color: 'var(--accent)', minHeight: 0, minWidth: 0, padding: 0 }}
+                aria-label="Cancel reply"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          )}
           <div
             className="flex items-center gap-2 rounded-full pl-4 pr-2"
             style={{
@@ -606,7 +816,7 @@ const PhotoViewerModal: React.FC<Props> = ({
                   submitComment();
                 }
               }}
-              placeholder="Add a comment..."
+              placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
               className="flex-1 bg-transparent text-[14px] outline-none"
               style={{ color: 'var(--text-primary)' }}
             />
@@ -615,7 +825,7 @@ const PhotoViewerModal: React.FC<Props> = ({
               disabled={submitting || !body.trim()}
               className="w-9 h-9 rounded-full flex items-center justify-center disabled:opacity-50 flex-shrink-0"
               style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
-              aria-label="Post comment"
+              aria-label={replyingTo ? 'Post reply' : 'Post comment'}
             >
               {submitting ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={16} />}
             </button>
