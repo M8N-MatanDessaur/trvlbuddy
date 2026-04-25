@@ -10,22 +10,69 @@ export const TARGET_HEIGHT = 720;
 export const TARGET_VIDEO_BITRATE = '1200k';
 export const POSTER_QUALITY = 4; // 1-31 (lower = higher quality)
 
+const FFMPEG_CORE_VERSION = '0.12.10';
+// Ordered fallback list. unpkg occasionally serves a 403/HTML error page for
+// scoped packages (CDN edge issues) — when that happens the bytes still come
+// back with a 2xx-or-not status that the default toBlobURL ignores, the HTML
+// gets wrapped as text/javascript, and the worker fails with the opaque
+// "failed to import ffmpeg-core.js". Trying jsdelivr next gives us a clean
+// recovery path without requiring an app reload.
+const FFMPEG_CORE_BASES = [
+  `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`,
+  `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`,
+];
+
 let loader: Promise<FFmpeg> | null = null;
 
 async function loadFFmpeg(): Promise<FFmpeg> {
   if (loader) return loader;
   loader = (async () => {
     const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-    const { toBlobURL } = await import('@ffmpeg/util');
-    const CORE_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
     const ff = new FFmpeg();
-    await ff.load({
-      coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
-    return ff;
-  })();
+    const errors: string[] = [];
+    for (const base of FFMPEG_CORE_BASES) {
+      try {
+        const [coreURL, wasmURL] = await Promise.all([
+          fetchAsBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
+          fetchAsBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
+        ]);
+        await ff.load({ coreURL, wasmURL });
+        return ff;
+      } catch (e) {
+        errors.push(`${base}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    throw new Error(`Could not load video engine. Tried: ${errors.join(' | ')}`);
+  })().catch((e) => {
+    // Don't pin a rejected loader — the next call should be allowed to retry
+    // (e.g. after the user comes back online).
+    loader = null;
+    throw e;
+  });
   return loader;
+}
+
+// Like @ffmpeg/util's toBlobURL but verifies the fetch succeeded and that the
+// body looks like the expected asset, so a CDN error page can't be wrapped as
+// JavaScript and turned into the opaque "failed to import ffmpeg-core.js"
+// downstream.
+async function fetchAsBlobURL(url: string, mimeType: string): Promise<string> {
+  const res = await fetch(url, { credentials: 'omit' });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} fetching ${url}`);
+  }
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength === 0) {
+    throw new Error(`Empty response from ${url}`);
+  }
+  if (mimeType === 'application/wasm') {
+    // wasm magic: 0x00 0x61 0x73 0x6d (\0asm)
+    const head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+    if (head[0] !== 0x00 || head[1] !== 0x61 || head[2] !== 0x73 || head[3] !== 0x6d) {
+      throw new Error(`Invalid wasm magic from ${url}`);
+    }
+  }
+  return URL.createObjectURL(new Blob([buf], { type: mimeType }));
 }
 
 export interface VideoMeta {
