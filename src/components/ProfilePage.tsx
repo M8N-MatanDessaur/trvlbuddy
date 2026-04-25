@@ -7,6 +7,7 @@ import {
   Image as ImageIcon,
   LogOut,
   MessageCircle,
+  Play,
   Plane,
   Settings as SettingsIcon,
 } from 'lucide-react';
@@ -20,13 +21,22 @@ import {
   type UserPhoto,
   type UserSocialStats,
 } from '../services/activityMediaService';
+import { listUserVideos, type UserVideo } from '../services/activityVideoService';
 import { listMyTrips, loadTrip } from '../services/tripsService';
 import Avatar from './Avatar';
 import CachedImage from './CachedImage';
 import PhotoViewerModal from './PhotoViewerModal';
+import VideoViewerModal from './VideoViewerModal';
 import TripsCarousel from './TripsCarousel';
 import { warmImageCache } from '../lib/imagePrefetch';
 import { thumbhashToCssDataUrl } from '../lib/thumbhash';
+
+// Unified grid item for the profile media wall. Image and video rows
+// have different shapes in the DB; the discriminator lets the grid
+// render each correctly without forcing one schema to fit the other.
+type ProfileMediaItem =
+  | { kind: 'image'; data: UserPhoto }
+  | { kind: 'video'; data: UserVideo };
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -54,11 +64,24 @@ const ProfilePage: React.FC = () => {
   const [profileLoading, setProfileLoading] = useState(!isOwn);
   const [stats, setStats] = useState<UserSocialStats>({ postCount: 0, likesReceived: 0, commentsReceived: 0 });
   const [photos, setPhotos] = useState<UserPhoto[]>([]);
+  const [videos, setVideos] = useState<UserVideo[]>([]);
   const [photosLoading, setPhotosLoading] = useState(true);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [tripsLoading, setTripsLoading] = useState(isOwn);
   const [loadingTripId, setLoadingTripId] = useState<string | null>(null);
   const [openPhotoId, setOpenPhotoId] = useState<string | null>(null);
+  const [openVideoId, setOpenVideoId] = useState<string | null>(null);
+
+  // Merge into one chronological grid. Done here (rather than in state)
+  // so optimistic updates to either array re-merge automatically.
+  const mediaItems = useMemo<ProfileMediaItem[]>(() => {
+    const items: ProfileMediaItem[] = [
+      ...photos.map<ProfileMediaItem>((data) => ({ kind: 'image', data })),
+      ...videos.map<ProfileMediaItem>((data) => ({ kind: 'video', data })),
+    ];
+    items.sort((a, b) => (a.data.created_at < b.data.created_at ? 1 : -1));
+    return items;
+  }, [photos, videos]);
 
   useEffect(() => {
     if (isOwn) setProfile(ownProfile);
@@ -88,12 +111,20 @@ const ProfilePage: React.FC = () => {
     let alive = true;
     setPhotosLoading(true);
 
-    Promise.all([getUserSocialStats(targetId), listUserPhotos(targetId)]).then(([s, p]) => {
+    Promise.all([
+      getUserSocialStats(targetId),
+      listUserPhotos(targetId),
+      listUserVideos(targetId),
+    ]).then(([s, p, v]) => {
       if (!alive) return;
       setStats(s);
       setPhotos(p);
+      setVideos(v);
       setPhotosLoading(false);
-      warmImageCache(p.map((photo) => photo.url));
+      warmImageCache([
+        ...p.map((photo) => photo.url),
+        ...v.map((video) => video.posterUrl),
+      ]);
     });
 
     return () => {
@@ -155,8 +186,13 @@ const ProfilePage: React.FC = () => {
     setOpenPhotoId(photo.id);
   };
 
+  const handleVideoTap = (video: UserVideo) => {
+    setOpenVideoId(video.id);
+  };
+
   const openIndex = openPhotoId ? photos.findIndex((p) => p.id === openPhotoId) : -1;
   const initialIndex = openIndex >= 0 ? openIndex : null;
+  const openVideo = openVideoId ? videos.find((v) => v.id === openVideoId) ?? null : null;
 
   const displayName = profile?.display_name || profile?.email || (isOwn ? 'Traveler' : 'Traveler');
   const influence = profile?.influence ?? 0;
@@ -291,61 +327,123 @@ const ProfilePage: React.FC = () => {
                   />
                 ))}
               </div>
-            ) : photos.length === 0 ? (
+            ) : mediaItems.length === 0 ? (
               <div
                 className="rounded-2xl px-4 py-6 text-center"
                 style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)' }}
               >
                 <ImageIcon size={20} className="mx-auto mb-2" style={{ color: 'var(--text-tertiary)' }} />
                 <p className="text-[13px] font-bold">
-                  {isOwn ? 'No photos yet' : 'Nothing posted yet'}
+                  {isOwn ? 'No posts yet' : 'Nothing posted yet'}
                 </p>
                 <p className="text-[12px] mt-1">
-                  {isOwn ? 'Tap the plus button on a place to share a photo.' : ' '}
+                  {isOwn ? 'Tap the plus button on a place to share a photo or video.' : ' '}
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-2">
-                {photos.map((photo) => {
-                  const placeholder = thumbhashToCssDataUrl(photo.thumbhash);
+                {mediaItems.map((item) => {
+                  if (item.kind === 'image') {
+                    const photo = item.data;
+                    const placeholder = thumbhashToCssDataUrl(photo.thumbhash);
+                    return (
+                      <button
+                        key={`image-${photo.id}`}
+                        onClick={() => handlePhotoTap(photo)}
+                        className="relative overflow-hidden rounded-xl transition-transform active:scale-95"
+                        style={{
+                          aspectRatio: '1 / 1',
+                          background: placeholder
+                            ? `center / cover no-repeat url(${placeholder})`
+                            : 'var(--surface-container-high)',
+                          border: 'none',
+                          padding: 0,
+                        }}
+                        aria-label={`Open ${photo.activity_name}`}
+                      >
+                        <CachedImage
+                          src={photo.url}
+                          alt={photo.activity_name}
+                          loading="lazy"
+                          decoding="async"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                        <div
+                          aria-hidden="true"
+                          className="absolute inset-x-0 bottom-0 px-2 pt-4 pb-1.5"
+                          style={{
+                            background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+                            color: 'white',
+                          }}
+                        >
+                          <div className="flex items-center gap-1 text-[10px] font-bold">
+                            <Heart size={10} fill="currentColor" />
+                            <span>{photo.likeCount}</span>
+                            <MessageCircle size={10} className="ml-1.5" />
+                            <span>{photo.commentCount}</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  }
+                  // Video tile — same square thumbnail shape as photos, with
+                  // the trim-start poster and a Play badge so the tile reads
+                  // as video at a glance.
+                  const video = item.data;
+                  const placeholder = thumbhashToCssDataUrl(video.thumbhash);
                   return (
-                  <button
-                    key={photo.id}
-                    onClick={() => handlePhotoTap(photo)}
-                    className="relative overflow-hidden rounded-xl transition-transform active:scale-95"
-                    style={{
-                      aspectRatio: '1 / 1',
-                      background: placeholder
-                        ? `center / cover no-repeat url(${placeholder})`
-                        : 'var(--surface-container-high)',
-                      border: 'none',
-                      padding: 0,
-                    }}
-                    aria-label={`Open ${photo.activity_name}`}
-                  >
-                    <CachedImage
-                      src={photo.url}
-                      alt={photo.activity_name}
-                      loading="lazy"
-                      decoding="async"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                    <div
-                      aria-hidden="true"
-                      className="absolute inset-x-0 bottom-0 px-2 pt-4 pb-1.5"
+                    <button
+                      key={`video-${video.id}`}
+                      onClick={() => handleVideoTap(video)}
+                      className="relative overflow-hidden rounded-xl transition-transform active:scale-95"
                       style={{
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
-                        color: 'white',
+                        aspectRatio: '1 / 1',
+                        background: placeholder
+                          ? `center / cover no-repeat url(${placeholder})`
+                          : 'var(--surface-container-high)',
+                        border: 'none',
+                        padding: 0,
                       }}
+                      aria-label={`Open video from ${video.activity_name}`}
                     >
-                      <div className="flex items-center gap-1 text-[10px] font-bold">
-                        <Heart size={10} fill="currentColor" />
-                        <span>{photo.likeCount}</span>
-                        <MessageCircle size={10} className="ml-1.5" />
-                        <span>{photo.commentCount}</span>
+                      <CachedImage
+                        src={video.posterUrl}
+                        alt={video.activity_name}
+                        loading="lazy"
+                        decoding="async"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      {/* Play badge top-right */}
+                      <div
+                        aria-hidden="true"
+                        className="absolute top-1.5 right-1.5 flex items-center justify-center rounded-full"
+                        style={{
+                          width: 22,
+                          height: 22,
+                          background: 'rgba(0,0,0,0.55)',
+                          backdropFilter: 'blur(6px)',
+                          WebkitBackdropFilter: 'blur(6px)',
+                          color: 'white',
+                        }}
+                      >
+                        <Play size={11} fill="currentColor" />
                       </div>
-                    </div>
-                  </button>
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-x-0 bottom-0 px-2 pt-4 pb-1.5"
+                        style={{
+                          background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
+                          color: 'white',
+                        }}
+                      >
+                        <div className="flex items-center gap-1 text-[10px] font-bold">
+                          <Heart size={10} fill="currentColor" />
+                          <span>{video.likeCount}</span>
+                          <MessageCircle size={10} className="ml-1.5" />
+                          <span>{video.commentCount}</span>
+                        </div>
+                      </div>
+                    </button>
                   );
                 })}
               </div>
@@ -455,6 +553,11 @@ const ProfilePage: React.FC = () => {
           );
           setStats((s) => ({ ...s, commentsReceived: s.commentsReceived + 1 }));
         }}
+      />
+
+      <VideoViewerModal
+        video={openVideo}
+        onClose={() => setOpenVideoId(null)}
       />
     </div>
   );
