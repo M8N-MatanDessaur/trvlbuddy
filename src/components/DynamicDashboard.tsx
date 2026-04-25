@@ -8,12 +8,13 @@ import { useToast } from '../contexts/ToastContext';
 import { useCompletedActivities } from '../hooks/useCompletedActivities';
 import { computeSlug } from '../services/activityMediaService';
 import TripGoneScreen from './TripGoneScreen';
-import { Cloud, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { MapPin, Calendar, Plane, Train, Car, Ship, Bus, Map, Navigation as NavIcon, Globe, Coins, Phone, Hotel, Compass, Sparkles, Lightbulb, Heart, RefreshCw, Loader2, Pencil, X as XIcon, Cloud, Sun, CloudRain } from 'lucide-react';
 import DayDebrief from './trip/DayDebrief';
 import TripMembersStrip from './TripMembersStrip';
 import ShareTripModal from './ShareTripModal';
 import SegmentBrief from './SegmentBrief';
+import TripMapOverview from './TripMapOverview';
 
 interface WeatherData {
   temp: number;
@@ -89,6 +90,7 @@ const DynamicDashboard: React.FC = () => {
   const [weatherData, setWeatherData] = useState<{ [key: string]: WeatherData }>({});
   const [selectedWeatherLoc, setSelectedWeatherLoc] = useState('');
   const [showShare, setShowShare] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const tripIdForHeader = currentTripId;
   const openShareDialog = () => {
     if (!tripIdForHeader) {
@@ -304,6 +306,23 @@ const DynamicDashboard: React.FC = () => {
           <h1 className="text-2xl font-extrabold tracking-tight leading-tight flex-1 min-w-0">
             {currentPlan.title || 'Your Trip'}
           </h1>
+          <button
+            onClick={() => setShowMap(true)}
+            className="flex items-center justify-center rounded-full flex-shrink-0 transition-transform active:scale-95"
+            style={{
+              width: 36,
+              height: 36,
+              background: 'var(--surface-container-high)',
+              color: 'var(--text-primary)',
+              border: 'none',
+              minHeight: 0,
+              minWidth: 0,
+              padding: 0,
+            }}
+            aria-label="Open trip map"
+          >
+            <Map size={16} />
+          </button>
           <TripMembersStrip tripId={tripIdForHeader} onInvite={openShareDialog} />
         </div>
         <div className="flex items-center gap-2 text-[13px] text-[var(--text-secondary)] mt-1 flex-wrap">
@@ -632,6 +651,7 @@ const DynamicDashboard: React.FC = () => {
       )}
 
       <ShareTripModal isOpen={showShare} onClose={() => setShowShare(false)} tripId={tripIdForHeader} />
+      <TripMapOverview isOpen={showMap} onClose={() => setShowMap(false)} />
     </section>
   );
 };
