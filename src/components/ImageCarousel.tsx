@@ -146,6 +146,7 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
             onError={() => handleImageError(src)}
             loading={i < eagerCount ? 'eager' : 'lazy'}
             decoding="async"
+            crossOrigin="anonymous"
           />
         );
       })}

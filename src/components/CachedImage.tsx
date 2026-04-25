@@ -13,6 +13,10 @@ interface CachedImageProps {
   height?: number;
   referrerPolicy?: React.HTMLAttributeReferrerPolicy;
   draggable?: boolean;
+  // crossOrigin defaults to "anonymous" so the service worker receives a
+  // typed CORS response it can validate (response.ok). Without this, all
+  // image fetches are opaque and the SW can't tell success from failure.
+  crossOrigin?: 'anonymous' | 'use-credentials' | '';
 }
 
 // An <img> request can be aborted mid-flight when its parent unmounts during
@@ -42,6 +46,7 @@ const CachedImage: React.FC<CachedImageProps> = ({
   height,
   referrerPolicy,
   draggable,
+  crossOrigin = 'anonymous',
 }) => {
   const [attempt, setAttempt] = useState(0);
 
@@ -74,6 +79,7 @@ const CachedImage: React.FC<CachedImageProps> = ({
       height={height}
       referrerPolicy={referrerPolicy}
       draggable={draggable}
+      crossOrigin={crossOrigin}
     />
   );
 };
