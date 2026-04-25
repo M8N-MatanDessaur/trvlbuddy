@@ -486,12 +486,18 @@ export async function deleteActivityImage(params: {
 }): Promise<{ error: string | null }> {
   const { imageId, userId, storagePath } = params;
 
-  const { error } = await supabase
+  // Select after delete so we can detect RLS-blocked deletes (which return
+  // no error but affect zero rows).
+  const { data, error } = await supabase
     .from('activity_images')
     .delete()
     .eq('id', imageId)
-    .eq('uploaded_by', userId);
+    .eq('uploaded_by', userId)
+    .select('id');
   if (error) return { error: error.message };
+  if (!data || data.length === 0) {
+    return { error: 'Could not delete photo' };
+  }
 
   // Storage object cleanup is best-effort; the row delete is the source of truth.
   try {
