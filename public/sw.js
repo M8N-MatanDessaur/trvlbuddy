@@ -5,12 +5,15 @@
 //   trvlbuddy-rest-v1     supabase REST reads — stale-while-revalidate
 
 const CACHE_NAME = 'trvlbuddy-v6';
-// v3 — v2 cached every opaque response unconditionally. That meant 404s and
-// 5xx errors from Supabase Storage (also opaque under no-cors) got persisted
-// for 30 days, and users saw broken-image icons that survived reloads and
-// app restarts. v3 probes opaque responses with a CORS HEAD before caching;
-// bumping the name evicts the bad entries left behind by v2.
-const IMG_CACHE = 'trvlbuddy-imgs-v3';
+// v4 — Android back-gesture aborts in-flight image streams. The browser's
+// HTTP cache (sitting below the SW) sometimes persists that partial response;
+// the SW's `fetch(request)` then reads the poisoned bytes from browser cache,
+// the CORS HEAD probe to origin still returns 200, and we cache the broken
+// response for 30 days. Two changes: the GET now uses `cache: 'reload'` to
+// bypass the browser HTTP cache, and only validated CORS responses are
+// stored — opaque responses are passed straight through. Bumping the name
+// evicts the poisoned v3 entries.
+const IMG_CACHE = 'trvlbuddy-imgs-v4';
 const REST_CACHE = 'trvlbuddy-rest-v1';
 
 const IMG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -71,13 +74,15 @@ function storePendingFile(text) {
 
 // ── Runtime-cache helpers ────────────────────────────────────────────────
 
-// Cache-first with TTL. The previous version of this function rebuilt the
-// response by reading .blob() and wrapping it in a new Response — that
-// quietly broke for opaque cross-origin responses (img tags without
-// crossOrigin), whose body is unreadable so we cached an empty status-0
-// shell. We now store the ORIGINAL response clone and keep the timestamp
-// in a sidecar cache entry under a fragment-keyed URL so opaque bytes
-// survive intact.
+// Cache-first with TTL. Two failure modes guided this implementation:
+//   1. The browser HTTP cache (below the SW) can persist partial bytes from
+//      requests aborted mid-stream by Android back-gesture / route changes.
+//      We pass `cache: 'reload'` on the upstream GET to bypass it.
+//   2. Opaque (no-cors) responses don't expose status, so we can't tell an
+//      error from success — a CORS HEAD heuristic was unreliable. The page
+//      now sets crossOrigin="anonymous" on every Supabase image, so we
+//      receive validated CORS responses here and cache only response.ok.
+//      Opaque responses are passed straight through, never persisted.
 async function cacheFirstWithExpiry(request, cacheName, maxAgeMs, maxEntries) {
   const cache = await caches.open(cacheName);
   const tsKey = request.url + '#__sw_ts__';
@@ -91,34 +96,19 @@ async function cacheFirstWithExpiry(request, cacheName, maxAgeMs, maxEntries) {
     if (cachedAt > 0 && Date.now() - cachedAt < maxAgeMs) {
       return cached;
     }
-    // Either expired or no timestamp — refresh.
     cache.delete(request).catch(() => {});
     cache.delete(tsKey).catch(() => {});
   }
   try {
-    const response = await fetch(request);
-    let cacheable = false;
-    if (response) {
-      if (response.type === 'basic' || response.type === 'cors') {
-        cacheable = response.status >= 200 && response.status < 400;
-      } else if (response.type === 'opaque') {
-        // Status is unreadable for opaque responses, so probe with a CORS
-        // HEAD before persisting. Without this, a 404/500 (also opaque
-        // under no-cors) gets cached for 30 days and the user sees a
-        // broken-image icon that survives reloads and app restarts.
-        try {
-          const probe = await fetch(request.url, {
-            method: 'HEAD',
-            mode: 'cors',
-            credentials: 'omit',
-            cache: 'no-store',
-          });
-          cacheable = probe.ok;
-        } catch (_) {
-          cacheable = false;
-        }
-      }
-    }
+    // Build a fresh request that bypasses the browser HTTP cache. Using
+    // `cache: 'reload'` here prevents reading aborted/partial responses that
+    // an earlier navigation may have left in the browser's HTTP cache.
+    const upstream = new Request(request, { cache: 'reload' });
+    const response = await fetch(upstream);
+    const cacheable =
+      response &&
+      (response.type === 'basic' || response.type === 'cors') &&
+      response.ok;
     if (cacheable) {
       cache.put(request, response.clone())
         .then(() => cache.put(tsKey, new Response(String(Date.now()))))
