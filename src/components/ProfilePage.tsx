@@ -22,6 +22,7 @@ import {
 } from '../services/activityMediaService';
 import { listMyTrips, loadTrip } from '../services/tripsService';
 import Avatar from './Avatar';
+import CachedImage from './CachedImage';
 import PhotoViewerModal from './PhotoViewerModal';
 import TripsCarousel from './TripsCarousel';
 import { warmImageCache } from '../lib/imagePrefetch';
@@ -322,7 +323,7 @@ const ProfilePage: React.FC = () => {
                     }}
                     aria-label={`Open ${photo.activity_name}`}
                   >
-                    <img
+                    <CachedImage
                       src={photo.url}
                       alt={photo.activity_name}
                       loading="lazy"
