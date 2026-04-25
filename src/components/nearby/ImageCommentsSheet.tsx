@@ -40,6 +40,13 @@ function formatCommentTime(value: string): string {
   return new Date(value).toLocaleDateString();
 }
 
+const DELETED_TOMBSTONE_MS = 30_000;
+
+function isStaleDelete(comment: ActivityImageComment, nowMs: number): boolean {
+  if (!comment.deleted_at) return false;
+  return nowMs - new Date(comment.deleted_at).getTime() >= DELETED_TOMBSTONE_MS;
+}
+
 function buildCommentTree(comments: ActivityImageComment[]): CommentNode[] {
   const nodes = new Map<string, CommentNode>();
   comments.forEach((comment) => {
@@ -100,8 +107,24 @@ const ImageCommentsSheet: React.FC<Props> = ({
     }
   }, [isOpen]);
 
-  const commentTree = useMemo(() => buildCommentTree(comments), [comments]);
-  const visibleCommentCount = comments.filter((comment) => !comment.deleted_at).length;
+  // Re-render every 5s while a just-deleted tombstone is still within its
+  // 30s grace window, so it disappears on schedule even without new events.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const hasRecentDelete = comments.some(
+      (c) => c.deleted_at && Date.now() - new Date(c.deleted_at).getTime() < DELETED_TOMBSTONE_MS,
+    );
+    if (!hasRecentDelete) return;
+    const id = setInterval(() => setNowMs(Date.now()), 5_000);
+    return () => clearInterval(id);
+  }, [comments]);
+
+  const displayComments = useMemo(
+    () => comments.filter((comment) => !isStaleDelete(comment, nowMs)),
+    [comments, nowMs],
+  );
+  const commentTree = useMemo(() => buildCommentTree(displayComments), [displayComments]);
+  const visibleCommentCount = displayComments.filter((comment) => !comment.deleted_at).length;
 
   if (!isOpen || !image) return null;
 
