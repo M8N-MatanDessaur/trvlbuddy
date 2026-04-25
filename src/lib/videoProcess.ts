@@ -97,15 +97,18 @@ export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> 
     const buf = new Uint8Array(await file.arrayBuffer());
     await ff.writeFile(inputName, buf);
 
-    // Trim + downscale. -ss before -i seeks fast (keyframe-based), after -i
-    // is accurate. We use after-input for accuracy on mobile captures.
+    // Trim + center-crop to 4:5 (Instagram portrait) + downscale. -ss before
+    // -i seeks fast (keyframe-based), after -i is accurate; we use
+    // after-input for accuracy on mobile captures. The crop expression
+    // takes the largest 4:5 rectangle that fits inside the source — works
+    // for landscape (16:9), square, and portrait (9:16) inputs alike.
     // scale=-2 keeps width even-numbered for H.264.
     await ff.exec([
       '-y',
       '-i', inputName,
       '-ss', startSec.toFixed(3),
       '-t', durationSec.toFixed(3),
-      '-vf', `scale=-2:'min(${maxHeight},ih)'`,
+      '-vf', `crop='min(iw,ih*4/5)':'min(ih,iw*5/4)',scale=-2:'min(${maxHeight},ih)'`,
       '-c:v', 'libx264',
       '-preset', 'veryfast',
       '-crf', '23',

@@ -190,12 +190,25 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
       </header>
 
       <div className="flex-1 flex flex-col">
-        {/* Preview */}
-        <div className="flex-1 flex items-center justify-center bg-black" style={{ minHeight: 0 }}>
+        {/* Preview — locked to a 4:5 portrait frame (Instagram-style).
+            Cover-cropping the source so the user sees exactly what will
+            be saved, instead of letting a 16:9 capture overflow. */}
+        <div
+          className="flex-1 flex items-center justify-center bg-black"
+          style={{ minHeight: 0, padding: 8 }}
+        >
           <video
             ref={videoRef}
             src={sourceUrl}
-            className="max-w-full max-h-full"
+            style={{
+              aspectRatio: '4 / 5',
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'cover',
+              display: 'block',
+              background: 'black',
+              borderRadius: 12,
+            }}
             playsInline
             muted
             preload="metadata"
