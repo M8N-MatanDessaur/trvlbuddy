@@ -1,15 +1,20 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  AtSign,
   Award,
   Bell,
+  BellRing,
   ChevronLeft,
   Heart,
   Loader2,
   MessageCircle,
   Reply,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { useNotifications } from '../hooks/useNotifications';
+import { ensurePushSubscription, isPushSupported } from '../lib/webPush';
 import type { Notification, NotificationType } from '../services/notificationsService';
 
 function timeAgo(value: string): string {
@@ -21,11 +26,12 @@ function timeAgo(value: string): string {
   return new Date(value).toLocaleDateString();
 }
 
-function iconFor(type: NotificationType) {
+function iconFor(type: NotificationType | 'comment_mentioned') {
   switch (type) {
     case 'image_liked': return Heart;
     case 'image_commented': return MessageCircle;
     case 'comment_replied': return Reply;
+    case 'comment_mentioned': return AtSign;
     case 'influence_milestone': return Award;
     default: return Bell;
   }
@@ -51,6 +57,10 @@ function bodyFor(notification: Notification): string {
       const preview = typeof data.preview === 'string' ? data.preview : '';
       return preview ? `${who} replied: "${preview}"` : `${who} replied to your comment`;
     }
+    case 'comment_mentioned' as NotificationType: {
+      const preview = typeof data.preview === 'string' ? data.preview : '';
+      return preview ? `${who} mentioned you: "${preview}"` : `${who} mentioned you`;
+    }
     case 'influence_milestone': {
       const threshold = typeof data.threshold === 'number' ? data.threshold : null;
       return threshold ? `You hit ${threshold} Influence` : 'Influence milestone reached';
@@ -62,7 +72,34 @@ function bodyFor(notification: Notification): string {
 
 const NotificationsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const { items, unread, loading, markRead, markAllRead } = useNotifications();
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
+  const [enablingPush, setEnablingPush] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPushPermission(Notification.permission);
+    }
+  }, []);
+
+  const showPushPrompt = isPushSupported() && pushPermission === 'default' && items.length > 0;
+
+  const enablePush = async () => {
+    if (!user) return;
+    setEnablingPush(true);
+    const result = await ensurePushSubscription(user.id);
+    setEnablingPush(false);
+    setPushPermission(result.permission);
+    if (result.ok) {
+      toast('Push notifications enabled', 'success');
+    } else if (result.permission === 'denied') {
+      toast('Push blocked — enable in browser settings', 'info');
+    } else if (result.error) {
+      toast(result.error, 'error');
+    }
+  };
 
   const goBack = () => {
     if (window.history.length > 1) navigate(-1);
@@ -118,7 +155,39 @@ const NotificationsPage: React.FC = () => {
           paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))',
         }}
       >
-        <div className="max-w-xl mx-auto px-5">
+        <div className="max-w-xl mx-auto px-5 space-y-3">
+          {showPushPrompt && (
+            <div
+              className="rounded-2xl p-4 flex items-start gap-3"
+              style={{
+                background: 'color-mix(in srgb, var(--accent) 8%, var(--surface-container))',
+                border: '0.5px solid color-mix(in srgb, var(--accent) 25%, var(--outline))',
+              }}
+            >
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+              >
+                <BellRing size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-bold">Turn on push notifications</p>
+                <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                  Get notified when someone likes, comments on, or mentions you — even when
+                  the app is closed.
+                </p>
+                <button
+                  onClick={enablePush}
+                  disabled={enablingPush}
+                  className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold disabled:opacity-60"
+                  style={{ background: 'var(--accent)', color: 'var(--on-accent)', border: 'none', minHeight: 0, minWidth: 0 }}
+                >
+                  {enablingPush && <Loader2 size={12} className="animate-spin" />}
+                  {enablingPush ? 'Enabling' : 'Enable notifications'}
+                </button>
+              </div>
+            </div>
+          )}
           {loading && items.length === 0 ? (
             <div className="flex items-center justify-center py-12" style={{ color: 'var(--text-secondary)' }}>
               <Loader2 size={20} className="animate-spin" />

@@ -1,8 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Loader2, MessageCircle, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { success as hapticSuccess, warning as hapticWarning } from '../../lib/haptics';
+import { getActiveMentionQuery, type MentionSuggestion } from '../../lib/mentions';
+import MentionSuggestions from '../MentionSuggestions';
+import MentionBody from '../MentionBody';
 import {
   deleteActivityImageComment,
   listActivityImageComments,
@@ -81,7 +84,33 @@ const ImageCommentsSheet: React.FC<Props> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState('');
   const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const imageId = image?.id;
+
+  const updateMentionQuery = (value: string, caret: number) => {
+    const ctx = getActiveMentionQuery(value, caret);
+    setMentionQuery(ctx ? ctx.query : null);
+  };
+
+  const insertMention = (s: MentionSuggestion) => {
+    const el = inputRef.current;
+    if (!el) return;
+    const caret = el.selectionEnd ?? body.length;
+    const ctx = getActiveMentionQuery(body, caret);
+    if (!ctx) return;
+    const token = `@[${s.display_name}](${s.id}) `;
+    const next = body.slice(0, ctx.start) + token + body.slice(ctx.end);
+    setBody(next.slice(0, 500));
+    setMentionQuery(null);
+    requestAnimationFrame(() => {
+      const pos = Math.min(next.length, ctx.start + token.length);
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(pos, pos);
+      }
+    });
+  };
 
   useEffect(() => {
     if (!isOpen || !imageId) return;
@@ -285,15 +314,14 @@ const ImageCommentsSheet: React.FC<Props> = ({
                 </div>
               </div>
             ) : (
-              <p
+              <MentionBody
+                body={comment.body}
                 className="text-[13px] leading-relaxed break-words mt-0.5"
                 style={{
                   color: isDeleted ? 'var(--text-tertiary)' : 'var(--text-secondary)',
                   fontStyle: isDeleted ? 'italic' : undefined,
                 }}
-              >
-                {comment.body}
-              </p>
+              />
             )}
 
             {!isEditing && canAct && (
@@ -421,6 +449,8 @@ const ImageCommentsSheet: React.FC<Props> = ({
               </button>
             </div>
           )}
+          <div className="relative">
+          <MentionSuggestions query={mentionQuery} onSelect={insertMention} />
           <div
             className="flex items-center gap-2 rounded-full pl-4 pr-0"
             style={{
@@ -430,9 +460,20 @@ const ImageCommentsSheet: React.FC<Props> = ({
             }}
           >
             <input
+              ref={inputRef}
               type="text"
               value={body}
-              onChange={(event) => setBody(event.target.value.slice(0, 500))}
+              onChange={(event) => {
+                const next = event.target.value.slice(0, 500);
+                setBody(next);
+                const caret = event.target.selectionEnd ?? next.length;
+                updateMentionQuery(next, caret);
+              }}
+              onKeyUp={(event) => {
+                const el = event.currentTarget;
+                updateMentionQuery(el.value, el.selectionEnd ?? el.value.length);
+              }}
+              onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
@@ -452,6 +493,7 @@ const ImageCommentsSheet: React.FC<Props> = ({
             >
               {submitting ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={16} />}
             </button>
+          </div>
           </div>
         </div>
       </div>

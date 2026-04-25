@@ -230,3 +230,44 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+// ── Web Push ─────────────────────────────────────────────────────────────
+// The server sends a JSON payload (see send-push edge function). We shape
+// it into the OS notification + deep-link so the user lands on the right
+// screen when they tap.
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch (_) {
+    payload = { title: 'TravelBuddy', body: event.data.text() };
+  }
+  const title = payload.title || 'TravelBuddy';
+  const options = {
+    body: payload.body || '',
+    icon: payload.icon || '/appicon-192.png',
+    badge: '/appicon-192.png',
+    tag: payload.tag,
+    renotify: true,
+    data: { url: payload.url || '/notifications' },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/notifications';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.focus();
+          if ('navigate' in client) client.navigate(url).catch(() => {});
+          return;
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(url);
+    }),
+  );
+});

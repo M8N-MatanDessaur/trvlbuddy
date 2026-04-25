@@ -27,6 +27,9 @@ import {
   type UserPhoto,
 } from '../services/activityMediaService';
 import { thumbhashToCssDataUrl } from '../lib/thumbhash';
+import { getActiveMentionQuery, type MentionSuggestion } from '../lib/mentions';
+import MentionSuggestions from './MentionSuggestions';
+import MentionBody from './MentionBody';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { impact as hapticImpact, success as hapticSuccess, tap as hapticTap, warning as hapticWarning } from '../lib/haptics';
@@ -103,6 +106,33 @@ const PhotoViewerModal: React.FC<Props> = ({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState('');
   const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const updateMentionQuery = (value: string, caret: number) => {
+    const ctx = getActiveMentionQuery(value, caret);
+    setMentionQuery(ctx ? ctx.query : null);
+  };
+
+  const insertMention = (s: MentionSuggestion) => {
+    const el = inputRef.current;
+    if (!el) return;
+    const caret = el.selectionEnd ?? body.length;
+    const ctx = getActiveMentionQuery(body, caret);
+    if (!ctx) return;
+    const token = `@[${s.display_name}](${s.id}) `;
+    const next = body.slice(0, ctx.start) + token + body.slice(ctx.end);
+    setBody(next.slice(0, 500));
+    setMentionQuery(null);
+    // Restore focus and move caret past the inserted token.
+    requestAnimationFrame(() => {
+      const pos = Math.min(next.length, ctx.start + token.length);
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(pos, pos);
+      }
+    });
+  };
 
   const open = initialIndex !== null && photos.length > 0;
   const photo = open ? photos[Math.max(0, Math.min(index, photos.length - 1))] : null;
@@ -474,15 +504,14 @@ const PhotoViewerModal: React.FC<Props> = ({
                 </div>
               </div>
             ) : (
-              <p
+              <MentionBody
+                body={comment.body}
                 className="text-[13px] leading-relaxed break-words mt-0.5"
                 style={{
                   color: isDeleted ? 'var(--text-tertiary)' : 'var(--text-secondary)',
                   fontStyle: isDeleted ? 'italic' : undefined,
                 }}
-              >
-                {comment.body}
-              </p>
+              />
             )}
 
             {!isEditing && canAct && (
@@ -856,6 +885,8 @@ const PhotoViewerModal: React.FC<Props> = ({
               </button>
             </div>
           )}
+          <div className="relative">
+          <MentionSuggestions query={mentionQuery} onSelect={insertMention} />
           <div
             className="flex items-center gap-2 rounded-full pl-4 pr-0"
             style={{
@@ -865,9 +896,20 @@ const PhotoViewerModal: React.FC<Props> = ({
             }}
           >
             <input
+              ref={inputRef}
               type="text"
               value={body}
-              onChange={(e) => setBody(e.target.value.slice(0, 500))}
+              onChange={(e) => {
+                const next = e.target.value.slice(0, 500);
+                setBody(next);
+                const caret = e.target.selectionEnd ?? next.length;
+                updateMentionQuery(next, caret);
+              }}
+              onKeyUp={(e) => {
+                const el = e.currentTarget;
+                updateMentionQuery(el.value, el.selectionEnd ?? el.value.length);
+              }}
+              onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -887,6 +929,7 @@ const PhotoViewerModal: React.FC<Props> = ({
             >
               {submitting ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={16} />}
             </button>
+          </div>
           </div>
         </div>
       </div>

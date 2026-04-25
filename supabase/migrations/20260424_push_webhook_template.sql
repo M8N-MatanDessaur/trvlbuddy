@@ -1,0 +1,64 @@
+-- Template: fire the send-push edge function on every new notification row.
+--
+-- This migration is commented out because it needs two values that differ
+-- per project (the function URL and the service role key). Fill them in,
+-- then run. Alternatively, configure a Database Webhook in the Supabase
+-- dashboard — Settings → Database → Webhooks → INSERT on notifications —
+-- pointing at the same URL; that's the UI-managed path.
+--
+-- Requires the pg_net extension (enable in Database → Extensions).
+--
+-- do $$
+-- begin
+--   create extension if not exists pg_net;
+-- end$$;
+--
+-- create or replace function public.notify_send_push()
+-- returns trigger
+-- language plpgsql
+-- security definer
+-- set search_path = public
+-- as $$
+-- declare
+--   actor_name text;
+--   title text;
+--   body text;
+-- begin
+--   select display_name into actor_name from public.profiles where id = new.actor_id;
+--   actor_name := coalesce(actor_name, 'Someone');
+--
+--   title := 'TravelBuddy';
+--   case new.type
+--     when 'image_liked' then body := actor_name || ' liked your photo';
+--     when 'image_commented' then body := actor_name || ' commented on your photo';
+--     when 'comment_replied' then body := actor_name || ' replied to your comment';
+--     when 'comment_mentioned' then body := actor_name || ' mentioned you';
+--     when 'influence_milestone' then body := 'Influence milestone unlocked';
+--     else body := 'New notification';
+--   end case;
+--
+--   perform net.http_post(
+--     url := 'https://<PROJECT_REF>.functions.supabase.co/send-push',
+--     headers := jsonb_build_object(
+--       'Content-Type', 'application/json',
+--       'Authorization', 'Bearer <SERVICE_ROLE_KEY>'
+--     ),
+--     body := jsonb_build_object(
+--       'recipient_id', new.recipient_id,
+--       'type', new.type,
+--       'title', title,
+--       'body', body,
+--       'url', '/notifications',
+--       'tag', new.id::text
+--     )
+--   );
+--
+--   return new;
+-- end;
+-- $$;
+--
+-- drop trigger if exists notifications_send_push on public.notifications;
+-- create trigger notifications_send_push
+--   after insert on public.notifications
+--   for each row
+--   execute function public.notify_send_push();
