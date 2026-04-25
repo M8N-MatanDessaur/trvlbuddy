@@ -17,12 +17,14 @@ interface Props {
 }
 
 // Drop-in replacement for UploadPhotoButton that also handles 7-second
-// video uploads. On touch devices the chooser now offers: take photo,
-// from library (images), and record / pick video. Video picks go through
-// VideoTrimmer → ffmpeg trim/downscale → caller.
+// video uploads. On touch devices the chooser offers: camera (photo or
+// video, decided in the native camera UI), photo library, and video
+// library. Any video — recorded or picked — goes through VideoTrimmer →
+// ffmpeg trim/downscale → caller.
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
 const VIDEO_ACCEPT = 'video/mp4,video/quicktime,video/webm,video/x-m4v';
+const CAMERA_ACCEPT = `${IMAGE_ACCEPT},${VIDEO_ACCEPT}`;
 
 const UploadMediaButton: React.FC<Props> = ({
   onPhotoFile,
@@ -84,6 +86,21 @@ const UploadMediaButton: React.FC<Props> = ({
     setPendingVideo(file);
   };
 
+  const handleCameraCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    setChooserOpen(false);
+    if (!file) return;
+    // The camera input accepts both photos and videos; route by MIME.
+    if (file.type.startsWith('video/')) {
+      setPendingVideo(file);
+      return;
+    }
+    const { ok, error } = await onPhotoFile(file);
+    if (!ok) toast(error || 'Upload failed', 'error');
+    else toast('Photo uploaded', 'success');
+  };
+
   const handleTrimConfirm = async (result: TrimResult) => {
     setPendingVideo(null);
     const { ok, error } = await onVideoResult(result);
@@ -126,10 +143,10 @@ const UploadMediaButton: React.FC<Props> = ({
       <input
         ref={cameraInputRef}
         type="file"
-        accept={IMAGE_ACCEPT}
+        accept={CAMERA_ACCEPT}
         capture="environment"
         className="hidden"
-        onChange={handlePhotoChange}
+        onChange={handleCameraCapture}
       />
       <input
         ref={galleryInputRef}
@@ -189,7 +206,7 @@ const UploadMediaButton: React.FC<Props> = ({
             <div className="grid grid-cols-3 gap-2">
               {isTouch && chooserButton(
                 <Camera size={20} />,
-                'Take photo',
+                'Camera',
                 () => cameraInputRef.current?.click(),
                 true,
               )}
