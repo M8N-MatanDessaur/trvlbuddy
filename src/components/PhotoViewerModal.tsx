@@ -30,6 +30,7 @@ import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 import { getActiveMentionQuery, type MentionSuggestion } from '../lib/mentions';
 import MentionSuggestions from './MentionSuggestions';
 import MentionBody from './MentionBody';
+import CachedImage from './CachedImage';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { impact as hapticImpact, success as hapticSuccess, tap as hapticTap, warning as hapticWarning } from '../lib/haptics';
@@ -657,7 +658,7 @@ const PhotoViewerModal: React.FC<Props> = ({
                 }}
                 onClick={() => { if (i === index) handleImageTap(); }}
               >
-                <img
+                <CachedImage
                   src={p.url}
                   alt={p.activity_name}
                   draggable={false}
