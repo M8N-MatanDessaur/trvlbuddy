@@ -9,6 +9,11 @@ export const MAX_CLIP_SECONDS = 7;
 export const TARGET_HEIGHT = 720;
 export const TARGET_VIDEO_BITRATE = '1200k';
 export const POSTER_QUALITY = 4; // 1-31 (lower = higher quality)
+// Single-threaded ffmpeg.wasm has a fixed ~2GB memory budget, and the input
+// file lives in that budget alongside decoder/encoder working buffers. We
+// reject anything north of this conservatively to surface a useful message
+// instead of letting ffmpeg trap with "memory access out of bounds" mid-encode.
+export const MAX_INPUT_BYTES = 350 * 1024 * 1024; // 350 MB
 
 const FFMPEG_CORE_VERSION = '0.12.6';
 // @ffmpeg/ffmpeg@0.12.15 spawns its worker as `type: 'module'`, so the
@@ -141,6 +146,14 @@ export interface TrimResult {
 // decode a keyframe just to draw a thumbnail.
 export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> {
   const { file, startSec, durationSec, maxHeight = TARGET_HEIGHT, onProgress } = params;
+
+  if (file.size > MAX_INPUT_BYTES) {
+    throw new Error(
+      `Video is too large to trim in-browser (${formatMB(file.size)}, max ${formatMB(MAX_INPUT_BYTES)}). ` +
+        `Try a shorter capture or one that's not 4K.`,
+    );
+  }
+
   const ff = await loadFFmpeg();
 
   // Compute the 4:5 (Instagram portrait) crop window in JS so the ffmpeg
@@ -163,15 +176,17 @@ export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> 
     const buf = new Uint8Array(await file.arrayBuffer());
     await ff.writeFile(inputName, buf);
 
-    // Trim + center-crop to 4:5 + downscale. -ss before -i seeks fast
-    // (keyframe-based), after -i is accurate; we use after-input for
-    // accuracy on mobile captures. cropW/cropH are precomputed integers
-    // (even, for yuv420p), so the filter graph has no expressions to
-    // escape. scale=-2 keeps width even-numbered for H.264.
-    const code = await ff.exec([
+    // Trim + center-crop to 4:5 + downscale. -ss BEFORE -i is a fast
+    // keyframe-based seek that lets the demuxer skip past most of the
+    // input without decoding it — this matters because the entire source
+    // file lives in ffmpeg's wasm heap, and decoding from t=0 of a long
+    // clip can blow the ~2GB single-threaded memory budget. cropW/cropH
+    // are precomputed integers (even, for yuv420p), so the filter graph
+    // has no expressions to escape. scale=-2 keeps width even-numbered.
+    const code = await runFFmpeg(ff, [
       '-y',
-      '-i', inputName,
       '-ss', startSec.toFixed(3),
+      '-i', inputName,
       '-t', durationSec.toFixed(3),
       '-vf', `crop=${cropW}:${cropH},scale=-2:${targetH}`,
       '-c:v', 'libx264',
@@ -185,19 +200,19 @@ export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> 
       '-movflags', '+faststart',
       '-pix_fmt', 'yuv420p',
       outputName,
-    ]);
+    ], file.size);
     if (code !== 0) {
       throw new Error(`Video encode failed (ffmpeg exit ${code})`);
     }
 
     // Poster frame at t=0 of the trimmed clip.
-    const posterCode = await ff.exec([
+    const posterCode = await runFFmpeg(ff, [
       '-y',
       '-i', outputName,
       '-vframes', '1',
       '-q:v', String(POSTER_QUALITY),
       posterName,
-    ]);
+    ], file.size);
     if (posterCode !== 0) {
       throw new Error(`Poster extract failed (ffmpeg exit ${posterCode})`);
     }
@@ -242,6 +257,33 @@ export async function trimAndDownscale(params: TrimParams): Promise<TrimResult> 
       try { await ff.deleteFile(name); } catch { /* ignore */ }
     }
   }
+}
+
+// Wraps ff.exec so a wasm trap (typically OOM on a large input) surfaces as
+// a message that tells the user what they can do, instead of the bare
+// "RuntimeError: memory access out of bounds" / "abort" that ffmpeg-core
+// re-throws when its fixed memory pool runs out.
+async function runFFmpeg(ff: FFmpeg, args: string[], inputBytes: number): Promise<number> {
+  try {
+    return await ff.exec(args);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      msg.includes('memory access out of bounds') ||
+      msg.includes('Out of memory') ||
+      msg.toLowerCase().includes('abort')
+    ) {
+      throw new Error(
+        `Video too large to process in-browser (source ${formatMB(inputBytes)}). ` +
+          `Try a shorter capture or one that's not 4K.`,
+      );
+    }
+    throw e instanceof Error ? e : new Error(msg);
+  }
+}
+
+function formatMB(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function asUint8Array(data: unknown): Uint8Array {
