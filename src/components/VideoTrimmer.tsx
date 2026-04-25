@@ -146,10 +146,18 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
     }
   };
 
+  // Swallow touches at the root so they can't bubble up to a PullToRefresh
+  // ancestor and trigger a refresh while the user is dragging the trim
+  // window or just resting a finger on the overlay.
+  const stopTouch = (e: React.TouchEvent) => e.stopPropagation();
+
   return (
     <div
       className="fixed inset-0 z-[90] flex flex-col"
-      style={{ background: 'rgba(0,0,0,0.95)', height: '100dvh' }}
+      style={{ background: 'rgba(0,0,0,0.95)', height: '100dvh', overscrollBehavior: 'contain' }}
+      onTouchStart={stopTouch}
+      onTouchMove={stopTouch}
+      onTouchEnd={stopTouch}
     >
       <header
         className="flex items-center justify-between px-3 flex-shrink-0"
