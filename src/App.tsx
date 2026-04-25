@@ -17,6 +17,8 @@ import SignInScreen from './components/SignInScreen';
 import LoadingScreen from './components/LoadingScreen';
 import AuthSplash from './components/AuthSplash';
 import SettingsPage from './components/SettingsPage';
+import AccountPage from './components/AccountPage';
+import PasswordResetPage from './components/PasswordResetPage';
 import ProfilePage from './components/ProfilePage';
 import NewTripLauncher from './components/NewTripLauncher';
 import TripJoinPage from './components/TripJoinPage';
@@ -55,11 +57,15 @@ const localPages: PageDef[] = [
 
 const AppContent: React.FC = () => {
   const { hasCompletedOnboarding, isLoading, appMode } = useTravel();
-  const { session, profile, isLoading: authLoading } = useAuth();
+  const { session, profile, isLoading: authLoading, recoveryMode } = useAuth();
   const location = useLocation();
 
   if (authLoading) return <AuthSplash />;
   if (!session) return <SignInScreen />;
+  // Password-recovery click lands here with a recovery-scoped session. Hold
+  // the user on PasswordResetPage until they either complete the flow or
+  // cancel — never route to the main app with a recovery session.
+  if (recoveryMode) return <PasswordResetPage />;
   if (!profile) return <AuthSplash />;
 
   const joinMatch = location.pathname.match(/^\/trip\/join\/([^/]+)/);
@@ -68,6 +74,7 @@ const AppContent: React.FC = () => {
   if (!profile.onboarded_at) return <ContributorOnboarding />;
 
   if (location.pathname === '/settings') return <SettingsPage />;
+  if (location.pathname === '/account') return <AccountPage />;
   if (location.pathname === '/profile' || location.pathname.startsWith('/profile/')) return <ProfilePage />;
 
   // Trip generation / long-running work gets the branded loading screen.

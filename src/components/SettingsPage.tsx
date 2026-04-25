@@ -10,6 +10,7 @@ import {
   LogOut,
   ChevronRight,
   Check,
+  UserCog,
 } from 'lucide-react';
 import { useTheme, THEME_OPTIONS } from '../contexts/ThemeContext';
 import { useTravel } from '../contexts/TravelContext';
@@ -471,6 +472,31 @@ const SettingsPage: React.FC = () => {
                 className="rounded-2xl overflow-hidden"
                 style={{ background: 'var(--surface-container)' }}
               >
+                <button
+                  onClick={() => navigate('/account')}
+                  className={rowClass}
+                  style={{ borderBottom: '0.33px solid var(--outline)' }}
+                >
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{
+                      background: 'var(--accent-container)',
+                      color: 'var(--accent)',
+                    }}
+                  >
+                    <UserCog size={18} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-semibold">Account</div>
+                    <div
+                      className="text-[12px]"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Email, password, sessions, delete account
+                    </div>
+                  </div>
+                  <ChevronRight size={16} style={{ color: 'var(--text-tertiary)' }} />
+                </button>
                 <button onClick={handleSignOut} className={rowClass}>
                   <div
                     className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
