@@ -140,7 +140,7 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
       });
       onConfirm(result);
     } catch (err) {
-      console.error('[VideoTrimmer] trim failed', err);
+      console.error('[VideoTrimmer] prepare failed', err);
       const detail = err instanceof Error
         ? err.message
         : typeof err === 'string'
@@ -148,7 +148,7 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
           : err && typeof err === 'object' && 'message' in err
             ? String((err as { message: unknown }).message)
             : '';
-      setError(detail ? `Trim failed: ${detail}` : 'Trim failed. Please try again.');
+      setError(detail || 'Could not prepare the clip. Please try again.');
       setProcessing(false);
     }
   };

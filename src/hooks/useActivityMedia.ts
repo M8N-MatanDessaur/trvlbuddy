@@ -121,6 +121,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         video: result.video,
         poster: result.poster,
         durationMs: result.durationMs,
+        startMs: result.startMs,
         width: result.width,
         height: result.height,
       });
