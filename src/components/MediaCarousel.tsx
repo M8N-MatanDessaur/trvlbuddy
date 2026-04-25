@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { warmImageCache } from '../lib/imagePrefetch';
 import { purgeCachedImage } from '../lib/purgeImage';
 import { thumbhashToCssDataUrl } from '../lib/thumbhash';
+import VideoThumbnail from './VideoThumbnail';
 
 // Slide types for the unified media carousel. The carousel stays
 // dumb — it just renders whatever items are passed in — so callers
@@ -233,19 +234,18 @@ const MediaCarousel: React.FC<Props> = ({ items, className, style, eagerCount = 
 
         // Video slide. We render only the active video element to keep
         // memory + decode pressure low when many cards live in the feed
-        // — non-active videos collapse to a poster image until they
-        // become active again.
+        // — non-active videos collapse to a thumbnail until they become
+        // active again. VideoThumbnail handles black/missing posters by
+        // decoding the live first frame on the client.
         if (!isActive) {
           return (
-            <img
+            <VideoThumbnail
               key={`${slide.src}|poster`}
-              src={slide.posterUrl}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover"
-              style={{ opacity: 0, transition: 'opacity 0.35s ease' }}
+              videoUrl={slide.src}
+              posterUrl={slide.posterUrl}
+              className="absolute inset-0 w-full h-full"
+              style={{ objectFit: 'cover', opacity: 0, transition: 'opacity 0.35s ease' }}
               loading="lazy"
-              decoding="async"
-              crossOrigin="anonymous"
             />
           );
         }
