@@ -62,10 +62,14 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         setState({ loading: false, images: [], imageUrls: [], activityId: null, error: 'Could not ensure activity', uploading: false, vote: ZERO_VOTE_STATE });
         return;
       }
-      const [images, vote] = await Promise.all([
+      // Run images + vote independently so a vote-table miss (e.g. a view
+      // that isn't migrated yet) can't wipe the images the feed renders.
+      const [imagesResult, voteResult] = await Promise.allSettled([
         listActivityImages(activity.id, user?.id ?? null),
         getActivityVoteState(activity.id, user?.id ?? null),
       ]);
+      const images = imagesResult.status === 'fulfilled' ? imagesResult.value : [];
+      const vote = voteResult.status === 'fulfilled' ? voteResult.value : ZERO_VOTE_STATE;
       warmImageCache(images.map((image) => image.url));
       setState({ loading: false, images, imageUrls: images.map((image) => image.url), activityId: activity.id, error: null, uploading: false, vote });
     } catch (err: unknown) {

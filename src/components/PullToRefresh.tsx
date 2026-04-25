@@ -20,25 +20,46 @@ interface Props {
 const PullToRefresh: React.FC<Props> = ({
   onRefresh,
   children,
-  threshold = 70,
+  threshold = 90,
   disabled = false,
 }) => {
   const [pullY, setPullY] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const touchStart = useRef<number | null>(null);
+  const touchStartedAtTop = useRef(false);
+  const disqualified = useRef(false);
   const armed = useRef(false);
+
+  const isAtTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
 
   const onTouchStart = (e: React.TouchEvent) => {
     if (disabled || refreshing) return;
-    // Only arm at the very top of the page — avoid fighting normal scroll.
-    if ((window.scrollY || document.documentElement.scrollTop || 0) > 0) return;
     touchStart.current = e.touches[0].clientY;
+    touchStartedAtTop.current = isAtTop();
+    disqualified.current = !touchStartedAtTop.current;
     armed.current = false;
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
     if (touchStart.current === null || refreshing || disabled) return;
+    if (disqualified.current) return;
     const dy = e.touches[0].clientY - touchStart.current;
+    // Any meaningful upward movement means this isn't a fresh pull — lock
+    // PTR out for the rest of this touch so scrolling-up-past-top can't
+    // bleed into a refresh gesture.
+    if (dy < -4) {
+      disqualified.current = true;
+      setPullY(0);
+      armed.current = false;
+      return;
+    }
+    // If the page has scrolled since the gesture started, also bail.
+    if (!isAtTop()) {
+      disqualified.current = true;
+      setPullY(0);
+      armed.current = false;
+      return;
+    }
     if (dy <= 0) {
       setPullY(0);
       armed.current = false;
@@ -59,7 +80,7 @@ const PullToRefresh: React.FC<Props> = ({
   const onTouchEnd = async () => {
     const distance = pullY;
     touchStart.current = null;
-    if (distance >= threshold && !refreshing && !disabled) {
+    if (!disqualified.current && distance >= threshold && !refreshing && !disabled) {
       setRefreshing(true);
       setPullY(52);
       try {
@@ -73,6 +94,7 @@ const PullToRefresh: React.FC<Props> = ({
       setPullY(0);
       armed.current = false;
     }
+    disqualified.current = false;
   };
 
   const isArmed = pullY >= threshold;
