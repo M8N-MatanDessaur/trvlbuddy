@@ -26,6 +26,7 @@ import {
   type ActivityImageComment,
   type UserPhoto,
 } from '../services/activityMediaService';
+import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { impact as hapticImpact, success as hapticSuccess, tap as hapticTap, warning as hapticWarning } from '../lib/haptics';
@@ -612,11 +613,19 @@ const PhotoViewerModal: React.FC<Props> = ({
               overscrollBehaviorX: 'contain',
             }}
           >
-            {photos.map((p, i) => (
+            {photos.map((p, i) => {
+              const placeholder = thumbhashToCssDataUrl(p.thumbhash);
+              return (
               <div
                 key={p.id}
                 className="relative flex-shrink-0 w-full h-full"
-                style={{ scrollSnapAlign: 'center', scrollSnapStop: 'always' }}
+                style={{
+                  scrollSnapAlign: 'center',
+                  scrollSnapStop: 'always',
+                  background: placeholder
+                    ? `center / cover no-repeat url(${placeholder})`
+                    : 'black',
+                }}
                 onClick={() => { if (i === index) handleImageTap(); }}
               >
                 <img
@@ -634,7 +643,8 @@ const PhotoViewerModal: React.FC<Props> = ({
                   }}
                 />
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Heart burst on double-tap, overlays the centered slide */}

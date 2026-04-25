@@ -341,6 +341,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
         >
           <ImageCarousel
             images={imageUrls}
+            thumbhashes={images.map((img) => img.thumbhash)}
             className="absolute inset-0"
             eagerCount={2}
             onIndexChange={setActiveImageIndex}

@@ -25,6 +25,7 @@ import Avatar from './Avatar';
 import PhotoViewerModal from './PhotoViewerModal';
 import TripsCarousel from './TripsCarousel';
 import { warmImageCache } from '../lib/imagePrefetch';
+import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -304,14 +305,18 @@ const ProfilePage: React.FC = () => {
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-2">
-                {photos.map((photo) => (
+                {photos.map((photo) => {
+                  const placeholder = thumbhashToCssDataUrl(photo.thumbhash);
+                  return (
                   <button
                     key={photo.id}
                     onClick={() => handlePhotoTap(photo)}
                     className="relative overflow-hidden rounded-xl transition-transform active:scale-95"
                     style={{
                       aspectRatio: '1 / 1',
-                      background: 'var(--surface-container-high)',
+                      background: placeholder
+                        ? `center / cover no-repeat url(${placeholder})`
+                        : 'var(--surface-container-high)',
                       border: 'none',
                       padding: 0,
                     }}
@@ -340,7 +345,8 @@ const ProfilePage: React.FC = () => {
                       </div>
                     </div>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
