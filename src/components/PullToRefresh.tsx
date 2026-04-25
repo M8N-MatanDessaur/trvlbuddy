@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowDown, Loader2 } from 'lucide-react';
 import { impact as hapticImpact } from '../lib/haptics';
@@ -10,12 +10,14 @@ interface Props {
   disabled?: boolean;
 }
 
-// Native-feeling pull-to-refresh wrapper. Activates only when the page is
-// already scrolled to the top so normal scroll isn't hijacked. Uses a
+// Native-feeling pull-to-refresh wrapper. Activates only when the nearest
+// scrollable ancestor is at the top so normal scroll isn't hijacked. Uses a
 // rubber-band curve past the threshold and fires a haptic tap the instant
 // the user crosses the "will-refresh" line, so they feel the commitment
 // before they release. The indicator lives above the content and rides
 // along with a spring return.
+
+const ENGAGE_DISTANCE = 12; // ignore tiny finger jitter — require a real downward pull
 
 const PullToRefresh: React.FC<Props> = ({
   onRefresh,
@@ -25,12 +27,36 @@ const PullToRefresh: React.FC<Props> = ({
 }) => {
   const [pullY, setPullY] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLElement | Window | null>(null);
   const touchStart = useRef<number | null>(null);
   const touchStartedAtTop = useRef(false);
   const disqualified = useRef(false);
   const armed = useRef(false);
 
-  const isAtTop = () => (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+  // Find the nearest scrollable ancestor on mount. The page-level scroll
+  // container in SwipeNavigator owns the scroll position, not window — so
+  // checking window.scrollY would always read 0 and falsely report "at top".
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let node: HTMLElement | null = el.parentElement;
+    while (node) {
+      const overflow = getComputedStyle(node).overflowY;
+      if (overflow === 'auto' || overflow === 'scroll') break;
+      node = node.parentElement;
+    }
+    scrollerRef.current = node ?? window;
+  }, []);
+
+  const getScrollTop = (): number => {
+    const s = scrollerRef.current;
+    if (!s) return 0;
+    if (s === window) return window.scrollY || document.documentElement.scrollTop || 0;
+    return (s as HTMLElement).scrollTop;
+  };
+
+  const isAtTop = () => getScrollTop() <= 0;
 
   const onTouchStart = (e: React.TouchEvent) => {
     if (disabled || refreshing) return;
@@ -53,21 +79,28 @@ const PullToRefresh: React.FC<Props> = ({
       armed.current = false;
       return;
     }
-    // If the page has scrolled since the gesture started, also bail.
+    // If the scroll container has moved off the top since the gesture
+    // started, also bail — the user is scrolling normally, not refreshing.
     if (!isAtTop()) {
       disqualified.current = true;
       setPullY(0);
       armed.current = false;
       return;
     }
-    if (dy <= 0) {
+    // Require a deliberate downward pull before showing the indicator. Tiny
+    // finger jitter at the top (e.g. starting a scroll-down gesture) should
+    // not engage PTR.
+    if (dy < ENGAGE_DISTANCE) {
       setPullY(0);
       armed.current = false;
       return;
     }
+    // Subtract the engage distance so the indicator starts at 0 once we
+    // commit, instead of jumping up by ENGAGE_DISTANCE pixels.
+    const effective = dy - ENGAGE_DISTANCE;
     // Linear until threshold, then heavy rubber-band so further pulling
     // feels weighted — matches the feel of iOS scroll bounce.
-    const eased = dy <= threshold ? dy : threshold + (dy - threshold) * 0.35;
+    const eased = effective <= threshold ? effective : threshold + (effective - threshold) * 0.35;
     setPullY(eased);
     if (eased >= threshold && !armed.current) {
       armed.current = true;
@@ -103,6 +136,7 @@ const PullToRefresh: React.FC<Props> = ({
 
   return (
     <div
+      ref={containerRef}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
