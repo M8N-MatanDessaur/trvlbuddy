@@ -10,6 +10,7 @@ html, body {
 }
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 .app-frame-backdrop {
   background: #0a0a0f;
@@ -18,6 +19,7 @@ html, body {
   position: relative;
   width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg-primary);
   overflow: hidden;
   /* Make this the containing block for `position: fixed` descendants so the
@@ -33,6 +35,17 @@ html, body {
     height: 100vh;
     min-height: 100vh;
   }
+}
+/* Treat Tailwind's viewport utilities as dynamic viewport units on mobile so
+   the UI doesn't jitter under the mobile browser's collapsing URL bar. The
+   desktop phone-frame override (below) still wins with !important. */
+.min-h-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.h-screen {
+  height: 100vh;
+  height: 100dvh;
 }
 @media (min-width: 760px) {
   .app-frame {

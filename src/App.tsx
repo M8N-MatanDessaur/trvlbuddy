@@ -122,7 +122,7 @@ const DesktopFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   <div
     className="app-frame-backdrop"
     style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       width: '100%',
       display: 'flex',
       alignItems: 'center',
