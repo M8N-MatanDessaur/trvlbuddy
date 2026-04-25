@@ -90,14 +90,19 @@ export async function uploadActivityVideo(
 
   const ts = Date.now();
   const stub = `${uploaderId}-${ts}-${Math.random().toString(36).slice(2, 8)}`;
-  const videoPath = `${activityId}/${stub}.mp4`;
+  // The encoder picks .mp4 on Safari/recent Chrome and .webm on Chrome/Firefox.
+  // Match storage path + Content-Type to whatever was actually produced so the
+  // bytes are served with a header browsers will play.
+  const videoExt = video.type.includes('webm') ? 'webm' : 'mp4';
+  const videoMime = video.type.includes('webm') ? 'video/webm' : 'video/mp4';
+  const videoPath = `${activityId}/${stub}.${videoExt}`;
   const posterPath = `${activityId}/${stub}.jpg`;
 
   const [videoRes, posterRes, thumbhash] = await Promise.all([
     supabase.storage.from('activity-videos').upload(videoPath, video, {
       cacheControl: '31536000',
       upsert: false,
-      contentType: 'video/mp4',
+      contentType: videoMime,
     }),
     // Posters live in the existing activity-images bucket so the same
     // CDN cache + RLS + image pipeline handles them.
