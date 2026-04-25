@@ -7,7 +7,10 @@ import type { TrimResult } from '../lib/videoProcess';
 
 interface Props {
   onPhotoFile: (file: File) => Promise<{ ok: boolean; error?: string | null }>;
-  onVideoResult: (result: TrimResult) => Promise<{ ok: boolean; error?: string | null }>;
+  onVideoResult: (
+    result: TrimResult,
+    onProgress?: (progress: number) => void,
+  ) => Promise<{ ok: boolean; error?: string | null }>;
   uploading?: boolean;
   disabled?: boolean;
   className?: string;
@@ -96,11 +99,23 @@ const UploadMediaButton: React.FC<Props> = ({
     setPendingVideo(file);
   };
 
-  const handleTrimConfirm = async (result: TrimResult) => {
-    setPendingVideo(null);
-    const { ok, error } = await onVideoResult(result);
-    if (!ok) toast(error || 'Video upload failed', 'error');
-    else toast('Video uploaded', 'success');
+  // The trimmer keeps itself visible while the upload is in flight (it
+  // awaits this promise and shows real % progress in the button label),
+  // so we DON'T clear pendingVideo until the upload settles. On success
+  // VideoTrimmer also clears its own state and we drop the modal here.
+  const handleTrimConfirm = async (
+    result: TrimResult,
+    onProgress?: (p: number) => void,
+  ): Promise<{ ok: boolean; error?: string | null }> => {
+    const res = await onVideoResult(result, onProgress);
+    if (res.ok) {
+      setPendingVideo(null);
+      toast('Video uploaded', 'success');
+    } else {
+      // Leave the trimmer up so the user can retry without re-picking.
+      toast(res.error || 'Video upload failed', 'error');
+    }
+    return res;
   };
 
   const chooserButton = (icon: React.ReactNode, label: string, onClick: () => void, primary = false) => (
@@ -278,7 +293,7 @@ const UploadMediaButton: React.FC<Props> = ({
         <VideoTrimmer
           source={pendingVideo}
           onCancel={() => setPendingVideo(null)}
-          onConfirm={(result) => { void handleTrimConfirm(result); }}
+          onConfirm={handleTrimConfirm}
         />
       )}
     </>

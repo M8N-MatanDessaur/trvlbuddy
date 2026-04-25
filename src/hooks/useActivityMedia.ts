@@ -29,7 +29,10 @@ interface State {
 
 interface UseActivityMediaResult extends State {
   upload: (file: File) => Promise<{ ok: boolean; error?: string | null }>;
-  uploadVideo: (result: TrimResult) => Promise<{ ok: boolean; error?: string | null }>;
+  uploadVideo: (
+    result: TrimResult,
+    onProgress?: (progress: number) => void,
+  ) => Promise<{ ok: boolean; error?: string | null }>;
   setImageLiked: (image: ActivityImageMedia, liked: boolean) => Promise<{ ok: boolean; error?: string | null; ignored?: boolean }>;
   addImageComment: (image: ActivityImageMedia, body: string, parentCommentId?: string | null) => Promise<{ ok: boolean; error?: string | null }>;
   removeImageComment: (image: ActivityImageMedia) => void;
@@ -111,7 +114,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
   );
 
   const uploadVideoFn = useCallback<UseActivityMediaResult['uploadVideo']>(
-    async (result) => {
+    async (result, onProgress) => {
       if (!user) return { ok: false, error: 'Sign in required' };
       if (!state.activityId) return { ok: false, error: 'Activity not ready yet' };
       setState((s) => ({ ...s, uploading: true, error: null }));
@@ -124,6 +127,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         startMs: result.startMs,
         width: result.width,
         height: result.height,
+        onProgress,
       });
       setState((s) => ({ ...s, uploading: false, error }));
       if (error) return { ok: false, error };
