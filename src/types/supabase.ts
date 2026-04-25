@@ -191,6 +191,42 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          id: string
+          recipient_id: string
+          actor_id: string | null
+          type: string
+          subject_type: string | null
+          subject_id: string | null
+          data: Record<string, unknown>
+          read_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          recipient_id: string
+          actor_id?: string | null
+          type: string
+          subject_type?: string | null
+          subject_id?: string | null
+          data?: Record<string, unknown>
+          read_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          recipient_id?: string
+          actor_id?: string | null
+          type?: string
+          subject_type?: string | null
+          subject_id?: string | null
+          data?: Record<string, unknown>
+          read_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       activity_images: {
         Row: {
           activity_id: string

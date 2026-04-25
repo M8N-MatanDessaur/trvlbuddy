@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Plane } from 'lucide-react';
+import { Bell, Plane } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useTravel } from '../contexts/TravelContext';
 import { useToast } from '../contexts/ToastContext';
+import { useNotifications } from '../hooks/useNotifications';
 import { listMyTrips, loadTrip } from '../services/tripsService';
 import type { Trip } from '../lib/supabase';
 import Avatar from './Avatar';
@@ -38,6 +39,7 @@ const Header: React.FC<Props> = ({ pages }) => {
   const [tripsLoaded, setTripsLoaded] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [busyTripId, setBusyTripId] = useState<string | null>(null);
+  const { unread } = useNotifications();
 
   const isLocal = appMode === 'local';
   // Headline label: trip title in trip mode, "Nearby" in local mode, page label otherwise.
@@ -217,20 +219,58 @@ const Header: React.FC<Props> = ({ pages }) => {
           </AnimatePresence>
         </button>
 
-        <button
-          onClick={() => navigate('/profile')}
-          className="flex items-center justify-center rounded-full transition-transform active:scale-95"
-          style={{
-            padding: 0,
-            border: '1.5px solid var(--outline)',
-            background: 'transparent',
-            minHeight: 0,
-            minWidth: 0,
-          }}
-          aria-label="Open profile"
-        >
-          <Avatar profile={profile} size={30} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/notifications')}
+            className="relative flex items-center justify-center rounded-full transition-transform active:scale-95"
+            style={{
+              width: 34,
+              height: 34,
+              padding: 0,
+              border: '1.5px solid var(--outline)',
+              background: 'transparent',
+              color: 'var(--text-primary)',
+              minHeight: 0,
+              minWidth: 0,
+            }}
+            aria-label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}
+          >
+            <Bell size={16} />
+            {unread > 0 && (
+              <span
+                aria-hidden="true"
+                className="absolute flex items-center justify-center text-[9px] font-extrabold"
+                style={{
+                  top: -3,
+                  right: -3,
+                  minWidth: 16,
+                  height: 16,
+                  padding: '0 4px',
+                  borderRadius: 999,
+                  background: 'var(--accent)',
+                  color: 'var(--on-accent)',
+                  border: '2px solid var(--bg-primary)',
+                }}
+              >
+                {unread > 99 ? '99+' : unread}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => navigate('/profile')}
+            className="flex items-center justify-center rounded-full transition-transform active:scale-95"
+            style={{
+              padding: 0,
+              border: '1.5px solid var(--outline)',
+              background: 'transparent',
+              minHeight: 0,
+              minWidth: 0,
+            }}
+            aria-label="Open profile"
+          >
+            <Avatar profile={profile} size={30} />
+          </button>
+        </div>
       </header>
 
       <TripSwitcherModal
