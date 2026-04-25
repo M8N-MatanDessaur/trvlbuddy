@@ -25,8 +25,7 @@ import { listUserVideos, type UserVideo } from '../services/activityVideoService
 import { listMyTrips, loadTrip } from '../services/tripsService';
 import Avatar from './Avatar';
 import CachedImage from './CachedImage';
-import PhotoViewerModal from './PhotoViewerModal';
-import VideoViewerModal from './VideoViewerModal';
+import ProfileMediaViewer, { type MediaItem } from './ProfileMediaViewer';
 import TripsCarousel from './TripsCarousel';
 import { warmImageCache } from '../lib/imagePrefetch';
 import { thumbhashToCssDataUrl } from '../lib/thumbhash';
@@ -34,9 +33,7 @@ import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 // Unified grid item for the profile media wall. Image and video rows
 // have different shapes in the DB; the discriminator lets the grid
 // render each correctly without forcing one schema to fit the other.
-type ProfileMediaItem =
-  | { kind: 'image'; data: UserPhoto }
-  | { kind: 'video'; data: UserVideo };
+type ProfileMediaItem = MediaItem;
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
@@ -69,8 +66,7 @@ const ProfilePage: React.FC = () => {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [tripsLoading, setTripsLoading] = useState(isOwn);
   const [loadingTripId, setLoadingTripId] = useState<string | null>(null);
-  const [openPhotoId, setOpenPhotoId] = useState<string | null>(null);
-  const [openVideoId, setOpenVideoId] = useState<string | null>(null);
+  const [openMediaKey, setOpenMediaKey] = useState<string | null>(null);
 
   // Merge into one chronological grid. Done here (rather than in state)
   // so optimistic updates to either array re-merge automatically.
@@ -183,16 +179,17 @@ const ProfilePage: React.FC = () => {
   };
 
   const handlePhotoTap = (photo: UserPhoto) => {
-    setOpenPhotoId(photo.id);
+    setOpenMediaKey(`image-${photo.id}`);
   };
 
   const handleVideoTap = (video: UserVideo) => {
-    setOpenVideoId(video.id);
+    setOpenMediaKey(`video-${video.id}`);
   };
 
-  const openIndex = openPhotoId ? photos.findIndex((p) => p.id === openPhotoId) : -1;
+  const openIndex = openMediaKey
+    ? mediaItems.findIndex((m) => `${m.kind}-${m.data.id}` === openMediaKey)
+    : -1;
   const initialIndex = openIndex >= 0 ? openIndex : null;
-  const openVideo = openVideoId ? videos.find((v) => v.id === openVideoId) ?? null : null;
 
   const displayName = profile?.display_name || profile?.email || (isOwn ? 'Traveler' : 'Traveler');
   const influence = profile?.influence ?? 0;
@@ -522,42 +519,63 @@ const ProfilePage: React.FC = () => {
         </div>
       </main>
 
-      <PhotoViewerModal
-        photos={photos}
+      <ProfileMediaViewer
+        media={mediaItems}
         initialIndex={initialIndex}
         uploaderId={targetId}
-        onClose={() => setOpenPhotoId(null)}
-        onLikeChange={(photoId, delta) => {
-          setPhotos((rows) =>
-            rows.map((row) =>
-              row.id === photoId ? { ...row, likeCount: Math.max(0, row.likeCount + delta) } : row,
-            ),
-          );
+        onClose={() => setOpenMediaKey(null)}
+        onLikeChange={(id, kind, delta) => {
+          if (kind === 'image') {
+            setPhotos((rows) =>
+              rows.map((row) =>
+                row.id === id ? { ...row, likeCount: Math.max(0, row.likeCount + delta) } : row,
+              ),
+            );
+          } else {
+            setVideos((rows) =>
+              rows.map((row) =>
+                row.id === id ? { ...row, likeCount: Math.max(0, row.likeCount + delta) } : row,
+              ),
+            );
+          }
           setStats((s) => ({ ...s, likesReceived: Math.max(0, s.likesReceived + delta) }));
         }}
-        onPhotoDeleted={(photoId) => {
-          const removed = photos.find((p) => p.id === photoId);
-          setPhotos((rows) => rows.filter((row) => row.id !== photoId));
-          setStats((s) => ({
-            postCount: Math.max(0, s.postCount - 1),
-            likesReceived: Math.max(0, s.likesReceived - (removed?.likeCount ?? 0)),
-            commentsReceived: Math.max(0, s.commentsReceived - (removed?.commentCount ?? 0)),
-          }));
-          setOpenPhotoId(null);
+        onMediaDeleted={(id, kind) => {
+          if (kind === 'image') {
+            const removed = photos.find((p) => p.id === id);
+            setPhotos((rows) => rows.filter((row) => row.id !== id));
+            setStats((s) => ({
+              postCount: Math.max(0, s.postCount - 1),
+              likesReceived: Math.max(0, s.likesReceived - (removed?.likeCount ?? 0)),
+              commentsReceived: Math.max(0, s.commentsReceived - (removed?.commentCount ?? 0)),
+            }));
+          } else {
+            const removed = videos.find((v) => v.id === id);
+            setVideos((rows) => rows.filter((row) => row.id !== id));
+            setStats((s) => ({
+              postCount: Math.max(0, s.postCount - 1),
+              likesReceived: Math.max(0, s.likesReceived - (removed?.likeCount ?? 0)),
+              commentsReceived: Math.max(0, s.commentsReceived - (removed?.commentCount ?? 0)),
+            }));
+          }
+          setOpenMediaKey(null);
         }}
-        onCommentAdded={(photoId) => {
-          setPhotos((rows) =>
-            rows.map((row) =>
-              row.id === photoId ? { ...row, commentCount: row.commentCount + 1 } : row,
-            ),
-          );
+        onCommentAdded={(id, kind) => {
+          if (kind === 'image') {
+            setPhotos((rows) =>
+              rows.map((row) =>
+                row.id === id ? { ...row, commentCount: row.commentCount + 1 } : row,
+              ),
+            );
+          } else {
+            setVideos((rows) =>
+              rows.map((row) =>
+                row.id === id ? { ...row, commentCount: row.commentCount + 1 } : row,
+              ),
+            );
+          }
           setStats((s) => ({ ...s, commentsReceived: s.commentsReceived + 1 }));
         }}
-      />
-
-      <VideoViewerModal
-        video={openVideo}
-        onClose={() => setOpenVideoId(null)}
       />
     </div>
   );

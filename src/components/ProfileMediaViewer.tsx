@@ -13,6 +13,8 @@ import {
   Reply,
   SendHorizontal,
   Trash2,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import {
@@ -26,6 +28,17 @@ import {
   type ActivityImageComment,
   type UserPhoto,
 } from '../services/activityMediaService';
+import {
+  addActivityVideoComment,
+  deleteActivityVideo,
+  deleteActivityVideoComment,
+  isVideoLikedByViewer,
+  listActivityVideoComments,
+  setActivityVideoLiked,
+  updateActivityVideoComment,
+  type ActivityVideoComment,
+  type UserVideo,
+} from '../services/activityVideoService';
 import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 import { getActiveMentionQuery, type MentionSuggestion } from '../lib/mentions';
 import MentionSuggestions from './MentionSuggestions';
@@ -35,18 +48,32 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { impact as hapticImpact, success as hapticSuccess, tap as hapticTap, warning as hapticWarning } from '../lib/haptics';
 
-interface CommentNode extends ActivityImageComment {
+export type MediaItem =
+  | { kind: 'image'; data: UserPhoto }
+  | { kind: 'video'; data: UserVideo };
+
+interface AnyComment {
+  id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string | null;
+  deleted_at: string | null;
+  parent_comment_id: string | null;
+}
+
+interface CommentNode extends AnyComment {
   replies: CommentNode[];
 }
 
 const DELETED_TOMBSTONE_MS = 30_000;
 
-function isStaleDelete(comment: ActivityImageComment, nowMs: number): boolean {
+function isStaleDelete(comment: AnyComment, nowMs: number): boolean {
   if (!comment.deleted_at) return false;
   return nowMs - new Date(comment.deleted_at).getTime() >= DELETED_TOMBSTONE_MS;
 }
 
-function buildCommentTree(comments: ActivityImageComment[]): CommentNode[] {
+function buildCommentTree(comments: AnyComment[]): CommentNode[] {
   const nodes = new Map<string, CommentNode>();
   comments.forEach((comment) => {
     nodes.set(comment.id, { ...comment, replies: [] });
@@ -61,13 +88,13 @@ function buildCommentTree(comments: ActivityImageComment[]): CommentNode[] {
 }
 
 interface Props {
-  photos: UserPhoto[];
+  media: MediaItem[];
   initialIndex: number | null;
   uploaderId: string | null;
   onClose: () => void;
-  onLikeChange?: (photoId: string, delta: number, liked: boolean) => void;
-  onCommentAdded?: (photoId: string) => void;
-  onPhotoDeleted?: (photoId: string) => void;
+  onLikeChange?: (id: string, kind: 'image' | 'video', delta: number, liked: boolean) => void;
+  onCommentAdded?: (id: string, kind: 'image' | 'video') => void;
+  onMediaDeleted?: (id: string, kind: 'image' | 'video') => void;
 }
 
 function formatCommentTime(value: string): string {
@@ -80,21 +107,38 @@ function formatCommentTime(value: string): string {
   return new Date(value).toLocaleDateString();
 }
 
-const PhotoViewerModal: React.FC<Props> = ({
-  photos,
+function getActivityName(item: MediaItem): string {
+  return item.data.activity_name;
+}
+function getActivityAddress(item: MediaItem): string | null {
+  return item.data.activity_address;
+}
+function getMapsUrl(item: MediaItem): string {
+  if (item.data.google_maps_url) return item.data.google_maps_url;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${item.data.activity_name} ${item.data.activity_address || ''}`.trim())}`;
+}
+function getLikeCount(item: MediaItem): number {
+  return item.data.likeCount;
+}
+function getCommentCount(item: MediaItem): number {
+  return item.data.commentCount;
+}
+
+const ProfileMediaViewer: React.FC<Props> = ({
+  media,
   initialIndex,
   uploaderId,
   onClose,
   onLikeChange,
   onCommentAdded,
-  onPhotoDeleted,
+  onMediaDeleted,
 }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [index, setIndex] = useState<number>(initialIndex ?? 0);
   const [likeCount, setLikeCount] = useState(0);
   const [liked, setLiked] = useState(false);
-  const [comments, setComments] = useState<ActivityImageComment[]>([]);
+  const [comments, setComments] = useState<AnyComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -103,12 +147,14 @@ const PhotoViewerModal: React.FC<Props> = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
-  const [replyingTo, setReplyingTo] = useState<ActivityImageComment | null>(null);
+  const [replyingTo, setReplyingTo] = useState<AnyComment | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState('');
   const [busyCommentId, setBusyCommentId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [muted, setMuted] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
 
   const updateMentionQuery = (value: string, caret: number) => {
     const ctx = getActiveMentionQuery(value, caret);
@@ -125,7 +171,6 @@ const PhotoViewerModal: React.FC<Props> = ({
     const next = body.slice(0, ctx.start) + token + body.slice(ctx.end);
     setBody(next.slice(0, 500));
     setMentionQuery(null);
-    // Restore focus and move caret past the inserted token.
     requestAnimationFrame(() => {
       const pos = Math.min(next.length, ctx.start + token.length);
       if (inputRef.current) {
@@ -135,20 +180,18 @@ const PhotoViewerModal: React.FC<Props> = ({
     });
   };
 
-  const open = initialIndex !== null && photos.length > 0;
-  const photo = open ? photos[Math.max(0, Math.min(index, photos.length - 1))] : null;
+  const open = initialIndex !== null && media.length > 0;
+  const item = open ? media[Math.max(0, Math.min(index, media.length - 1))] : null;
+  const ownItem = !!user && !!uploaderId && uploaderId === user.id;
 
-  const ownPhoto = !!user && !!uploaderId && uploaderId === user.id;
-
-  // Reset internal index whenever the modal opens with a new starting point.
   useEffect(() => {
     if (initialIndex !== null) setIndex(initialIndex);
   }, [initialIndex]);
 
-  // When the visible photo changes, reload its like + comments state.
+  // Reload like + comments whenever the focused item changes.
   useEffect(() => {
-    if (!photo) return;
-    setLikeCount(photo.likeCount);
+    if (!item) return;
+    setLikeCount(getLikeCount(item));
     setLiked(false);
     setBody('');
     setComments([]);
@@ -161,9 +204,38 @@ const PhotoViewerModal: React.FC<Props> = ({
     setLoadingComments(true);
 
     let alive = true;
+    const id = item.data.id;
+    const kind = item.kind;
+
     Promise.all([
-      user ? isImageLikedByViewer(photo.id, user.id) : Promise.resolve(false),
-      listActivityImageComments(photo.id),
+      user
+        ? kind === 'image'
+          ? isImageLikedByViewer(id, user.id)
+          : isVideoLikedByViewer(id, user.id)
+        : Promise.resolve(false),
+      kind === 'image'
+        ? listActivityImageComments(id).then((rows) =>
+            rows.map<AnyComment>((r) => ({
+              id: r.id,
+              user_id: r.user_id,
+              body: r.body,
+              created_at: r.created_at,
+              updated_at: r.updated_at,
+              deleted_at: r.deleted_at,
+              parent_comment_id: r.parent_comment_id,
+            })),
+          )
+        : listActivityVideoComments(id).then((rows) =>
+            rows.map<AnyComment>((r) => ({
+              id: r.id,
+              user_id: r.user_id,
+              body: r.body,
+              created_at: r.created_at,
+              updated_at: r.updated_at,
+              deleted_at: r.deleted_at,
+              parent_comment_id: r.parent_comment_id,
+            })),
+          ),
     ]).then(([isLiked, rows]) => {
       if (!alive) return;
       setLiked(isLiked);
@@ -174,11 +246,9 @@ const PhotoViewerModal: React.FC<Props> = ({
     return () => {
       alive = false;
     };
-  }, [photo?.id, user?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.data.id, item?.kind, user?.id]);
 
-  // Instagram-style horizontal snap gallery. Scrolling and swipe physics are
-  // native; we just observe scrollLeft to keep `index` in sync and provide
-  // programmatic scrolls for chevron / keyboard nav.
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
   const suppressScrollSyncRef = useRef(false);
@@ -186,7 +256,7 @@ const PhotoViewerModal: React.FC<Props> = ({
   const scrollToIndex = (target: number, behavior: ScrollBehavior = 'smooth') => {
     const el = scrollRef.current;
     if (!el) return;
-    const clamped = Math.max(0, Math.min(photos.length - 1, target));
+    const clamped = Math.max(0, Math.min(media.length - 1, target));
     suppressScrollSyncRef.current = behavior === 'auto';
     el.scrollTo({ left: clamped * el.clientWidth, behavior });
   };
@@ -194,7 +264,7 @@ const PhotoViewerModal: React.FC<Props> = ({
   const goPrev = () => scrollToIndex(index - 1);
   const goNext = () => scrollToIndex(index + 1);
 
-  // Jump to the starting photo instantly when the modal opens on a new index.
+  // Jump to the starting media item instantly when the modal opens.
   useEffect(() => {
     if (initialIndex === null) return;
     const el = scrollRef.current;
@@ -209,7 +279,7 @@ const PhotoViewerModal: React.FC<Props> = ({
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialIndex, photos.length]);
+  }, [initialIndex, media.length]);
 
   const handleGalleryScroll = () => {
     if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current);
@@ -219,12 +289,27 @@ const PhotoViewerModal: React.FC<Props> = ({
       const el = scrollRef.current;
       if (!el || el.clientWidth === 0) return;
       const next = Math.round(el.scrollLeft / el.clientWidth);
-      if (next !== index && next >= 0 && next < photos.length) {
+      if (next !== index && next >= 0 && next < media.length) {
         setIndex(next);
         hapticTap();
       }
     });
   };
+
+  // Pause every video that isn't the active slide; play the active one.
+  useEffect(() => {
+    videoRefs.current.forEach((video, i) => {
+      if (!video) return;
+      if (i === index) {
+        video.muted = muted;
+        try {
+          void video.play().catch(() => {});
+        } catch { /* noop */ }
+      } else {
+        try { video.pause(); } catch { /* noop */ }
+      }
+    });
+  }, [index, muted, item?.kind]);
 
   // Keyboard navigation.
   useEffect(() => {
@@ -237,14 +322,10 @@ const PhotoViewerModal: React.FC<Props> = ({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, photos.length, index]);
+  }, [open, media.length, index]);
 
-  // Double-tap on the image likes it (matches social-app convention).
-  // Declared here so the hook order stays stable across renders.
   const lastTapRef = useRef(0);
 
-  // Re-render every 5s while a just-deleted tombstone is still within its
-  // 30s grace window, so it disappears on schedule even without new events.
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const hasRecentDelete = comments.some(
@@ -262,18 +343,15 @@ const PhotoViewerModal: React.FC<Props> = ({
   const commentTree = useMemo(() => buildCommentTree(displayComments), [displayComments]);
   const visibleCommentCount = displayComments.filter((c) => !c.deleted_at).length;
 
-  if (!photo) return null;
-
-  const hasPrev = index > 0;
-  const hasNext = index < photos.length - 1;
+  if (!item) return null;
 
   const handleLike = async () => {
     if (!user) {
-      toast('Sign in to like photos', 'info');
+      toast('Sign in to like posts', 'info');
       return;
     }
-    if (ownPhoto) {
-      toast('Your own photo does not earn Influence', 'info');
+    if (ownItem) {
+      toast('Your own post does not earn Influence', 'info');
       return;
     }
     const next = !liked;
@@ -283,7 +361,10 @@ const PhotoViewerModal: React.FC<Props> = ({
     if (next) hapticImpact();
     else hapticTap();
 
-    const { error } = await setActivityImageLiked({ imageId: photo.id, userId: user.id, liked: next });
+    const id = item.data.id;
+    const { error } = item.kind === 'image'
+      ? await setActivityImageLiked({ imageId: id, userId: user.id, liked: next })
+      : await setActivityVideoLiked({ videoId: id, userId: user.id, liked: next });
     setLikeBusy(false);
     if (error) {
       setLiked(!next);
@@ -291,17 +372,20 @@ const PhotoViewerModal: React.FC<Props> = ({
       toast(error, 'error');
       return;
     }
-    onLikeChange?.(photo.id, next ? 1 : -1, next);
+    onLikeChange?.(id, item.kind, next ? 1 : -1, next);
   };
 
-  const handleImageTap = () => {
+  const handleSlideTap = () => {
+    if (item.kind === 'video') {
+      setMuted((m) => !m);
+      return;
+    }
     const now = Date.now();
     if (now - lastTapRef.current < 280) {
       lastTapRef.current = 0;
       setHeartBurst((n) => n + 1);
       hapticImpact();
-      // Only fire a like (not an unlike) on double-tap to match social-app convention.
-      if (!liked && !ownPhoto && user) {
+      if (!liked && !ownItem && user) {
         void handleLike();
       }
     } else {
@@ -310,43 +394,51 @@ const PhotoViewerModal: React.FC<Props> = ({
   };
 
   const confirmDelete = async () => {
-    if (!user || !ownPhoto) return;
+    if (!user || !ownItem) return;
     setDeleting(true);
     hapticWarning();
-    const { error } = await deleteActivityImage({
-      imageId: photo.id,
-      userId: user.id,
-      storagePath: photo.storage_path,
-    });
+    const id = item.data.id;
+    const result = item.kind === 'image'
+      ? await deleteActivityImage({ imageId: id, userId: user.id, storagePath: (item.data as UserPhoto).storage_path })
+      : await deleteActivityVideo({
+          videoId: id,
+          userId: user.id,
+          storagePath: (item.data as UserVideo).storage_path,
+          posterPath: (item.data as UserVideo).poster_path,
+        });
     setDeleting(false);
-    if (error) {
-      toast(error, 'error');
+    if (result.error) {
+      toast(result.error, 'error');
       return;
     }
-    onPhotoDeleted?.(photo.id);
+    onMediaDeleted?.(id, item.kind);
     setConfirmDeleteOpen(false);
   };
 
-  const downloadImage = async () => {
+  const downloadMedia = async () => {
     setMenuOpen(false);
     try {
-      const res = await fetch(photo.url);
+      const url = item.kind === 'image' ? (item.data as UserPhoto).url : (item.data as UserVideo).url;
+      const res = await fetch(url);
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const ext = (photo.storage_path.split('.').pop() || 'jpg').toLowerCase();
-      const safeName = photo.activity_name
+      const path = item.kind === 'image'
+        ? (item.data as UserPhoto).storage_path
+        : (item.data as UserVideo).storage_path;
+      const ext = (path.split('.').pop() || (item.kind === 'image' ? 'jpg' : 'mp4')).toLowerCase();
+      const safeName = item.data.activity_name
         .toLowerCase()
         .normalize('NFKD')
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')
-        .slice(0, 60) || 'photo';
-      a.href = url;
+        .slice(0, 60) || (item.kind === 'image' ? 'photo' : 'video');
+      a.href = blobUrl;
       a.download = `${safeName}.${ext}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Could not download', 'error');
     }
@@ -360,40 +452,64 @@ const PhotoViewerModal: React.FC<Props> = ({
       return;
     }
     setSubmitting(true);
-    const { comment, error } = await addActivityImageComment({
-      imageId: photo.id,
-      userId: user.id,
-      body: trimmed,
-      parentCommentId: replyingTo?.id ?? null,
-    });
+    const id = item.data.id;
+    const result = item.kind === 'image'
+      ? await addActivityImageComment({
+          imageId: id,
+          userId: user.id,
+          body: trimmed,
+          parentCommentId: replyingTo?.id ?? null,
+        })
+      : await addActivityVideoComment({
+          videoId: id,
+          userId: user.id,
+          body: trimmed,
+          parentCommentId: replyingTo?.id ?? null,
+        });
     setSubmitting(false);
-    if (error || !comment) {
-      toast(error || 'Could not add comment', 'error');
+    if (result.error || !result.comment) {
+      toast(result.error || 'Could not add comment', 'error');
       return;
     }
-    setComments((rows) => [...rows, comment]);
+    const c = result.comment as ActivityImageComment | ActivityVideoComment;
+    const normalized: AnyComment = {
+      id: c.id,
+      user_id: c.user_id,
+      body: c.body,
+      created_at: c.created_at,
+      updated_at: c.updated_at,
+      deleted_at: c.deleted_at,
+      parent_comment_id: c.parent_comment_id,
+    };
+    setComments((rows) => [...rows, normalized]);
     setBody('');
     setReplyingTo(null);
     hapticSuccess();
-    onCommentAdded?.(photo.id);
+    onCommentAdded?.(id, item.kind);
   };
 
-  const startEdit = (comment: ActivityImageComment) => {
+  const startEdit = (comment: AnyComment) => {
     setEditingId(comment.id);
     setEditingBody(comment.body);
   };
 
-  const saveEdit = async (comment: ActivityImageComment) => {
+  const saveEdit = async (comment: AnyComment) => {
     if (!user) return;
     const trimmed = editingBody.trim();
     if (!trimmed) return;
 
     setBusyCommentId(comment.id);
-    const result = await updateActivityImageComment({
-      commentId: comment.id,
-      userId: user.id,
-      body: trimmed,
-    });
+    const result = item.kind === 'image'
+      ? await updateActivityImageComment({
+          commentId: comment.id,
+          userId: user.id,
+          body: trimmed,
+        })
+      : await updateActivityVideoComment({
+          commentId: comment.id,
+          userId: user.id,
+          body: trimmed,
+        });
     setBusyCommentId(null);
 
     if (result.error || !result.comment) {
@@ -401,20 +517,30 @@ const PhotoViewerModal: React.FC<Props> = ({
       return;
     }
 
-    setComments((rows) => rows.map((row) => (row.id === comment.id ? result.comment! : row)));
+    const c = result.comment as ActivityImageComment | ActivityVideoComment;
+    const normalized: AnyComment = {
+      id: c.id,
+      user_id: c.user_id,
+      body: c.body,
+      created_at: c.created_at,
+      updated_at: c.updated_at,
+      deleted_at: c.deleted_at,
+      parent_comment_id: c.parent_comment_id,
+    };
+
+    setComments((rows) => rows.map((row) => (row.id === comment.id ? normalized : row)));
     setEditingId(null);
     setEditingBody('');
   };
 
-  const removeComment = async (comment: ActivityImageComment) => {
+  const removeComment = async (comment: AnyComment) => {
     if (!user || comment.deleted_at) return;
 
     setBusyCommentId(comment.id);
     hapticWarning();
-    const result = await deleteActivityImageComment({
-      commentId: comment.id,
-      userId: user.id,
-    });
+    const result = item.kind === 'image'
+      ? await deleteActivityImageComment({ commentId: comment.id, userId: user.id })
+      : await deleteActivityVideoComment({ commentId: comment.id, userId: user.id });
     setBusyCommentId(null);
 
     if (result.error) {
@@ -562,8 +688,10 @@ const PhotoViewerModal: React.FC<Props> = ({
     );
   };
 
-  const mapsUrl = photo.google_maps_url
-    || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${photo.activity_name} ${photo.activity_address || ''}`.trim())}`;
+  const mapsUrl = getMapsUrl(item);
+  const headerName = getActivityName(item);
+  const headerAddress = getActivityAddress(item);
+  const totalCount = media.length;
 
   return (
     <div
@@ -576,7 +704,6 @@ const PhotoViewerModal: React.FC<Props> = ({
         style={{ maxWidth: '480px', background: 'var(--bg-primary)', height: '100dvh', minHeight: 0 }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <header
           className="flex items-center gap-2 px-3"
           style={{
@@ -591,19 +718,19 @@ const PhotoViewerModal: React.FC<Props> = ({
             onClick={onClose}
             className="w-9 h-9 rounded-lg flex items-center justify-center"
             style={{ color: 'var(--text-primary)' }}
-            aria-label="Close photo"
+            aria-label="Close"
           >
             <X size={20} />
           </button>
           <div className="flex-1 min-w-0">
             <div className="text-[14px] font-extrabold tracking-tight truncate">
-              {photo.activity_name}
+              {headerName}
             </div>
             <div className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-secondary)' }}>
-              <span className="truncate">{photo.activity_address || 'Activity'}</span>
+              <span className="truncate">{headerAddress || 'Activity'}</span>
               <span style={{ opacity: 0.4 }}>·</span>
               <span className="flex-shrink-0 font-bold" style={{ color: 'var(--text-tertiary)' }}>
-                {index + 1} / {photos.length}
+                {index + 1} / {totalCount}
               </span>
             </div>
           </div>
@@ -619,9 +746,6 @@ const PhotoViewerModal: React.FC<Props> = ({
           </a>
         </header>
 
-        {/* Horizontal snap gallery. Native scroll gives Instagram-style
-            momentum + snap; index stays in sync via scroll observer. Square
-            container, capped at 50dvh so comments always stay in view. */}
         <div
           className="relative w-full select-none"
           style={{
@@ -643,41 +767,52 @@ const PhotoViewerModal: React.FC<Props> = ({
               overscrollBehaviorX: 'contain',
             }}
           >
-            {photos.map((p, i) => {
-              const placeholder = thumbhashToCssDataUrl(p.thumbhash);
+            {media.map((m, i) => {
+              const placeholder = thumbhashToCssDataUrl(m.data.thumbhash);
               return (
-              <div
-                key={p.id}
-                className="relative flex-shrink-0 w-full h-full"
-                style={{
-                  scrollSnapAlign: 'center',
-                  scrollSnapStop: 'always',
-                  background: placeholder
-                    ? `center / cover no-repeat url(${placeholder})`
-                    : 'black',
-                }}
-                onClick={() => { if (i === index) handleImageTap(); }}
-              >
-                <CachedImage
-                  src={p.url}
-                  alt={p.activity_name}
-                  draggable={false}
-                  loading={Math.abs(i - index) <= 1 ? 'eager' : 'lazy'}
-                  decoding="async"
+                <div
+                  key={`${m.kind}-${m.data.id}`}
+                  className="relative flex-shrink-0 w-full h-full"
                   style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    cursor: 'pointer',
-                    pointerEvents: 'none',
+                    scrollSnapAlign: 'center',
+                    scrollSnapStop: 'always',
+                    background: placeholder
+                      ? `center / cover no-repeat url(${placeholder})`
+                      : 'black',
                   }}
-                />
-              </div>
+                  onClick={() => { if (i === index) handleSlideTap(); }}
+                >
+                  {m.kind === 'image' ? (
+                    <CachedImage
+                      src={m.data.url}
+                      alt={m.data.activity_name}
+                      draggable={false}
+                      loading={Math.abs(i - index) <= 1 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        cursor: 'pointer',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  ) : (
+                    <VideoSlide
+                      video={m.data}
+                      isActive={i === index}
+                      muted={muted}
+                      registerRef={(el) => {
+                        if (el) videoRefs.current.set(i, el);
+                        else videoRefs.current.delete(i);
+                      }}
+                    />
+                  )}
+                </div>
               );
             })}
           </div>
 
-          {/* Heart burst on double-tap, overlays the centered slide */}
           <AnimatePresence>
             {heartBurst > 0 && (
               <motion.div
@@ -702,12 +837,31 @@ const PhotoViewerModal: React.FC<Props> = ({
             )}
           </AnimatePresence>
 
-          {photos.length > 1 && (
+          {/* Mute indicator for video slides */}
+          {item.kind === 'video' && (
+            <div
+              aria-hidden="true"
+              className="absolute right-2 top-2 flex items-center justify-center rounded-full pointer-events-none"
+              style={{
+                width: 28,
+                height: 28,
+                background: 'rgba(0,0,0,0.55)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                color: 'white',
+                zIndex: 4,
+              }}
+            >
+              {muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
+            </div>
+          )}
+
+          {media.length > 1 && (
             <div
               className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 pointer-events-none"
               style={{ zIndex: 4 }}
             >
-              {photos.map((_, i) => (
+              {media.map((_, i) => (
                 <span
                   key={i}
                   className="rounded-full transition-all"
@@ -722,7 +876,6 @@ const PhotoViewerModal: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Action row */}
         <div
           className="flex items-center gap-2 px-4 py-3"
           style={{ borderBottom: '0.33px solid var(--outline)', flexShrink: 0 }}
@@ -741,7 +894,7 @@ const PhotoViewerModal: React.FC<Props> = ({
               color: liked ? 'var(--on-accent)' : 'var(--text-primary)',
               border: 'none',
             }}
-            aria-label={liked ? 'Unlike photo' : 'Like photo'}
+            aria-label={liked ? 'Unlike' : 'Like'}
           >
             <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
             <span className="text-[13px] font-bold leading-none">{likeCount}</span>
@@ -757,10 +910,10 @@ const PhotoViewerModal: React.FC<Props> = ({
             }}
           >
             <MessageCircle size={16} />
-            <span className="text-[13px] font-bold leading-none">{visibleCommentCount}</span>
+            <span className="text-[13px] font-bold leading-none">{visibleCommentCount || getCommentCount(item)}</span>
           </div>
 
-          {ownPhoto && (
+          {ownItem && (
             <div className="ml-auto relative">
               <button
                 onClick={() => setMenuOpen((o) => !o)}
@@ -776,7 +929,7 @@ const PhotoViewerModal: React.FC<Props> = ({
                   border: 'none',
                   padding: 0,
                 }}
-                aria-label="Photo options"
+                aria-label="Options"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
               >
@@ -800,7 +953,7 @@ const PhotoViewerModal: React.FC<Props> = ({
                     }}
                   >
                     <button
-                      onClick={downloadImage}
+                      onClick={downloadMedia}
                       className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
                       style={{
                         background: 'transparent',
@@ -812,7 +965,9 @@ const PhotoViewerModal: React.FC<Props> = ({
                       role="menuitem"
                     >
                       <Download size={16} style={{ color: 'var(--accent)' }} />
-                      <span className="text-[13px] font-semibold">Download image</span>
+                      <span className="text-[13px] font-semibold">
+                        {item.kind === 'image' ? 'Download image' : 'Download video'}
+                      </span>
                     </button>
                     <div style={{ height: '0.5px', background: 'var(--outline)' }} aria-hidden="true" />
                     <button
@@ -840,7 +995,6 @@ const PhotoViewerModal: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Comments scroll */}
         <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4" style={{ minHeight: 0 }}>
           {loadingComments ? (
             <div className="flex items-center justify-center py-8" style={{ color: 'var(--text-secondary)' }}>
@@ -858,7 +1012,6 @@ const PhotoViewerModal: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Comment input */}
         <div
           className="px-4 py-3"
           style={{
@@ -887,55 +1040,54 @@ const PhotoViewerModal: React.FC<Props> = ({
             </div>
           )}
           <div className="relative">
-          <MentionSuggestions query={mentionQuery} onSelect={insertMention} />
-          <div
-            className="flex items-center gap-2 rounded-full pl-4 pr-0"
-            style={{
-              background: 'var(--bg-primary)',
-              border: '1px solid var(--outline)',
-              height: '50px',
-            }}
-          >
-            <input
-              ref={inputRef}
-              type="text"
-              value={body}
-              onChange={(e) => {
-                const next = e.target.value.slice(0, 500);
-                setBody(next);
-                const caret = e.target.selectionEnd ?? next.length;
-                updateMentionQuery(next, caret);
+            <MentionSuggestions query={mentionQuery} onSelect={insertMention} />
+            <div
+              className="flex items-center gap-2 rounded-full pl-4 pr-0"
+              style={{
+                background: 'var(--bg-primary)',
+                border: '1px solid var(--outline)',
+                height: '50px',
               }}
-              onKeyUp={(e) => {
-                const el = e.currentTarget;
-                updateMentionQuery(el.value, el.selectionEnd ?? el.value.length);
-              }}
-              onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  submitComment();
-                }
-              }}
-              placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
-              className="flex-1 bg-transparent text-[14px] outline-none"
-              style={{ color: 'var(--text-primary)' }}
-            />
-            <button
-              onClick={submitComment}
-              disabled={submitting || !body.trim()}
-              className="w-9 h-9 rounded-full flex items-center justify-center disabled:opacity-50 flex-shrink-0"
-              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
-              aria-label={replyingTo ? 'Post reply' : 'Post comment'}
             >
-              {submitting ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={16} />}
-            </button>
-          </div>
+              <input
+                ref={inputRef}
+                type="text"
+                value={body}
+                onChange={(e) => {
+                  const next = e.target.value.slice(0, 500);
+                  setBody(next);
+                  const caret = e.target.selectionEnd ?? next.length;
+                  updateMentionQuery(next, caret);
+                }}
+                onKeyUp={(e) => {
+                  const el = e.currentTarget;
+                  updateMentionQuery(el.value, el.selectionEnd ?? el.value.length);
+                }}
+                onBlur={() => setTimeout(() => setMentionQuery(null), 150)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitComment();
+                  }
+                }}
+                placeholder={replyingTo ? 'Write a reply...' : 'Add a comment...'}
+                className="flex-1 bg-transparent text-[14px] outline-none"
+                style={{ color: 'var(--text-primary)' }}
+              />
+              <button
+                onClick={submitComment}
+                disabled={submitting || !body.trim()}
+                className="w-9 h-9 rounded-full flex items-center justify-center disabled:opacity-50 flex-shrink-0"
+                style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+                aria-label={replyingTo ? 'Post reply' : 'Post comment'}
+              >
+                {submitting ? <Loader2 size={16} className="animate-spin" /> : <SendHorizontal size={16} />}
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Unpublish confirmation modal */}
       <AnimatePresence>
         {confirmDeleteOpen && (
           <motion.div
@@ -967,10 +1119,10 @@ const PhotoViewerModal: React.FC<Props> = ({
                   <AlertTriangle size={22} />
                 </div>
                 <h3 className="text-[16px] font-extrabold tracking-tight">
-                  Unpublish this image?
+                  Unpublish this {item.kind === 'image' ? 'image' : 'video'}?
                 </h3>
                 <p className="text-[13px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                  This is non-reversible. The photo, its likes, and its comments will be removed from
+                  This is non-reversible. The {item.kind}, its likes, and its comments will be removed from
                   every place it appears.
                 </p>
               </div>
@@ -1012,4 +1164,91 @@ const PhotoViewerModal: React.FC<Props> = ({
   );
 };
 
-export default PhotoViewerModal;
+interface VideoSlideProps {
+  video: UserVideo;
+  isActive: boolean;
+  muted: boolean;
+  registerRef: (el: HTMLVideoElement | null) => void;
+}
+
+// Inner video slide. Loops within the trim window the uploader picked
+// (start_ms + duration_ms) so playback only ever shows the chosen
+// 7-second segment, mirroring the standalone video viewer's behavior.
+// The poster attribute keeps the first frame visible while bytes load,
+// fixing the "video has no thumbnail" feel.
+const VideoSlide: React.FC<VideoSlideProps> = ({ video, isActive, muted, registerRef }) => {
+  const ref = useRef<HTMLVideoElement | null>(null);
+
+  const startSec = video.start_ms && video.start_ms > 0 ? video.start_ms / 1000 : 0;
+  const endSec = video.duration_ms && video.duration_ms > 0
+    ? startSec + video.duration_ms / 1000
+    : null;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const trySeek = () => {
+      if (startSec > 0 && Math.abs(el.currentTime - startSec) > 0.05) {
+        try { el.currentTime = startSec; } catch { /* noop */ }
+      }
+    };
+    if (el.readyState >= 1) trySeek();
+    el.addEventListener('loadedmetadata', trySeek);
+    return () => el.removeEventListener('loadedmetadata', trySeek);
+  }, [startSec]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || endSec === null) return;
+    const onTimeUpdate = () => {
+      if (el.currentTime >= endSec - 0.05) {
+        try {
+          el.currentTime = startSec;
+          void el.play().catch(() => {});
+        } catch { /* noop */ }
+      } else if (el.currentTime < startSec - 0.05) {
+        try { el.currentTime = startSec; } catch { /* noop */ }
+      }
+    };
+    el.addEventListener('timeupdate', onTimeUpdate);
+    return () => el.removeEventListener('timeupdate', onTimeUpdate);
+  }, [startSec, endSec]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.muted = muted;
+    if (isActive) {
+      try { void el.play().catch(() => {}); } catch { /* noop */ }
+    } else {
+      try { el.pause(); } catch { /* noop */ }
+    }
+  }, [isActive, muted]);
+
+  return (
+    <video
+      ref={(el) => {
+        ref.current = el;
+        registerRef(el);
+      }}
+      src={video.url}
+      poster={video.posterUrl}
+      muted={muted}
+      autoPlay={isActive}
+      playsInline
+      loop={endSec === null}
+      preload={isActive ? 'auto' : 'metadata'}
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        display: 'block',
+        background: 'black',
+        cursor: 'pointer',
+        pointerEvents: 'none',
+      }}
+    />
+  );
+};
+
+export default ProfileMediaViewer;

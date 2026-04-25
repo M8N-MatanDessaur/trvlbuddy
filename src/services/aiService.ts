@@ -1781,16 +1781,20 @@ export async function interpretNearbyPrompt(
   const prompt = `A user of a nearby-places app typed this free-form request:
 "${trimmed}"
 
-Map it to a strict JSON object that tells the app which Google Places categories and what keyword to use.
+Map it to a strict JSON object that tells the app which Google Places categories and what keyword to use. The keyword feeds Google Places Text Search, so it should read like the query a human would type into Google Maps.
 
 Allowed category types (use ONLY these string values): ${typeList}.
 
 Rules:
-- Return between 1 and 4 category types that best match the intent. Do NOT invent new types.
-- "keyword" is a short phrase (1-4 words) that captures any specific flavor of the request (e.g. "viral tiktok", "scenic", "vegan", "hidden gem", "sunset view"). Leave it empty if the request is purely about a category (e.g. "just restaurants").
-- If the request mentions things like "walk", "stroll", "outside", prefer "park" and "tourist_attraction".
+- "keyword" must capture the SPECIFIC THING the user wants so Google Places Text Search can find it. Cases:
+  * Specific place name (a proper noun like "Bee Bagels" or "Joe's Pizza"): keyword is the full place name exactly as typed. Pick 1-2 categories that best match what that kind of place usually is.
+  * Cuisine / dish / specialty ("ramen", "bagels", "sushi", "poutine", "matcha latte"): keyword is that word or short phrase.
+  * Vibe / phrase / intent ("cozy cafe with wifi", "rooftop for sunset", "viral tiktok dessert"): keyword is a short 2-4 word distillation a human would Google.
+  * Pure category ("just restaurants", "any park"): keyword is empty.
+- Return between 0 and 4 category types that best match the intent. Use 0 only when the request is so specific (a unique business name) that no category narrows it. Otherwise pick 1-4. Do NOT invent new types.
+- If the request mentions "walk", "stroll", "outside", prefer "park" and "tourist_attraction".
 - If it mentions "photo", "pictures", "instagram", "scenic", prefer "tourist_attraction" and "park" with a keyword like "scenic" or "viewpoint".
-- If it mentions "tiktok", "viral", "trendy", keep the requested category but add that as the keyword.
+- If it mentions "tiktok", "viral", "trendy", keep the requested category and add that as the keyword.
 
 Return ONLY minified JSON of the form: {"types":["restaurant","cafe"],"keyword":"viral tiktok"}. No markdown, no prose.`;
 

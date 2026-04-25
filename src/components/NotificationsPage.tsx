@@ -108,10 +108,10 @@ const NotificationsPage: React.FC = () => {
 
   const handleRowClick = async (n: Notification) => {
     if (!n.read_at) void markRead(n.id);
-    // Light-weight routing: image-related notifications → photo viewer via
+    // Light-weight routing: image-related notifications → media viewer via
     // the profile page. Lands on /profile for now and lets the user find
     // their photo. A deep-link to the specific image would need extra state
-    // plumbing in PhotoViewerModal.
+    // plumbing in ProfileMediaViewer.
     if (n.type === 'image_liked' || n.type === 'image_commented' || n.type === 'comment_replied') {
       navigate('/profile');
     }
