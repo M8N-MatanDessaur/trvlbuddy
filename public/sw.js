@@ -178,20 +178,10 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Trip-intelligence read-only APIs: cache aggressively so weather +
-  // exchange rates work offline on the trip page. Both are same-origin
-  // via public internet — SWR keeps the UI snappy while background
-  // revalidation keeps data fresh when online.
-  if (url.hostname === 'api.open-meteo.com' || url.hostname === 'api.exchangerate.host') {
+  // exchange rates work offline on the trip page. SWR keeps the UI snappy
+  // while background revalidation keeps data fresh when online.
+  if (url.hostname === 'api.open-meteo.com' || url.hostname === 'open.er-api.com') {
     event.respondWith(staleWhileRevalidate(event.request, REST_CACHE, REST_MAX_ENTRIES));
-    return;
-  }
-
-  // OpenStreetMap raster tiles for the trip map — cache-first, 30 days.
-  // Tile bytes are immutable for a given z/x/y, so a hit is always safe.
-  if (/\.tile\.openstreetmap\.org$/.test(url.hostname)) {
-    event.respondWith(
-      cacheFirstWithExpiry(event.request, IMG_CACHE, IMG_MAX_AGE_MS, IMG_MAX_ENTRIES),
-    );
     return;
   }
 
