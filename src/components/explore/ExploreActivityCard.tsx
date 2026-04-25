@@ -17,7 +17,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import ImageCarousel from '../ImageCarousel';
-import UploadPhotoButton from '../UploadPhotoButton';
+import UploadMediaButton from '../UploadMediaButton';
 import Avatar from '../Avatar';
 import ImageCommentsSheet from '../nearby/ImageCommentsSheet';
 
@@ -70,6 +70,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
     imageUrls,
     uploading,
     upload,
+    uploadVideo,
     setImageLiked,
     addImageComment,
     removeImageComment,
@@ -359,12 +360,13 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
         <div className="flex items-center justify-between gap-3 mt-3">
           <div className="flex items-center gap-2">
             {doneButton}
-            <UploadPhotoButton
-              onFile={upload}
+            <UploadMediaButton
+              onPhotoFile={upload}
+              onVideoResult={uploadVideo}
               uploading={uploading}
               style={solidCircleStyle(true)}
               size={16}
-              ariaLabel="Add the first photo"
+              ariaLabel="Add the first photo or video"
             />
           </div>
           {votePill}
@@ -455,8 +457,9 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
           </div>
 
           <div className="absolute right-3 bottom-3 z-10">
-            <UploadPhotoButton
-              onFile={upload}
+            <UploadMediaButton
+              onPhotoFile={upload}
+              onVideoResult={uploadVideo}
               uploading={uploading}
               style={overlayCircleStyle()}
               size={16}

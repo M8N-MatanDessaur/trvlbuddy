@@ -11,7 +11,7 @@ import { NearbyPlace, formatDistance, priceLevelLabel } from '../../services/nea
 import { useActivityMedia } from '../../hooks/useActivityMedia';
 import { useAuth } from '../../contexts/AuthContext';
 import ImageCarousel from '../ImageCarousel';
-import UploadPhotoButton from '../UploadPhotoButton';
+import UploadMediaButton from '../UploadMediaButton';
 import Avatar from '../Avatar';
 import { useToast } from '../../contexts/ToastContext';
 import ImageCommentsSheet from './ImageCommentsSheet';
@@ -51,6 +51,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
     imageUrls,
     uploading,
     upload,
+    uploadVideo,
     setImageLiked,
     addImageComment,
     removeImageComment,
@@ -310,12 +311,13 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <UploadPhotoButton
-              onFile={upload}
+            <UploadMediaButton
+              onPhotoFile={upload}
+              onVideoResult={uploadVideo}
               uploading={uploading}
               style={solidCircleStyle(true)}
               size={16}
-              ariaLabel="Add the first photo"
+              ariaLabel="Add the first photo or video"
             />
             {votePill}
           </div>
@@ -404,8 +406,9 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
 
           {/* Bottom-right: plus */}
           <div className="absolute right-3 bottom-3 z-10">
-            <UploadPhotoButton
-              onFile={upload}
+            <UploadMediaButton
+              onPhotoFile={upload}
+              onVideoResult={uploadVideo}
               uploading={uploading}
               style={overlayCircleStyle()}
               size={16}

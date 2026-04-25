@@ -14,6 +14,8 @@ import {
   type ActivityVoteState,
 } from '../services/activityMediaService';
 import { warmImageCache } from '../lib/imagePrefetch';
+import { uploadActivityVideo } from '../services/activityVideoService';
+import type { TrimResult } from '../lib/videoProcess';
 
 interface State {
   loading: boolean;
@@ -27,6 +29,7 @@ interface State {
 
 interface UseActivityMediaResult extends State {
   upload: (file: File) => Promise<{ ok: boolean; error?: string | null }>;
+  uploadVideo: (result: TrimResult) => Promise<{ ok: boolean; error?: string | null }>;
   setImageLiked: (image: ActivityImageMedia, liked: boolean) => Promise<{ ok: boolean; error?: string | null; ignored?: boolean }>;
   addImageComment: (image: ActivityImageMedia, body: string, parentCommentId?: string | null) => Promise<{ ok: boolean; error?: string | null }>;
   removeImageComment: (image: ActivityImageMedia) => void;
@@ -101,6 +104,28 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       return { ok: true };
     },
     [user, state.activityId, refreshProfile]
+  );
+
+  const uploadVideoFn = useCallback<UseActivityMediaResult['uploadVideo']>(
+    async (result) => {
+      if (!user) return { ok: false, error: 'Sign in required' };
+      if (!state.activityId) return { ok: false, error: 'Activity not ready yet' };
+      setState((s) => ({ ...s, uploading: true, error: null }));
+      const { error } = await uploadActivityVideo({
+        activityId: state.activityId,
+        uploaderId: user.id,
+        video: result.video,
+        poster: result.poster,
+        durationMs: result.durationMs,
+        width: result.width,
+        height: result.height,
+      });
+      setState((s) => ({ ...s, uploading: false, error }));
+      if (error) return { ok: false, error };
+      refreshProfile().catch(() => {});
+      return { ok: true };
+    },
+    [user, state.activityId, refreshProfile],
   );
 
   const setImageLiked = useCallback<UseActivityMediaResult['setImageLiked']>(
@@ -223,7 +248,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     setState((s) => ({ ...s, images, imageUrls: images.map((image) => image.url), vote }));
   }, [state.activityId, user?.id]);
 
-  return { ...state, upload, setImageLiked, addImageComment, removeImageComment, setVote, refresh };
+  return { ...state, upload, uploadVideo: uploadVideoFn, setImageLiked, addImageComment, removeImageComment, setVote, refresh };
 }
 
 function computeOptimisticVote(prev: ActivityVoteState, next: 0 | 1 | -1): ActivityVoteState {
