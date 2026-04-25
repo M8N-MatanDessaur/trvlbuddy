@@ -1,4 +1,17 @@
-const CACHE_NAME = 'trvlbuddy-v4';
+// Service worker — shell + runtime cache.
+// Three buckets:
+//   trvlbuddy-v5          shell (icons, manifest, fallback document)
+//   trvlbuddy-imgs-v1     supabase storage objects (activity photos, avatars) — cache-first, 30d LRU
+//   trvlbuddy-rest-v1     supabase REST reads — stale-while-revalidate
+
+const CACHE_NAME = 'trvlbuddy-v5';
+const IMG_CACHE = 'trvlbuddy-imgs-v1';
+const REST_CACHE = 'trvlbuddy-rest-v1';
+
+const IMG_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const IMG_MAX_ENTRIES = 500;
+const REST_MAX_ENTRIES = 200;
+
 const urlsToCache = [
   '/',
   '/manifest.json',
@@ -17,11 +30,12 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  const keep = new Set([CACHE_NAME, IMG_CACHE, REST_CACHE]);
   event.waitUntil(
     caches.keys().then((cacheNames) =>
       Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME)
+          .filter((name) => !keep.has(name))
           .map((name) => caches.delete(name))
       )
     )
@@ -50,6 +64,73 @@ function storePendingFile(text) {
   });
 }
 
+// ── Runtime-cache helpers ────────────────────────────────────────────────
+
+// Cache-first with a timestamp stamped in a custom header so we can expire
+// entries. Trims the cache to MAX_ENTRIES after every write (FIFO, which is
+// close enough to LRU since we also delete on expiry).
+async function cacheFirstWithExpiry(request, cacheName, maxAgeMs, maxEntries) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  if (cached) {
+    const stamp = cached.headers.get('sw-cached-at');
+    const cachedAt = stamp ? parseInt(stamp, 10) : 0;
+    if (Date.now() - cachedAt < maxAgeMs) {
+      return cached;
+    }
+    cache.delete(request).catch(() => {});
+  }
+  try {
+    const response = await fetch(request);
+    if (response && (response.ok || response.type === 'opaque')) {
+      const headers = new Headers(response.headers);
+      headers.set('sw-cached-at', String(Date.now()));
+      const body = await response.clone().blob();
+      const timestamped = new Response(body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+      cache.put(request, timestamped).then(() => trimCache(cacheName, maxEntries)).catch(() => {});
+    }
+    return response;
+  } catch (err) {
+    // Offline and nothing cached — return the stale entry if we have one,
+    // otherwise let the caller see the network error.
+    if (cached) return cached;
+    throw err;
+  }
+}
+
+// Stale-while-revalidate: return cached immediately (if any), kick off a
+// background fetch to refresh. Used for Supabase REST GETs so feed / profile
+// data pops up instantly from the last visit and updates silently.
+async function staleWhileRevalidate(request, cacheName, maxEntries) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+  const networkPromise = fetch(request.clone()).then((response) => {
+    if (response && response.ok) {
+      cache.put(request, response.clone())
+        .then(() => trimCache(cacheName, maxEntries))
+        .catch(() => {});
+    }
+    return response;
+  }).catch(() => null);
+  return cached || (await networkPromise) || Response.error();
+}
+
+async function trimCache(cacheName, maxEntries) {
+  const cache = await caches.open(cacheName);
+  const keys = await cache.keys();
+  if (keys.length <= maxEntries) return;
+  const excess = keys.length - maxEntries;
+  for (let i = 0; i < excess; i++) {
+    await cache.delete(keys[i]);
+  }
+}
+
+// ── Fetch router ─────────────────────────────────────────────────────────
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -73,8 +154,29 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Skip non-GET and cross-origin requests
   if (event.request.method !== 'GET') return;
+
+  // ── Supabase cross-origin caching ──────────────────────────────────────
+  // Keyed by hostname ending in .supabase.co so any project id matches.
+  if (url.hostname.endsWith('.supabase.co')) {
+    // Public storage objects (activity photos, avatars): cache-first 30 days.
+    if (url.pathname.startsWith('/storage/v1/object/public/')) {
+      event.respondWith(
+        cacheFirstWithExpiry(event.request, IMG_CACHE, IMG_MAX_AGE_MS, IMG_MAX_ENTRIES),
+      );
+      return;
+    }
+    // PostgREST reads: stale-while-revalidate. Mutating methods were already
+    // filtered above (GET-only handler). Don't touch /auth/* or /realtime/*.
+    if (url.pathname.startsWith('/rest/v1/')) {
+      event.respondWith(staleWhileRevalidate(event.request, REST_CACHE, REST_MAX_ENTRIES));
+      return;
+    }
+    // Auth / realtime / functions: pass through untouched so live sessions
+    // and websockets are never served from cache.
+    return;
+  }
+
   if (url.hostname !== self.location.hostname) return;
 
   const isHashedAsset = url.pathname.startsWith('/assets/');
@@ -82,9 +184,9 @@ self.addEventListener('fetch', (event) => {
     event.request.mode === 'navigate' ||
     event.request.destination === 'document';
 
-  // Navigation (HTML document) requests: always go to network first so a
-  // fresh index.html with current chunk hashes is served. Fall back to the
-  // cached root document only when offline.
+  // Navigation (HTML document) requests: network first so a fresh index.html
+  // with current chunk hashes is served. Fall back to the cached root
+  // document when offline.
   if (isNavigation) {
     event.respondWith(
       fetch(event.request)

@@ -84,7 +84,10 @@ const AppContent: React.FC = () => {
   const pages = effectiveMode === 'local' ? localPages : tripPages;
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ paddingTop: '3.75rem' }}>
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ paddingTop: 'calc(3.75rem + env(safe-area-inset-top))' }}
+    >
       <Header pages={pages} />
 
       {/* Hidden routes for redirects */}

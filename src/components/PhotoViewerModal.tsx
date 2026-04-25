@@ -28,6 +28,7 @@ import {
 } from '../services/activityMediaService';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { impact as hapticImpact, success as hapticSuccess, tap as hapticTap, warning as hapticWarning } from '../lib/haptics';
 
 interface CommentNode extends ActivityImageComment {
   replies: CommentNode[];
@@ -188,6 +189,7 @@ const PhotoViewerModal: React.FC<Props> = ({
       const next = Math.round(el.scrollLeft / el.clientWidth);
       if (next !== index && next >= 0 && next < photos.length) {
         setIndex(next);
+        hapticTap();
       }
     });
   };
@@ -246,6 +248,8 @@ const PhotoViewerModal: React.FC<Props> = ({
     setLikeBusy(true);
     setLiked(next);
     setLikeCount((c) => Math.max(0, c + (next ? 1 : -1)));
+    if (next) hapticImpact();
+    else hapticTap();
 
     const { error } = await setActivityImageLiked({ imageId: photo.id, userId: user.id, liked: next });
     setLikeBusy(false);
@@ -263,6 +267,7 @@ const PhotoViewerModal: React.FC<Props> = ({
     if (now - lastTapRef.current < 280) {
       lastTapRef.current = 0;
       setHeartBurst((n) => n + 1);
+      hapticImpact();
       // Only fire a like (not an unlike) on double-tap to match social-app convention.
       if (!liked && !ownPhoto && user) {
         void handleLike();
@@ -275,6 +280,7 @@ const PhotoViewerModal: React.FC<Props> = ({
   const confirmDelete = async () => {
     if (!user || !ownPhoto) return;
     setDeleting(true);
+    hapticWarning();
     const { error } = await deleteActivityImage({
       imageId: photo.id,
       userId: user.id,
@@ -336,6 +342,7 @@ const PhotoViewerModal: React.FC<Props> = ({
     setComments((rows) => [...rows, comment]);
     setBody('');
     setReplyingTo(null);
+    hapticSuccess();
     onCommentAdded?.(photo.id);
   };
 
@@ -371,6 +378,7 @@ const PhotoViewerModal: React.FC<Props> = ({
     if (!user || comment.deleted_at) return;
 
     setBusyCommentId(comment.id);
+    hapticWarning();
     const result = await deleteActivityImageComment({
       commentId: comment.id,
       userId: user.id,
@@ -541,7 +549,8 @@ const PhotoViewerModal: React.FC<Props> = ({
         <header
           className="flex items-center gap-2 px-3"
           style={{
-            height: '3.25rem',
+            height: 'calc(3.25rem + env(safe-area-inset-top))',
+            paddingTop: 'env(safe-area-inset-top)',
             background: 'var(--bg-primary)',
             borderBottom: '0.33px solid var(--outline)',
             flexShrink: 0,
@@ -810,7 +819,14 @@ const PhotoViewerModal: React.FC<Props> = ({
         </div>
 
         {/* Comment input */}
-        <div className="px-4 py-3" style={{ borderTop: '0.33px solid var(--outline)', flexShrink: 0 }}>
+        <div
+          className="px-4 py-3"
+          style={{
+            borderTop: '0.33px solid var(--outline)',
+            flexShrink: 0,
+            paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+          }}
+        >
           {replyingTo && (
             <div
               className="mb-2 flex items-center justify-between gap-2 rounded-full px-3 py-1.5 text-[12px]"

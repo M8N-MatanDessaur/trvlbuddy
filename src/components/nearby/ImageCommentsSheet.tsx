@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Check, Loader2, MessageCircle, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { success as hapticSuccess, warning as hapticWarning } from '../../lib/haptics';
 import {
   deleteActivityImageComment,
   listActivityImageComments,
@@ -153,6 +154,7 @@ const ImageCommentsSheet: React.FC<Props> = ({
     setBody('');
     setReplyingTo(null);
     setSubmitting(false);
+    hapticSuccess();
   };
 
   const startEdit = (comment: ActivityImageComment) => {
@@ -187,6 +189,7 @@ const ImageCommentsSheet: React.FC<Props> = ({
     if (!user || comment.deleted_at) return;
 
     setBusyCommentId(comment.id);
+    hapticWarning();
     const result = await deleteActivityImageComment({
       commentId: comment.id,
       userId: user.id,
@@ -392,7 +395,13 @@ const ImageCommentsSheet: React.FC<Props> = ({
           )}
         </div>
 
-        <div className="px-4 py-3 border-t" style={{ borderColor: 'var(--outline)' }}>
+        <div
+          className="px-4 py-3 border-t"
+          style={{
+            borderColor: 'var(--outline)',
+            paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+          }}
+        >
           {replyingTo && (
             <div
               className="mb-2 flex items-center justify-between gap-2 rounded-full px-3 py-1.5 text-[12px]"
