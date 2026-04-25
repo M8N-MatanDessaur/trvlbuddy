@@ -505,12 +505,12 @@ const PhotoViewerModal: React.FC<Props> = ({
   return (
     <div
       className="fixed inset-0 z-[80] flex flex-col"
-      style={{ background: 'rgba(0,0,0,0.85)' }}
+      style={{ background: 'rgba(0,0,0,0.85)', height: '100dvh' }}
       onClick={onClose}
     >
       <div
-        className="flex flex-col w-full h-full mx-auto"
-        style={{ maxWidth: '480px', background: 'var(--bg-primary)' }}
+        className="flex flex-col w-full mx-auto"
+        style={{ maxWidth: '480px', background: 'var(--bg-primary)', height: '100dvh', minHeight: 0 }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -555,11 +555,13 @@ const PhotoViewerModal: React.FC<Props> = ({
           </a>
         </header>
 
-        {/* Square image with swipe + chevrons */}
+        {/* Square image, cover-cropped. Capped at ~half the viewport so the
+            comment section is always visible without scrolling the modal. */}
         <div
-          className="relative w-full flex items-center justify-center select-none"
+          className="relative w-full flex items-center justify-center select-none overflow-hidden"
           style={{
             aspectRatio: '1 / 1',
+            maxHeight: '50dvh',
             background: 'black',
             flexShrink: 0,
           }}
@@ -760,7 +762,7 @@ const PhotoViewerModal: React.FC<Props> = ({
         </div>
 
         {/* Comments scroll */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4" style={{ minHeight: 0 }}>
           {loadingComments ? (
             <div className="flex items-center justify-center py-8" style={{ color: 'var(--text-secondary)' }}>
               <Loader2 size={18} className="animate-spin" />
