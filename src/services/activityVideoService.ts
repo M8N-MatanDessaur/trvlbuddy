@@ -80,16 +80,22 @@ export interface UploadActivityVideoParams {
   startMs: number;
   width: number;
   height: number;
+  onProgress?: (progress: number) => void;
 }
 
 // Uploads the source video bytes as-is (no transcoding) plus the
-// extracted poster frame in parallel, computes a thumbhash from the
-// poster for the placeholder, then writes the activity_videos row
-// with the trim window so the player can scope playback.
+// extracted poster frame, computes a thumbhash from the poster for
+// the placeholder, then writes the activity_videos row with the trim
+// window so the player can scope playback.
+//
+// The video upload goes through createSignedUploadUrl + XHR PUT so we
+// get real bytes-uploaded progress events (the supabase-js fetch path
+// can't report upload progress). The poster is small (~200KB) so it
+// rides the regular client and runs in parallel.
 export async function uploadActivityVideo(
   params: UploadActivityVideoParams,
 ): Promise<{ video: ActivityVideoMedia | null; error: string | null }> {
-  const { activityId, uploaderId, video, poster, durationMs, startMs, width, height } = params;
+  const { activityId, uploaderId, video, poster, durationMs, startMs, width, height, onProgress } = params;
 
   const ts = Date.now();
   const stub = `${uploaderId}-${ts}-${Math.random().toString(36).slice(2, 8)}`;
@@ -101,12 +107,23 @@ export async function uploadActivityVideo(
   const videoPath = `${activityId}/${stub}.${videoExt}`;
   const posterPath = `${activityId}/${stub}.jpg`;
 
-  const [videoRes, posterRes, thumbhash] = await Promise.all([
-    supabase.storage.from('activity-videos').upload(videoPath, video, {
-      cacheControl: '31536000',
-      upsert: false,
-      contentType: videoMime,
-    }),
+  // Reserve a signed upload URL up front so we can PUT the bytes via XHR
+  // and watch progress events. Failing here is rare (auth/RLS issue) and
+  // shouldn't even start the parallel work below.
+  const { data: signed, error: signError } = await supabase.storage
+    .from('activity-videos')
+    .createSignedUploadUrl(videoPath);
+  if (signError || !signed?.signedUrl) {
+    return { video: null, error: signError?.message || 'Could not start video upload.' };
+  }
+
+  onProgress?.(0);
+
+  const [videoUploadError, posterRes, thumbhash] = await Promise.all([
+    putWithProgress(signed.signedUrl, video, videoMime, onProgress).then(
+      () => null,
+      (e: Error) => e,
+    ),
     // Posters live in the existing activity-images bucket so the same
     // CDN cache + RLS + image pipeline handles them.
     supabase.storage.from('activity-images').upload(posterPath, poster, {
@@ -117,7 +134,7 @@ export async function uploadActivityVideo(
     computeThumbhashFromFile(poster),
   ]);
 
-  if (videoRes.error) return { video: null, error: videoRes.error.message };
+  if (videoUploadError) return { video: null, error: videoUploadError.message };
   if (posterRes.error) {
     await supabase.storage.from('activity-videos').remove([videoPath]).catch(() => {});
     return { video: null, error: posterRes.error.message };
@@ -179,6 +196,56 @@ export async function deleteActivityVideo(params: {
   } catch { /* best-effort */ }
 
   return { error: null };
+}
+
+// PUT a file body to a Supabase signed upload URL via XHR so we can
+// surface bytes-uploaded progress (fetch can't observe upload progress
+// reliably across browsers). Resolves on a 2xx and rejects with a
+// useful message on anything else, including network failures and the
+// "object exceeded the maximum allowed size" error from the bucket.
+function putWithProgress(
+  signedUrl: string,
+  file: File,
+  contentType: string,
+  onProgress?: (p: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', signedUrl, true);
+    // x-upsert:false matches the regular .upload() default and lets the
+    // server reject duplicate paths cleanly instead of silently overwriting.
+    xhr.setRequestHeader('x-upsert', 'false');
+    if (contentType) xhr.setRequestHeader('Content-Type', contentType);
+    xhr.upload.onprogress = (e) => {
+      if (!onProgress) return;
+      if (e.lengthComputable && e.total > 0) {
+        onProgress(Math.min(1, e.loaded / e.total));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(1);
+        resolve();
+        return;
+      }
+      // Surface Supabase's structured error if the body is JSON; otherwise
+      // fall back to status-text. The bucket-size error reads
+      // "The object exceeded the maximum allowed size".
+      let message = `Upload failed (${xhr.status})`;
+      try {
+        const parsed = JSON.parse(xhr.responseText);
+        if (parsed?.message) message = String(parsed.message);
+        else if (parsed?.error) message = String(parsed.error);
+      } catch {
+        if (xhr.responseText) message = xhr.responseText.slice(0, 200);
+      }
+      reject(new Error(message));
+    };
+    xhr.onerror = () => reject(new Error('Network error during upload.'));
+    xhr.onabort = () => reject(new Error('Upload was cancelled.'));
+    xhr.ontimeout = () => reject(new Error('Upload timed out.'));
+    xhr.send(file);
+  });
 }
 
 // Picks an extension + MIME from the source file. The browser fills in
