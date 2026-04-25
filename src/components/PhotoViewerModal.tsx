@@ -615,6 +615,7 @@ const PhotoViewerModal: React.FC<Props> = ({
                   alt={p.activity_name}
                   draggable={false}
                   loading={Math.abs(i - index) <= 1 ? 'eager' : 'lazy'}
+                  decoding="async"
                   style={{
                     width: '100%',
                     height: '100%',
