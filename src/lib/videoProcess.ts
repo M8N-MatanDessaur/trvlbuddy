@@ -10,16 +10,18 @@ export const TARGET_HEIGHT = 720;
 export const TARGET_VIDEO_BITRATE = '1200k';
 export const POSTER_QUALITY = 4; // 1-31 (lower = higher quality)
 
-// 0.12.6 is the version pinned by the ffmpeg.wasm 0.12.15 playground/docs.
-// 0.12.10's UMD build doesn't expose self.createFFmpegCore in the shape the
-// worker expects, so importScripts succeeds but the load step then throws
-// the opaque "failed to import ffmpeg-core.js".
 const FFMPEG_CORE_VERSION = '0.12.6';
-// Ordered fallback list. unpkg occasionally serves a 403/HTML error page for
-// scoped packages (CDN edge issues); jsdelivr is a clean recovery path.
+// @ffmpeg/ffmpeg@0.12.15 spawns its worker as `type: 'module'`, so the
+// worker's `importScripts(coreURL)` throws synchronously (importScripts is
+// not defined in module workers) and execution falls into the
+// `await import(coreURL)` branch. That branch only succeeds for an actual
+// ES module — a UMD bundle imported as ESM has no default export, so the
+// worker then throws the opaque "failed to import ffmpeg-core.js".
+// Pointing at /dist/esm/ instead of /dist/umd/ gives the dynamic-import
+// fallback a real module to consume.
 const FFMPEG_CORE_BASES = [
-  `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`,
-  `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`,
+  `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/esm`,
+  `https://cdn.jsdelivr.net/npm/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/esm`,
 ];
 
 let loader: Promise<FFmpeg> | null = null;
