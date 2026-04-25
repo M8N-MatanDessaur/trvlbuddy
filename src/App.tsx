@@ -20,6 +20,7 @@ import SettingsPage from './components/SettingsPage';
 import AccountPage from './components/AccountPage';
 import PasswordResetPage from './components/PasswordResetPage';
 import ProfilePage from './components/ProfilePage';
+import NotificationsPage from './components/NotificationsPage';
 import NewTripLauncher from './components/NewTripLauncher';
 import TripJoinPage from './components/TripJoinPage';
 import { MessageCircle, Home, Compass, Languages, Phone, Radar, Plus, Wrench } from 'lucide-react';
@@ -75,6 +76,7 @@ const AppContent: React.FC = () => {
 
   if (location.pathname === '/settings') return <SettingsPage />;
   if (location.pathname === '/account') return <AccountPage />;
+  if (location.pathname === '/notifications') return <NotificationsPage />;
   if (location.pathname === '/profile' || location.pathname.startsWith('/profile/')) return <ProfilePage />;
 
   // Trip generation / long-running work gets the branded loading screen.
