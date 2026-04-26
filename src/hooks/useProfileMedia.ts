@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   getUserSocialStats,
   listUserPhotos,
@@ -28,51 +28,62 @@ interface ProfileMediaSnapshot {
   videos: UserVideo[];
 }
 
-// Wrap a promise with a timeout that REJECTS if the promise doesn't
-// settle. allSettled only helps if each underlying promise eventually
-// resolves OR rejects -- a hung Supabase query will sit forever on a
-// flaky phone connection. With this guard, each sub-query has at most
-// 12s to respond, then it counts as a rejection and the rest of the
-// data still renders.
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-    promise.then(
-      (value) => { clearTimeout(t); resolve(value); },
-      (err) => { clearTimeout(t); reject(err); },
-    );
-  });
+// Race a task against an AbortController-driven timeout. The task
+// receives the signal so it can actually cancel the underlying network
+// request instead of letting it run on after the wrapper rejects --
+// previously the request kept burning battery / data even though the
+// wrapper had given up.
+function withTimeout<T>(
+  task: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => {
+    try { ctrl.abort(new Error(`${label} timed out after ${ms}ms`)); } catch { ctrl.abort(); }
+  }, ms);
+  return task(ctrl.signal).finally(() => clearTimeout(timer));
 }
 
 const PROFILE_QUERY_TIMEOUT_MS = 12_000;
 
-async function fetchProfileMedia(userId: string): Promise<ProfileMediaSnapshot> {
-  // Each sub-query is independently timeout-guarded. If photos hangs,
-  // after 12s it counts as rejected; stats + videos still come through.
-  // The grid renders whatever resolved; the user never sits on shimmer
-  // forever.
+async function fetchProfileMedia(userId: string, qc: QueryClient): Promise<ProfileMediaSnapshot> {
+  // Read whatever we last had for this user. When a sub-query rejects
+  // (timeout or network error), we fall back to the prior value
+  // instead of fabricating a fake-empty result -- that's the
+  // "loads forever then says 0 posts" bug Codex flagged.
+  const prior = qc.getQueryData<ProfileMediaSnapshot>(queryKeys.profileMedia(userId));
+
   const [statsResult, photosResult, videosResult] = await Promise.allSettled([
-    withTimeout(getUserSocialStats(userId), PROFILE_QUERY_TIMEOUT_MS, 'stats'),
-    withTimeout(listUserPhotos(userId), PROFILE_QUERY_TIMEOUT_MS, 'photos'),
-    withTimeout(listUserVideos(userId), PROFILE_QUERY_TIMEOUT_MS, 'videos'),
+    withTimeout((signal) => getUserSocialStats(userId, signal), PROFILE_QUERY_TIMEOUT_MS, 'stats'),
+    withTimeout((signal) => listUserPhotos(userId, signal), PROFILE_QUERY_TIMEOUT_MS, 'photos'),
+    withTimeout((signal) => listUserVideos(userId, signal), PROFILE_QUERY_TIMEOUT_MS, 'videos'),
   ]);
 
   if (statsResult.status === 'rejected') console.warn('[profile] stats failed', statsResult.reason);
   if (photosResult.status === 'rejected') console.warn('[profile] photos failed', photosResult.reason);
   if (videosResult.status === 'rejected') console.warn('[profile] videos failed', videosResult.reason);
 
+  // Per-bucket fallback: rejected -> prior value (or safe-empty if no
+  // prior). This means a transient timeout never blanks out real data
+  // the user just saw a moment ago.
   const stats = statsResult.status === 'fulfilled'
     ? statsResult.value
-    : { postCount: 0, likesReceived: 0, commentsReceived: 0 };
-  const photos = photosResult.status === 'fulfilled' ? photosResult.value : [];
-  const videos = videosResult.status === 'fulfilled' ? videosResult.value : [];
+    : prior?.stats ?? { postCount: 0, likesReceived: 0, commentsReceived: 0 };
+  const photos = photosResult.status === 'fulfilled'
+    ? photosResult.value
+    : prior?.photos ?? [];
+  const videos = videosResult.status === 'fulfilled'
+    ? videosResult.value
+    : prior?.videos ?? [];
 
-  // If EVERY query rejected, throw so React Query enters an error state
-  // and the next mount retries instead of silently caching empty data.
+  // If EVERY query rejected AND we have no prior cache, throw so React
+  // Query enters an error state and the next mount retries.
   if (
     statsResult.status === 'rejected' &&
     photosResult.status === 'rejected' &&
-    videosResult.status === 'rejected'
+    videosResult.status === 'rejected' &&
+    !prior
   ) {
     throw statsResult.reason instanceof Error
       ? statsResult.reason
@@ -95,12 +106,11 @@ async function fetchProfileMedia(userId: string): Promise<ProfileMediaSnapshot> 
 // dedupe across components, and external code can invalidate via
 // queryKeys.profileMedia(userId).
 export function useProfileMedia(userId: string | null): ProfileMediaState {
+  const qc = useQueryClient();
   const query = useQuery({
     queryKey: queryKeys.profileMedia(userId),
-    queryFn: () => fetchProfileMedia(userId as string),
+    queryFn: () => fetchProfileMedia(userId as string, qc),
     enabled: Boolean(userId),
-    // Empty arrays kept as the placeholder so consumers always have a
-    // safe shape to render against, even before the first response.
     placeholderData: (prev) => prev,
   });
 
