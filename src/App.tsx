@@ -1,5 +1,7 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { installRealtimeBridge } from './lib/realtimeBridge';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { TravelProvider, useTravel } from './contexts/TravelContext';
 import { ToastProvider } from './contexts/ToastContext';
@@ -158,23 +160,55 @@ const DesktopFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   </div>
 );
 
+// One QueryClient per app instance. Defaults: stale-after-30s so revisits
+// to a screen feel instant from cache while a background refetch lands;
+// retries off (we surface real errors instead of silently retrying); refetch
+// on focus so coming back to the tab pulls anything that changed while we
+// were away. Realtime invalidations override the staleTime when relevant.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      retry: 1,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    },
+    mutations: {
+      retry: 0,
+    },
+  },
+});
+
+// Subscribes to Supabase Realtime once, fires React Query invalidations
+// on every relevant table change. Lives inside the QueryClientProvider so
+// useQueryClient resolves; no UI of its own.
+const RealtimeBridge: React.FC = () => {
+  const qc = useQueryClient();
+  useEffect(() => installRealtimeBridge(qc), [qc]);
+  return null;
+};
+
 function App() {
   return (
-    <ThemeProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <TravelProvider>
-            <ContextEngineProvider>
-              <ChatProvider>
-                <DesktopFrame>
-                  <AppContentWrapped />
-                </DesktopFrame>
-              </ChatProvider>
-            </ContextEngineProvider>
-          </TravelProvider>
-        </AuthProvider>
-      </ToastProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <RealtimeBridge />
+      <ThemeProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <TravelProvider>
+              <ContextEngineProvider>
+                <ChatProvider>
+                  <DesktopFrame>
+                    <AppContentWrapped />
+                  </DesktopFrame>
+                </ChatProvider>
+              </ContextEngineProvider>
+            </TravelProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowLeft, Camera, ImagePlus, Loader2, Plus, Video as VideoIcon, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -181,11 +182,17 @@ const UploadMediaButton: React.FC<Props> = ({
         onChange={handleVideoPick}
       />
 
-      {chooserOpen && (
+      {chooserOpen && createPortal(
         <div
           className="fixed inset-0 z-[80] flex items-end justify-center"
           style={{ background: 'rgba(0,0,0,0.45)' }}
-          onClick={() => setChooserOpen(false)}
+          onClick={(e) => {
+            // Stop the React synthetic-event bubble first so the close
+            // click never reaches the underlying card's onClick (which
+            // would open the activity-details modal). Then close.
+            e.stopPropagation();
+            setChooserOpen(false);
+          }}
         >
           <div
             className="w-full max-w-md"
@@ -286,7 +293,8 @@ const UploadMediaButton: React.FC<Props> = ({
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {pendingVideo && (

@@ -77,6 +77,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
     vote,
     setVote,
     activityId: dbActivityId,
+    loading: mediaLoading,
   } = useActivityMedia(activityKey);
   const isDone = isCompleted(dbActivityId);
 
@@ -421,7 +422,26 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
             onIndexChange={setActiveImageIndex}
           />
 
-          <div className="absolute top-3 left-3 z-10">{categoryPill}</div>
+          <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5">
+            {categoryPill}
+            {mediaLoading && (
+              <span
+                aria-label="Syncing"
+                className="flex items-center justify-center"
+                style={{
+                  width: '22px',
+                  height: '22px',
+                  borderRadius: '9999px',
+                  background: 'rgba(0,0,0,0.45)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  color: 'white',
+                }}
+              >
+                <Loader2 size={12} className="animate-spin" />
+              </span>
+            )}
+          </div>
 
           <div className="absolute top-3 right-3 z-10 flex flex-col items-center gap-2">
             {poster ? (

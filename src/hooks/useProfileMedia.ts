@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getUserSocialStats,
   listUserPhotos,
@@ -7,168 +7,76 @@ import {
 } from '../services/activityMediaService';
 import { listUserVideos, type UserVideo } from '../services/activityVideoService';
 import { warmImageCache } from '../lib/imagePrefetch';
-
-// Module-level SWR cache for profile media. Going Profile -> Post -> Profile
-// (or Profile -> Settings -> Profile) used to fire three fresh fetches per
-// visit, so the grid flashed shimmer and re-decoded every image. With this
-// cache: the cached snapshot renders instantly, a background revalidation
-// fires only if the entry is stale, and a fresh entry replaces the snapshot
-// when the network returns. Mirrors how Instagram's profile feels — the
-// data is already there the second time you visit.
-//
-// TTL is short enough that a like / new post lands quickly when revisiting,
-// but long enough that the typical "tap into a post then back" flow stays
-// pure-cache-hit (no network, no shimmer).
-const STALE_AFTER_MS = 30_000;
-
-interface ProfileMediaSnapshot {
-  stats: UserSocialStats;
-  photos: UserPhoto[];
-  videos: UserVideo[];
-  fetchedAt: number;
-}
-
-const cache = new Map<string, ProfileMediaSnapshot>();
-const inFlight = new Map<string, Promise<ProfileMediaSnapshot>>();
-const listeners = new Map<string, Set<(snap: ProfileMediaSnapshot) => void>>();
-
-function emit(userId: string, snap: ProfileMediaSnapshot): void {
-  const set = listeners.get(userId);
-  if (!set) return;
-  set.forEach((fn) => fn(snap));
-}
-
-async function fetchSnapshot(userId: string): Promise<ProfileMediaSnapshot> {
-  const existing = inFlight.get(userId);
-  if (existing) return existing;
-  // No client-side timeout: a slow phone network or a brief Supabase
-  // hiccup must NOT trigger a fake "no posts" fallback. We let the
-  // network promise settle naturally; on real failure we keep the prior
-  // cache (if any) and re-emit it so the UI stays on whatever it had
-  // last instead of flipping to an empty state.
-  const promise = Promise.all([
-    getUserSocialStats(userId),
-    listUserPhotos(userId),
-    listUserVideos(userId),
-  ])
-    .then(([stats, photos, videos]) => {
-      const snap: ProfileMediaSnapshot = {
-        stats,
-        photos,
-        videos,
-        fetchedAt: Date.now(),
-      };
-      cache.set(userId, snap);
-      emit(userId, snap);
-      try {
-        warmImageCache([
-          ...photos.map((p) => p.url),
-          ...videos.map((v) => v.posterUrl).filter(Boolean) as string[],
-        ]);
-      } catch {
-        // imagePrefetch is best-effort.
-      }
-      return snap;
-    })
-    .catch((err) => {
-      console.warn('[useProfileMedia] fetch failed', err);
-      const cached = cache.get(userId);
-      if (cached) {
-        emit(userId, cached);
-        return cached;
-      }
-      // No prior cache and the network errored. Re-throw so the caller
-      // surfaces the failure instead of pretending an empty profile is
-      // a successful response.
-      throw err;
-    })
-    .finally(() => {
-      inFlight.delete(userId);
-    });
-  inFlight.set(userId, promise);
-  return promise;
-}
-
-// Drop a user's cache entry — used after upload / delete so the next visit
-// sees the change immediately instead of waiting for the TTL.
-export function invalidateProfileMedia(userId: string): void {
-  cache.delete(userId);
-  inFlight.delete(userId);
-  fetchSnapshot(userId).catch(() => { /* swallowed */ });
-}
+import { queryKeys } from '../lib/queryKeys';
 
 export interface ProfileMediaState {
   stats: UserSocialStats;
   photos: UserPhoto[];
   videos: UserVideo[];
-  // True only on the very first render before any cached snapshot exists,
-  // so callers can show a shimmer just once per user-id.
   loading: boolean;
 }
 
-export function useProfileMedia(userId: string | null): ProfileMediaState {
-  const [snap, setSnap] = useState<ProfileMediaSnapshot | null>(() =>
-    userId ? cache.get(userId) ?? null : null,
-  );
+const EMPTY_STATS: UserSocialStats = {
+  postCount: 0,
+  likesReceived: 0,
+  commentsReceived: 0,
+};
 
-  useEffect(() => {
-    if (!userId) {
-      setSnap(null);
-      return;
-    }
+interface ProfileMediaSnapshot {
+  stats: UserSocialStats;
+  photos: UserPhoto[];
+  videos: UserVideo[];
+}
 
-    // Subscribe so future cache writes (from background revalidation,
-    // invalidations, or other mounts) update this consumer too.
-    let listenerSet = listeners.get(userId);
-    if (!listenerSet) {
-      listenerSet = new Set();
-      listeners.set(userId, listenerSet);
-    }
-    const listener = (next: ProfileMediaSnapshot) => setSnap(next);
-    listenerSet.add(listener);
-
-    const cached = cache.get(userId);
-    setSnap(cached ?? null);
-
-    // Revalidate on mount when the cache is missing or stale. Fresh
-    // mounts within TTL skip the network entirely — that's the whole
-    // point of the cache.
-    const isStale = !cached || Date.now() - cached.fetchedAt > STALE_AFTER_MS;
-    if (isStale) {
-      fetchSnapshot(userId).catch(() => { /* errors are swallowed by service callers */ });
-    }
-
-    return () => {
-      listenerSet?.delete(listener);
-      if (listenerSet && listenerSet.size === 0) {
-        listeners.delete(userId);
-      }
-    };
-  }, [userId]);
-
-  if (!snap) {
-    return {
-      stats: { postCount: 0, likesReceived: 0, commentsReceived: 0 },
-      photos: [],
-      videos: [],
-      loading: Boolean(userId),
-    };
+async function fetchProfileMedia(userId: string): Promise<ProfileMediaSnapshot> {
+  const [stats, photos, videos] = await Promise.all([
+    getUserSocialStats(userId),
+    listUserPhotos(userId),
+    listUserVideos(userId),
+  ]);
+  // Warm the SW image cache for the most relevant URLs so the next grid
+  // render hits cache instead of network. Best-effort; never throws.
+  try {
+    warmImageCache([
+      ...photos.map((p) => p.url),
+      ...videos.map((v) => v.posterUrl).filter(Boolean) as string[],
+    ]);
+  } catch {
+    /* noop */
   }
+  return { stats, photos, videos };
+}
 
+// Profile media (counts + photos + videos) for a given user. Backed by
+// React Query so revisits are instant from cache, in-flight requests
+// dedupe across components, and external code can invalidate via
+// queryKeys.profileMedia(userId).
+export function useProfileMedia(userId: string | null): ProfileMediaState {
+  const query = useQuery({
+    queryKey: queryKeys.profileMedia(userId),
+    queryFn: () => fetchProfileMedia(userId as string),
+    enabled: Boolean(userId),
+    // Empty arrays kept as the placeholder so consumers always have a
+    // safe shape to render against, even before the first response.
+    placeholderData: (prev) => prev,
+  });
+
+  const data = query.data;
   return {
-    stats: snap.stats,
-    photos: snap.photos,
-    videos: snap.videos,
-    loading: false,
+    stats: data?.stats ?? EMPTY_STATS,
+    photos: data?.photos ?? [],
+    videos: data?.videos ?? [],
+    // Only show loading on the very first fetch; cached revisits return
+    // data immediately and `loading: false` so the UI never re-flashes
+    // shimmer when the user lands back on the screen.
+    loading: query.isPending && Boolean(userId),
   };
 }
 
-// Optional: warm the cache for a user before navigation so the destination
-// renders with data already populated. Call from hover/intent handlers
-// on profile links.
-export function prefetchProfileMedia(userId: string): void {
-  const cached = cache.get(userId);
-  const isStale = !cached || Date.now() - cached.fetchedAt > STALE_AFTER_MS;
-  if (!isStale) return;
-  fetchSnapshot(userId).catch(() => { /* swallowed */ });
+// Imperative invalidation for callers outside the hook (e.g. immediately
+// after an upload / delete from useActivityMedia). Re-exported here so
+// the call site doesn't have to know the key shape.
+export function useInvalidateProfileMedia() {
+  const qc = useQueryClient();
+  return (userId: string) => qc.invalidateQueries({ queryKey: queryKeys.profileMedia(userId) });
 }
