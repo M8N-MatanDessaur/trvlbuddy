@@ -15,20 +15,16 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useTravel } from '../contexts/TravelContext';
 import { supabase, type Profile, type Trip } from '../lib/supabase';
-import {
-  getUserSocialStats,
-  listUserPhotos,
-  type UserPhoto,
-  type UserSocialStats,
-} from '../services/activityMediaService';
-import { listUserVideos, type UserVideo } from '../services/activityVideoService';
-import { listMyTrips, loadTrip } from '../services/tripsService';
+import { type UserPhoto } from '../services/activityMediaService';
+import { type UserVideo } from '../services/activityVideoService';
+import { useProfileMedia } from '../hooks/useProfileMedia';
+import { loadTrip } from '../services/tripsService';
+import { useMyTrips, invalidateMyTrips } from '../hooks/useMyTrips';
 import Avatar from './Avatar';
 import CachedImage from './CachedImage';
 import ProfileMediaViewer, { type MediaItem } from './ProfileMediaViewer';
 import TripsCarousel from './TripsCarousel';
 import VideoThumbnail from './VideoThumbnail';
-import { warmImageCache } from '../lib/imagePrefetch';
 import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 
 // Unified grid item for the profile media wall. Image and video rows
@@ -60,12 +56,13 @@ const ProfilePage: React.FC = () => {
 
   const [profile, setProfile] = useState<Profile | null>(isOwn ? ownProfile : null);
   const [profileLoading, setProfileLoading] = useState(!isOwn);
-  const [stats, setStats] = useState<UserSocialStats>({ postCount: 0, likesReceived: 0, commentsReceived: 0 });
-  const [photos, setPhotos] = useState<UserPhoto[]>([]);
-  const [videos, setVideos] = useState<UserVideo[]>([]);
-  const [photosLoading, setPhotosLoading] = useState(true);
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [tripsLoading, setTripsLoading] = useState(isOwn);
+  // SWR-cached profile media: instant render on revisit, background refresh
+  // when the entry is older than the cache TTL. Replaces the three useState
+  // calls + Promise.all that re-fired on every mount.
+  const { stats, photos, videos, loading: photosLoading } = useProfileMedia(targetId);
+  // Cached trips list — same SWR pattern. Returning to the profile no
+  // longer flashes the trip carousel through a fresh fetch.
+  const { trips, loading: tripsLoading } = useMyTrips(isOwn && user ? user.id : null);
   const [loadingTripId, setLoadingTripId] = useState<string | null>(null);
   const [openMediaKey, setOpenMediaKey] = useState<string | null>(null);
 
@@ -102,32 +99,6 @@ const ProfilePage: React.FC = () => {
       alive = false;
     };
   }, [isOwn, routeUserId]);
-
-  useEffect(() => {
-    if (!targetId) return;
-    let alive = true;
-    setPhotosLoading(true);
-
-    Promise.all([
-      getUserSocialStats(targetId),
-      listUserPhotos(targetId),
-      listUserVideos(targetId),
-    ]).then(([s, p, v]) => {
-      if (!alive) return;
-      setStats(s);
-      setPhotos(p);
-      setVideos(v);
-      setPhotosLoading(false);
-      warmImageCache([
-        ...p.map((photo) => photo.url),
-        ...v.map((video) => video.posterUrl),
-      ]);
-    });
-
-    return () => {
-      alive = false;
-    };
-  }, [targetId]);
 
   useEffect(() => {
     if (!isOwn || !user) return;
