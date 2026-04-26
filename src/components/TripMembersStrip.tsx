@@ -62,25 +62,15 @@ const TripMembersStrip: React.FC<Props> = ({ tripId, onInvite, max = 5 }) => {
                 position: 'relative',
                 marginLeft: i === 0 ? '-6px' : '-8px',
                 zIndex: visible.length - i,
+                // Green ring for online members reads more naturally than a
+                // corner dot at this size. Box-shadow draws it outside the
+                // avatar bounds without changing layout, so the strip's
+                // overlap geometry stays untouched.
                 borderRadius: '9999px',
+                boxShadow: isOnline ? '0 0 0 2px #22c55e' : 'none',
               }}
             >
               <Avatar profile={m.profile} size={28} />
-              {isOnline && (
-                <span
-                  aria-hidden="true"
-                  style={{
-                    position: 'absolute',
-                    bottom: -1,
-                    right: -1,
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '9999px',
-                    background: '#22c55e',
-                    border: '2px solid var(--bg-primary)',
-                  }}
-                />
-              )}
             </div>
           );
         })}
