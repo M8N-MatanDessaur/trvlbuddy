@@ -14,14 +14,8 @@ const GoogleGlyph: React.FC<{ size?: number }> = ({ size = 20 }) => (
   </svg>
 );
 
-const AppleGlyph: React.FC<{ size?: number }> = ({ size = 20 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-    <path d="M17.051 12.533c-.026-2.68 2.186-3.963 2.286-4.026-1.245-1.82-3.185-2.068-3.874-2.095-1.651-.166-3.225.968-4.066.968-.841 0-2.134-.942-3.507-.917-1.803.026-3.47 1.046-4.4 2.657-1.874 3.25-.48 8.064 1.348 10.71.893 1.294 1.96 2.746 3.359 2.694 1.348-.053 1.857-.87 3.49-.87 1.628 0 2.095.87 3.525.844 1.453-.027 2.374-1.317 3.263-2.614 1.028-1.499 1.452-2.95 1.478-3.024-.032-.016-2.838-1.088-2.902-4.327zM14.44 4.91c.741-.901 1.242-2.149 1.106-3.391-1.068.044-2.364.711-3.133 1.611-.687.795-1.29 2.073-1.129 3.28 1.196.093 2.414-.606 3.156-1.5z" />
-  </svg>
-);
-
 const SignInScreen: React.FC = () => {
-  const { signInWithGoogle, signInWithApple, signInWithPassword, signUpWithPassword } = useAuth();
+  const { signInWithGoogle, signInWithPassword, signUpWithPassword } = useAuth();
   const { toast } = useToast();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
@@ -36,14 +30,6 @@ const SignInScreen: React.FC = () => {
     setBusy(true);
     setError(null);
     const { error: err } = await signInWithGoogle();
-    if (err) setError(err);
-    setBusy(false);
-  };
-
-  const onApple = async () => {
-    setBusy(true);
-    setError(null);
-    const { error: err } = await signInWithApple();
     if (err) setError(err);
     setBusy(false);
   };
@@ -150,20 +136,6 @@ const SignInScreen: React.FC = () => {
             >
               <GoogleGlyph size={20} />
               <span className="text-[14px] font-bold">Continue with Google</span>
-            </button>
-            <button
-              type="button"
-              onClick={onApple}
-              disabled={busy}
-              className="flex items-center justify-center gap-3 py-3 sm:py-3.5 rounded-2xl transition active:scale-[0.985] disabled:opacity-60"
-              style={{
-                background: '#000',
-                border: '1px solid #000',
-                color: '#fff',
-              }}
-            >
-              <AppleGlyph size={20} />
-              <span className="text-[14px] font-bold">Continue with Apple</span>
             </button>
           </div>
 
