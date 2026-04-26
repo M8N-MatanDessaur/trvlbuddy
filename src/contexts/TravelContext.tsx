@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { TravelPlan, GeneratedActivity, Translation, EmergencyContact, JournalEntry } from '../types/TravelData';
+import { useAuth } from './AuthContext';
+import { listMyTrips, loadTrip } from '../services/tripsService';
 
 export type AppMode = 'trip' | 'local' | null;
 
@@ -159,6 +161,67 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     localStorage.setItem('journalEntries', JSON.stringify(journalEntries));
   }, [journalEntries]);
+
+  // Cache-cleared / first-load-on-new-device recovery: when a signed-in user
+  // has no local trip state, ask Supabase whether they actually have saved
+  // trips and rehydrate the most recent one (or the trip pinned in their
+  // profile). Without this the WelcomeScreen takes over as if they were
+  // brand new -- losing the trip until they manually open My Trips.
+  const { user, profile } = useAuth();
+  const restoreAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!user?.id) {
+      // Reset the gate on sign-out so the next sign-in can restore again.
+      restoreAttemptedRef.current = false;
+      return;
+    }
+    if (restoreAttemptedRef.current) return;
+    if (currentTripId || currentPlan) {
+      // Local state is intact -- nothing to restore.
+      restoreAttemptedRef.current = true;
+      return;
+    }
+    restoreAttemptedRef.current = true;
+
+    let cancelled = false;
+    setIsLoading(true);
+    (async () => {
+      try {
+        const trips = await listMyTrips(user.id);
+        if (cancelled || trips.length === 0) return;
+
+        const pinnedId = profile?.current_trip_id;
+        const targetId = pinnedId && trips.some((t) => t.id === pinnedId)
+          ? pinnedId
+          : trips[0].id;
+
+        const row = await loadTrip(targetId);
+        if (cancelled || !row?.plan?.currentPlan) return;
+
+        const bundle = row.plan;
+        setCurrentPlan(bundle.currentPlan);
+        setValidatedActivities(bundle.activities || []);
+        setTranslations(bundle.translations || []);
+        setEmergencyContacts(bundle.emergencyContacts || []);
+        setAppMode('trip');
+        setHasCompletedOnboarding(true);
+        setCurrentTripId(row.id);
+      } catch (err) {
+        console.error('trip auto-restore failed', err);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      setIsLoading(false);
+    };
+    // profile arrives after user; we depend on both so a pinned current_trip_id
+    // is honored when it lands. currentPlan/currentTripId are read once via
+    // the gate above; intentionally not in deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, profile?.current_trip_id]);
 
   return (
     <TravelContext.Provider value={{
