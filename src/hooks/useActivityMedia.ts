@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import {
   ensureActivity,
   addActivityImageComment,
@@ -21,10 +22,8 @@ import {
 } from '../services/activityVideoService';
 import type { TrimResult } from '../lib/videoProcess';
 
-// Unified carousel/grid item. Either an image (from activity_images) or a
-// video (from activity_videos). The two tables have distinct shapes; the
-// `kind` discriminator lets the UI render each correctly without forcing
-// one schema to pretend to be the other.
+// -------- Public types --------
+
 export type ActivityMediaItem =
   | { kind: 'image'; createdAt: string; data: ActivityImageMedia }
   | { kind: 'video'; createdAt: string; data: ActivityVideoMedia };
@@ -47,117 +46,407 @@ interface UseActivityMediaResult extends State {
     result: TrimResult,
     onProgress?: (progress: number) => void,
   ) => Promise<{ ok: boolean; error?: string | null }>;
-  setImageLiked: (image: ActivityImageMedia, liked: boolean) => Promise<{ ok: boolean; error?: string | null; ignored?: boolean }>;
-  addImageComment: (image: ActivityImageMedia, body: string, parentCommentId?: string | null) => Promise<{ ok: boolean; error?: string | null }>;
+  setImageLiked: (
+    image: ActivityImageMedia,
+    liked: boolean,
+  ) => Promise<{ ok: boolean; error?: string | null; ignored?: boolean }>;
+  addImageComment: (
+    image: ActivityImageMedia,
+    body: string,
+    parentCommentId?: string | null,
+  ) => Promise<{ ok: boolean; error?: string | null }>;
   removeImageComment: (image: ActivityImageMedia) => void;
   setVote: (next: 0 | 1 | -1) => Promise<{ ok: boolean; error?: string | null }>;
   refresh: () => Promise<void>;
 }
 
-export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResult {
-  const { user, refreshProfile } = useAuth();
-  const [state, setState] = useState<State>({
+const EMPTY_STATE: State = {
+  loading: false,
+  images: [],
+  imageUrls: [],
+  videos: [],
+  mediaItems: [],
+  activityId: null,
+  error: null,
+  uploading: false,
+  vote: ZERO_VOTE_STATE,
+};
+
+// -------- Module-level shared cache + Realtime fan-out --------
+//
+// Why: every <ExploreActivityCard>, <DynamicActivityModal>, and <NearbyPost>
+// for the same place is its own React subtree, but they all want the same
+// live data (counts, vote, media). Per-mount useState meant a vote made
+// in the modal didn't show on the explore card until you scrolled away
+// and back; navigating away and back re-fetched everything from scratch
+// and made a slow Supabase round-trip block all the cards.
+//
+// Cache contract:
+//   - Keyed by JSON({key, viewerId}) so different viewers see their own
+//     vote / likedByViewer state without leaking across users.
+//   - Realtime channel per activityId, refcounted across consumers.
+//   - On any postgres_changes event for that activityId we refetch and
+//     emit a new snapshot to every subscribed React component.
+//   - Mutations (vote / like / comment / upload) update the cache + emit
+//     immediately so the user sees their action without waiting for the
+//     realtime echo to come back.
+
+const STALE_AFTER_MS = 30_000;
+
+interface CachedEntry {
+  state: State;
+  fetchedAt: number;
+}
+
+const cache = new Map<string, CachedEntry>();
+const inFlight = new Map<string, Promise<State>>();
+const listeners = new Map<string, Set<(state: State) => void>>();
+
+// Realtime channel + refcount per activityId. We also track which cache
+// keys are interested in each activityId so a single postgres_changes
+// event fans out to every (key, viewer) pair using that activity.
+interface RealtimeBinding {
+  channel: ReturnType<typeof supabase.channel>;
+  refCount: number;
+}
+const realtime = new Map<string, RealtimeBinding>();
+const cacheKeysByActivityId = new Map<string, Set<string>>();
+// Reverse index so cleanup knows which activity to drop a listener from
+// when a cache key unsubscribes.
+const activityIdByCacheKey = new Map<string, string>();
+
+function emit(cacheKey: string, state: State): void {
+  const set = listeners.get(cacheKey);
+  if (!set) return;
+  set.forEach((fn) => fn(state));
+}
+
+function setCache(cacheKey: string, state: State): void {
+  cache.set(cacheKey, { state, fetchedAt: Date.now() });
+  emit(cacheKey, state);
+}
+
+function patchCache(cacheKey: string, patch: (s: State) => State): State | null {
+  const entry = cache.get(cacheKey);
+  if (!entry) return null;
+  const next = patch(entry.state);
+  cache.set(cacheKey, { state: next, fetchedAt: entry.fetchedAt });
+  emit(cacheKey, next);
+  return next;
+}
+
+function mergeMedia(
+  images: ActivityImageMedia[],
+  videos: ActivityVideoMedia[],
+): ActivityMediaItem[] {
+  const items: ActivityMediaItem[] = [
+    ...images.map<ActivityMediaItem>((data) => ({ kind: 'image', createdAt: data.created_at, data })),
+    ...videos.map<ActivityMediaItem>((data) => ({ kind: 'video', createdAt: data.created_at, data })),
+  ];
+  items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return items;
+}
+
+async function loadFresh(key: ActivityKey, viewerId: string | null): Promise<State> {
+  const activity = await ensureActivity(key, viewerId);
+  if (!activity) {
+    return {
+      ...EMPTY_STATE,
+      error: 'Could not ensure activity',
+    };
+  }
+  const [imagesResult, videosResult, voteResult] = await Promise.allSettled([
+    listActivityImages(activity.id, viewerId),
+    listActivityVideos(activity.id, viewerId),
+    getActivityVoteState(activity.id, viewerId),
+  ]);
+  const images = imagesResult.status === 'fulfilled' ? imagesResult.value : [];
+  const videos = videosResult.status === 'fulfilled' ? videosResult.value : [];
+  const vote = voteResult.status === 'fulfilled' ? voteResult.value : ZERO_VOTE_STATE;
+  warmImageCache([
+    ...images.map((image) => image.url),
+    ...videos.map((video) => video.posterUrl).filter((u): u is string => Boolean(u)),
+  ]);
+  return {
     loading: false,
-    images: [],
-    imageUrls: [],
-    videos: [],
-    mediaItems: [],
-    activityId: null,
+    images,
+    imageUrls: images.map((image) => image.url),
+    videos,
+    mediaItems: mergeMedia(images, videos),
+    activityId: activity.id,
     error: null,
     uploading: false,
-    vote: ZERO_VOTE_STATE,
-  });
-  const resolvedKeyRef = useRef<string>('');
-
-  // Merge images + videos into one chronological list so the carousel
-  // can render them interleaved by upload time, matching what users
-  // expect from a feed.
-  const mergeMedia = (
-    images: ActivityImageMedia[],
-    videos: ActivityVideoMedia[],
-  ): ActivityMediaItem[] => {
-    const items: ActivityMediaItem[] = [
-      ...images.map<ActivityMediaItem>((data) => ({ kind: 'image', createdAt: data.created_at, data })),
-      ...videos.map<ActivityMediaItem>((data) => ({ kind: 'video', createdAt: data.created_at, data })),
-    ];
-    items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-    return items;
+    vote,
   };
+}
 
-  const load = useCallback(async (k: ActivityKey) => {
-    const sig = JSON.stringify({ key: k, viewerId: user?.id ?? null });
-    if (sig === resolvedKeyRef.current) return;
-    resolvedKeyRef.current = sig;
-
-    setState((s) => ({ ...s, loading: true, error: null }));
-    try {
-      const activity = await ensureActivity(k, user?.id ?? null);
-      if (!activity) {
-        setState({ loading: false, images: [], imageUrls: [], activityId: null, error: 'Could not ensure activity', uploading: false, vote: ZERO_VOTE_STATE });
-        return;
+async function fetchAndCache(
+  cacheKey: string,
+  key: ActivityKey,
+  viewerId: string | null,
+): Promise<State> {
+  const existing = inFlight.get(cacheKey);
+  if (existing) return existing;
+  // Same timeout guard as useProfileMedia — protect every shared cache
+  // entry against a hung Supabase query so cards never stay on shimmer
+  // forever. 8s is generous; real responses are typically <500ms.
+  const TIMEOUT_MS = 8_000;
+  const promise = Promise.race([
+    loadFresh(key, viewerId),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('activity fetch timeout')), TIMEOUT_MS),
+    ),
+  ])
+    .then((state) => {
+      setCache(cacheKey, state);
+      if (state.activityId) {
+        bindCacheKeyToActivity(cacheKey, state.activityId);
       }
-      // Run images + videos + vote independently so a single-table miss
-      // (e.g. a view that isn't migrated yet) can't wipe the others.
-      const [imagesResult, videosResult, voteResult] = await Promise.allSettled([
-        listActivityImages(activity.id, user?.id ?? null),
-        listActivityVideos(activity.id, user?.id ?? null),
-        getActivityVoteState(activity.id, user?.id ?? null),
-      ]);
-      const images = imagesResult.status === 'fulfilled' ? imagesResult.value : [];
-      const videos = videosResult.status === 'fulfilled' ? videosResult.value : [];
-      const vote = voteResult.status === 'fulfilled' ? voteResult.value : ZERO_VOTE_STATE;
-      warmImageCache([
-        ...images.map((image) => image.url),
-        ...videos.map((video) => video.posterUrl),
-      ]);
-      setState({
-        loading: false,
-        images,
-        imageUrls: images.map((image) => image.url),
-        videos,
-        mediaItems: mergeMedia(images, videos),
-        activityId: activity.id,
-        error: null,
-        uploading: false,
-        vote,
-      });
-    } catch (err: unknown) {
-      setState({
-        loading: false,
-        images: [],
-        imageUrls: [],
-        videos: [],
-        mediaItems: [],
-        activityId: null,
-        error: err instanceof Error ? err.message : String(err),
-        uploading: false,
-        vote: ZERO_VOTE_STATE,
-      });
-    }
-  }, [user?.id]);
+      return state;
+    })
+    .catch((err) => {
+      console.warn('[useActivityMedia] fetch failed', err);
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        // Keep showing what we had instead of wiping to shimmer.
+        return cached.state;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      const state: State = { ...EMPTY_STATE, error: msg };
+      setCache(cacheKey, state);
+      return state;
+    })
+    .finally(() => {
+      inFlight.delete(cacheKey);
+    });
+  inFlight.set(cacheKey, promise);
+  return promise;
+}
 
-  const keySig = key ? JSON.stringify(key) : '';
+function bindCacheKeyToActivity(cacheKey: string, activityId: string): void {
+  if (activityIdByCacheKey.get(cacheKey) === activityId) return;
+  // If this cache key was previously bound to a different activityId
+  // (rare, but happens on key changes that resolve differently),
+  // unbind first.
+  unbindCacheKeyFromActivity(cacheKey);
+  let set = cacheKeysByActivityId.get(activityId);
+  if (!set) {
+    set = new Set();
+    cacheKeysByActivityId.set(activityId, set);
+  }
+  set.add(cacheKey);
+  activityIdByCacheKey.set(cacheKey, activityId);
+  acquireRealtime(activityId);
+}
+
+function unbindCacheKeyFromActivity(cacheKey: string): void {
+  const activityId = activityIdByCacheKey.get(cacheKey);
+  if (!activityId) return;
+  activityIdByCacheKey.delete(cacheKey);
+  const set = cacheKeysByActivityId.get(activityId);
+  if (set) {
+    set.delete(cacheKey);
+    if (set.size === 0) cacheKeysByActivityId.delete(activityId);
+  }
+  releaseRealtime(activityId);
+}
+
+function acquireRealtime(activityId: string): void {
+  const existing = realtime.get(activityId);
+  if (existing) {
+    existing.refCount += 1;
+    return;
+  }
+  const channel = supabase.channel(`activity-${activityId}`);
+  // Listen broadly across the activity-scoped tables. Server-side
+  // filters narrow to this activityId where the table has a column
+  // for it; for like/comment tables the join goes via image_id, so we
+  // listen to all likes/comments and gate inside the handler by
+  // checking whether the affected image_id is one of ours.
+  channel
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'activity_votes', filter: `activity_id=eq.${activityId}` },
+      () => onActivityChanged(activityId),
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'activity_images', filter: `activity_id=eq.${activityId}` },
+      () => onActivityChanged(activityId),
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'activity_videos', filter: `activity_id=eq.${activityId}` },
+      () => onActivityChanged(activityId),
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'activity_image_likes' },
+      (payload) => {
+        const imageId =
+          (payload.new as { image_id?: string } | undefined)?.image_id ??
+          (payload.old as { image_id?: string } | undefined)?.image_id;
+        if (imageId && imageBelongsToActivity(activityId, imageId)) {
+          onActivityChanged(activityId);
+        }
+      },
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'activity_image_comments' },
+      (payload) => {
+        const imageId =
+          (payload.new as { image_id?: string } | undefined)?.image_id ??
+          (payload.old as { image_id?: string } | undefined)?.image_id;
+        if (imageId && imageBelongsToActivity(activityId, imageId)) {
+          onActivityChanged(activityId);
+        }
+      },
+    )
+    .subscribe();
+  realtime.set(activityId, { channel, refCount: 1 });
+}
+
+function releaseRealtime(activityId: string): void {
+  const existing = realtime.get(activityId);
+  if (!existing) return;
+  existing.refCount -= 1;
+  if (existing.refCount <= 0) {
+    supabase.removeChannel(existing.channel);
+    realtime.delete(activityId);
+  }
+}
+
+function imageBelongsToActivity(activityId: string, imageId: string): boolean {
+  const set = cacheKeysByActivityId.get(activityId);
+  if (!set) return false;
+  for (const cacheKey of set) {
+    const entry = cache.get(cacheKey);
+    if (entry?.state.images.some((img) => img.id === imageId)) return true;
+  }
+  return false;
+}
+
+function onActivityChanged(activityId: string): void {
+  const cacheKeys = cacheKeysByActivityId.get(activityId);
+  if (!cacheKeys || cacheKeys.size === 0) return;
+  // Refetch every (key, viewer) cache entry tied to this activity. Each
+  // entry parses its own key so per-viewer state (myVote, likedByViewer)
+  // stays correct.
+  for (const cacheKey of cacheKeys) {
+    const parsed = parseCacheKey(cacheKey);
+    if (!parsed) continue;
+    fetchAndCache(cacheKey, parsed.key, parsed.viewerId).catch(() => {
+      /* error already captured into cache */
+    });
+  }
+}
+
+function makeCacheKey(key: ActivityKey, viewerId: string | null): string {
+  return JSON.stringify({ key, viewerId });
+}
+
+function parseCacheKey(cacheKey: string): { key: ActivityKey; viewerId: string | null } | null {
+  try {
+    return JSON.parse(cacheKey);
+  } catch {
+    return null;
+  }
+}
+
+// External invalidation hook for callers that just mutated server state
+// outside this module (e.g. trip-content moves an activity_image row).
+export function invalidateActivityMedia(key: ActivityKey, viewerId: string | null): void {
+  const cacheKey = makeCacheKey(key, viewerId);
+  fetchAndCache(cacheKey, key, viewerId).catch(() => { /* swallowed */ });
+}
+
+// -------- The hook --------
+
+export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResult {
+  const { user, refreshProfile } = useAuth();
+  const viewerId = user?.id ?? null;
+  const cacheKey = useMemo(
+    () => (key ? makeCacheKey(key, viewerId) : null),
+    [key, viewerId],
+  );
+
+  const [state, setState] = useState<State>(() => {
+    if (!cacheKey) return EMPTY_STATE;
+    const cached = cache.get(cacheKey);
+    if (cached) return cached.state;
+    return { ...EMPTY_STATE, loading: true };
+  });
+
   useEffect(() => {
-    if (!key) return;
-    load(key);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keySig, load]);
+    if (!cacheKey || !key) {
+      setState(EMPTY_STATE);
+      return;
+    }
+
+    let listenerSet = listeners.get(cacheKey);
+    if (!listenerSet) {
+      listenerSet = new Set();
+      listeners.set(cacheKey, listenerSet);
+    }
+    const onChange = (s: State) => setState(s);
+    listenerSet.add(onChange);
+
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      setState(cached.state);
+      // Re-bind realtime in case the activity was previously known but
+      // the channel was released between mounts.
+      if (cached.state.activityId) {
+        bindCacheKeyToActivity(cacheKey, cached.state.activityId);
+      }
+      const isStale = Date.now() - (cache.get(cacheKey)?.fetchedAt ?? 0) > STALE_AFTER_MS;
+      if (isStale) {
+        fetchAndCache(cacheKey, key, viewerId).catch(() => { /* swallowed */ });
+      }
+    } else {
+      setState({ ...EMPTY_STATE, loading: true });
+      fetchAndCache(cacheKey, key, viewerId).catch(() => { /* swallowed */ });
+    }
+
+    return () => {
+      listenerSet?.delete(onChange);
+      if (listenerSet && listenerSet.size === 0) {
+        listeners.delete(cacheKey);
+        // Last consumer for this cache key — release the realtime tie.
+        unbindCacheKeyFromActivity(cacheKey);
+      }
+    };
+  }, [cacheKey, key, viewerId]);
+
+  // Resolves to the current activityId, awaiting the in-flight load when
+  // the cache is mid-fetch. Fixes "Activity not ready yet" toasts that
+  // appeared whenever a user clicked vote / upload during the first
+  // ~200ms of a card mount.
+  const ensureActivityId = useCallback(async (): Promise<string | null> => {
+    if (!cacheKey || !key) return null;
+    const cached = cache.get(cacheKey);
+    if (cached?.state.activityId) return cached.state.activityId;
+    const fresh = await fetchAndCache(cacheKey, key, viewerId);
+    return fresh.activityId;
+  }, [cacheKey, key, viewerId]);
 
   const upload = useCallback<UseActivityMediaResult['upload']>(
     async (file) => {
       if (!user) return { ok: false, error: 'Sign in required' };
-      if (!state.activityId) return { ok: false, error: 'Activity not ready yet' };
-      setState((s) => ({ ...s, uploading: true, error: null }));
+      const activityId = await ensureActivityId();
+      if (!activityId) return { ok: false, error: 'Could not load activity' };
+      patchCache(cacheKey!, (s) => ({ ...s, uploading: true, error: null }));
       const { image, error } = await uploadActivityImage({
-        activityId: state.activityId,
+        activityId,
         uploaderId: user.id,
         file,
       });
       if (error || !image) {
-        setState((s) => ({ ...s, uploading: false, error }));
+        patchCache(cacheKey!, (s) => ({ ...s, uploading: false, error }));
         return { ok: false, error };
       }
-      setState((s) => ({
+      patchCache(cacheKey!, (s) => ({
         ...s,
         uploading: false,
         images: [image, ...s.images],
@@ -167,16 +456,17 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       refreshProfile().catch(() => {});
       return { ok: true };
     },
-    [user, state.activityId, refreshProfile]
+    [user, cacheKey, ensureActivityId, refreshProfile],
   );
 
   const uploadVideoFn = useCallback<UseActivityMediaResult['uploadVideo']>(
     async (result, onProgress) => {
       if (!user) return { ok: false, error: 'Sign in required' };
-      if (!state.activityId) return { ok: false, error: 'Activity not ready yet' };
-      setState((s) => ({ ...s, uploading: true, error: null }));
+      const activityId = await ensureActivityId();
+      if (!activityId) return { ok: false, error: 'Could not load activity' };
+      patchCache(cacheKey!, (s) => ({ ...s, uploading: true, error: null }));
       const { video, error } = await uploadActivityVideo({
-        activityId: state.activityId,
+        activityId,
         uploaderId: user.id,
         video: result.video,
         poster: result.poster,
@@ -187,10 +477,10 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         onProgress,
       });
       if (error || !video) {
-        setState((s) => ({ ...s, uploading: false, error }));
+        patchCache(cacheKey!, (s) => ({ ...s, uploading: false, error }));
         return { ok: false, error };
       }
-      setState((s) => ({
+      patchCache(cacheKey!, (s) => ({
         ...s,
         uploading: false,
         videos: [video, ...s.videos],
@@ -199,7 +489,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       refreshProfile().catch(() => {});
       return { ok: true };
     },
-    [user, state.activityId, refreshProfile],
+    [user, cacheKey, ensureActivityId, refreshProfile],
   );
 
   const setImageLiked = useCallback<UseActivityMediaResult['setImageLiked']>(
@@ -207,7 +497,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       if (!user) return { ok: false, error: 'Sign in required' };
       if (image.uploaded_by === user.id) return { ok: true, ignored: true };
 
-      setState((s) => ({
+      patchCache(cacheKey!, (s) => ({
         ...s,
         images: s.images.map((item) => {
           if (item.id !== image.id || item.likedByViewer === liked) return item;
@@ -226,7 +516,8 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       });
 
       if (error) {
-        setState((s) => ({
+        // Revert.
+        patchCache(cacheKey!, (s) => ({
           ...s,
           error,
           images: s.images.map((item) => {
@@ -244,10 +535,10 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       refreshProfile().catch(() => {});
       return { ok: true };
     },
-    [user, refreshProfile],
+    [user, cacheKey, refreshProfile],
   );
 
-  const addImageComment = useCallback<UseActivityMediaResult['addImageComment']>(
+  const addImageCommentFn = useCallback<UseActivityMediaResult['addImageComment']>(
     async (image, body, parentCommentId) => {
       if (!user) return { ok: false, error: 'Sign in required' };
 
@@ -260,7 +551,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
 
       if (error || !comment) return { ok: false, error };
 
-      setState((s) => ({
+      patchCache(cacheKey!, (s) => ({
         ...s,
         images: s.images.map((item) => (
           item.id === image.id
@@ -271,12 +562,12 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
 
       return { ok: true };
     },
-    [user],
+    [user, cacheKey],
   );
 
-  const removeImageComment = useCallback<UseActivityMediaResult['removeImageComment']>(
+  const removeImageCommentFn = useCallback<UseActivityMediaResult['removeImageComment']>(
     (image) => {
-      setState((s) => ({
+      patchCache(cacheKey!, (s) => ({
         ...s,
         images: s.images.map((item) => (
           item.id === image.id
@@ -285,55 +576,49 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         )),
       }));
     },
-    [],
+    [cacheKey],
   );
 
-  const setVote = useCallback<UseActivityMediaResult['setVote']>(
+  const setVoteFn = useCallback<UseActivityMediaResult['setVote']>(
     async (next) => {
       if (!user) return { ok: false, error: 'Sign in required' };
-      if (!state.activityId) return { ok: false, error: 'Activity not ready yet' };
+      const activityId = await ensureActivityId();
+      if (!activityId) return { ok: false, error: 'Could not load activity' };
 
-      const previous = state.vote;
+      const previous = cache.get(cacheKey!)?.state.vote ?? ZERO_VOTE_STATE;
       const optimistic = computeOptimisticVote(previous, next);
-      setState((s) => ({ ...s, vote: optimistic }));
+      patchCache(cacheKey!, (s) => ({ ...s, vote: optimistic }));
 
       const { error } = await setActivityVote({
-        activityId: state.activityId,
+        activityId,
         userId: user.id,
         value: next,
       });
 
       if (error) {
-        setState((s) => ({ ...s, vote: previous, error }));
+        patchCache(cacheKey!, (s) => ({ ...s, vote: previous, error }));
         return { ok: false, error };
       }
       return { ok: true };
     },
-    [user, state.activityId, state.vote],
+    [user, cacheKey, ensureActivityId],
   );
 
   const refresh = useCallback(async () => {
-    if (!state.activityId) return;
-    const [images, videos, vote] = await Promise.all([
-      listActivityImages(state.activityId, user?.id ?? null),
-      listActivityVideos(state.activityId, user?.id ?? null),
-      getActivityVoteState(state.activityId, user?.id ?? null),
-    ]);
-    warmImageCache([
-      ...images.map((image) => image.url),
-      ...videos.map((video) => video.posterUrl),
-    ]);
-    setState((s) => ({
-      ...s,
-      images,
-      imageUrls: images.map((image) => image.url),
-      videos,
-      mediaItems: mergeMedia(images, videos),
-      vote,
-    }));
-  }, [state.activityId, user?.id]);
+    if (!cacheKey || !key) return;
+    await fetchAndCache(cacheKey, key, viewerId);
+  }, [cacheKey, key, viewerId]);
 
-  return { ...state, upload, uploadVideo: uploadVideoFn, setImageLiked, addImageComment, removeImageComment, setVote, refresh };
+  return {
+    ...state,
+    upload,
+    uploadVideo: uploadVideoFn,
+    setImageLiked,
+    addImageComment: addImageCommentFn,
+    removeImageComment: removeImageCommentFn,
+    setVote: setVoteFn,
+    refresh,
+  };
 }
 
 function computeOptimisticVote(prev: ActivityVoteState, next: 0 | 1 | -1): ActivityVoteState {

@@ -41,10 +41,21 @@ function emit(userId: string, snap: ProfileMediaSnapshot): void {
 async function fetchSnapshot(userId: string): Promise<ProfileMediaSnapshot> {
   const existing = inFlight.get(userId);
   if (existing) return existing;
-  const promise = Promise.all([
-    getUserSocialStats(userId),
-    listUserPhotos(userId),
-    listUserVideos(userId),
+  // Timeout guard: in production we've seen Supabase queries occasionally
+  // hang indefinitely after a soft navigation (auth refresh racing the
+  // realtime websocket multiplex). Without a timeout, the snapshot
+  // promise never resolves and every consumer is stuck on shimmer.
+  // 8s is generous enough that a slow but real response still lands.
+  const TIMEOUT_MS = 8_000;
+  const promise = Promise.race([
+    Promise.all([
+      getUserSocialStats(userId),
+      listUserPhotos(userId),
+      listUserVideos(userId),
+    ]),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('profile fetch timeout')), TIMEOUT_MS),
+    ),
   ])
     .then(([stats, photos, videos]) => {
       const snap: ProfileMediaSnapshot = {
@@ -55,8 +66,6 @@ async function fetchSnapshot(userId: string): Promise<ProfileMediaSnapshot> {
       };
       cache.set(userId, snap);
       emit(userId, snap);
-      // Warm the SW image cache for the most relevant URLs so the next
-      // grid render hits cache instead of network.
       try {
         warmImageCache([
           ...photos.map((p) => p.url),
@@ -66,6 +75,25 @@ async function fetchSnapshot(userId: string): Promise<ProfileMediaSnapshot> {
         // imagePrefetch is best-effort.
       }
       return snap;
+    })
+    .catch((err) => {
+      // On timeout / failure return whatever cached snapshot we already
+      // have (if any) so the UI doesn't get stuck on shimmer forever.
+      // The next mount or invalidation will retry the network.
+      console.warn('[useProfileMedia] fetch failed, falling back to cache', err);
+      const cached = cache.get(userId);
+      if (cached) return cached;
+      // No prior cache — emit an empty snapshot so consumers exit the
+      // loading state and can show "No posts yet" instead of forever.
+      const empty: ProfileMediaSnapshot = {
+        stats: { postCount: 0, likesReceived: 0, commentsReceived: 0 },
+        photos: [],
+        videos: [],
+        fetchedAt: Date.now(),
+      };
+      cache.set(userId, empty);
+      emit(userId, empty);
+      return empty;
     })
     .finally(() => {
       inFlight.delete(userId);
