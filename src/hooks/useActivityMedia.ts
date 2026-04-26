@@ -368,13 +368,23 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       if (error || !comment) throw new Error(error ?? 'Comment failed');
       return image;
     },
-    onSuccess: (image) => {
+    // Optimistic: bump the comment count immediately so the UI feels
+    // instant. Cancel any in-flight refetch first so it can't overwrite
+    // the optimistic value with a stale server snapshot. Snapshot the
+    // previous state so we can roll back on error.
+    onMutate: async ({ image }) => {
+      await qc.cancelQueries({ queryKey });
+      const previous = readSnapshot();
       writeSnapshot((prev) => ({
         ...prev,
         images: prev.images.map((item) =>
           item.id === image.id ? { ...item, commentCount: item.commentCount + 1 } : item,
         ),
       }));
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) writeSnapshot(ctx.previous);
     },
   });
 
