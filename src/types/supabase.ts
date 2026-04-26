@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -191,42 +191,6 @@ export type Database = {
           },
         ]
       }
-      notifications: {
-        Row: {
-          id: string
-          recipient_id: string
-          actor_id: string | null
-          type: string
-          subject_type: string | null
-          subject_id: string | null
-          data: Record<string, unknown>
-          read_at: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          recipient_id: string
-          actor_id?: string | null
-          type: string
-          subject_type?: string | null
-          subject_id?: string | null
-          data?: Record<string, unknown>
-          read_at?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          recipient_id?: string
-          actor_id?: string | null
-          type?: string
-          subject_type?: string | null
-          subject_id?: string | null
-          data?: Record<string, unknown>
-          read_at?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
       activity_images: {
         Row: {
           activity_id: string
@@ -275,6 +239,151 @@ export type Database = {
           },
         ]
       }
+      activity_video_comments: {
+        Row: {
+          body: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          parent_comment_id: string | null
+          updated_at: string | null
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          parent_comment_id?: string | null
+          updated_at?: string | null
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          parent_comment_id?: string | null
+          updated_at?: string | null
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_video_comments_parent_comment_id_fkey"
+            columns: ["parent_comment_id"]
+            isOneToOne: false
+            referencedRelation: "activity_video_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_video_comments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_video_comments_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "activity_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_video_likes: {
+        Row: {
+          created_at: string
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_video_likes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_video_likes_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "activity_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      activity_videos: {
+        Row: {
+          activity_id: string
+          created_at: string
+          duration_ms: number | null
+          height: number | null
+          id: string
+          poster_path: string
+          start_ms: number
+          storage_path: string
+          thumbhash: string | null
+          uploaded_by: string
+          width: number | null
+        }
+        Insert: {
+          activity_id: string
+          created_at?: string
+          duration_ms?: number | null
+          height?: number | null
+          id?: string
+          poster_path: string
+          start_ms?: number
+          storage_path: string
+          thumbhash?: string | null
+          uploaded_by: string
+          width?: number | null
+        }
+        Update: {
+          activity_id?: string
+          created_at?: string
+          duration_ms?: number | null
+          height?: number | null
+          id?: string
+          poster_path?: string
+          start_ms?: number
+          storage_path?: string
+          thumbhash?: string | null
+          uploaded_by?: string
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_videos_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "activity_videos_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_votes: {
         Row: {
           activity_id: string
@@ -308,6 +417,138 @@ export type Database = {
           {
             foreignKeyName: "activity_votes_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_mentions: {
+        Row: {
+          comment_id: string
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          comment_id: string
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          comment_id?: string
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_mentions_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "activity_image_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comment_mentions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      influence_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          delta: number
+          event_type: string
+          id: string
+          recipient_id: string
+          subject_id: string | null
+          subject_type: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          delta: number
+          event_type: string
+          id?: string
+          recipient_id: string
+          subject_id?: string | null
+          subject_type?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          delta?: number
+          event_type?: string
+          id?: string
+          recipient_id?: string
+          subject_id?: string | null
+          subject_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "influence_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "influence_events_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          data: Json
+          id: string
+          read_at: string | null
+          recipient_id: string
+          subject_id: string | null
+          subject_type: string | null
+          type: string
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          data?: Json
+          id?: string
+          read_at?: string | null
+          recipient_id: string
+          subject_id?: string | null
+          subject_type?: string | null
+          type: string
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          data?: Json
+          id?: string
+          read_at?: string | null
+          recipient_id?: string
+          subject_id?: string | null
+          subject_type?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_recipient_id_fkey"
+            columns: ["recipient_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -354,6 +595,47 @@ export type Database = {
             columns: ["current_trip_id"]
             isOneToOne: false
             referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_used_at: string | null
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_used_at?: string | null
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_used_at?: string | null
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -634,6 +916,59 @@ export type Database = {
           {
             foreignKeyName: "trips_owner_id_fkey"
             columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_saved_places: {
+        Row: {
+          address: string | null
+          lat: number | null
+          lng: number | null
+          name: string
+          place_id: string
+          price_level: number | null
+          primary_type: string | null
+          primary_type_label: string | null
+          rating: number | null
+          saved_at: string
+          user_id: string
+          user_ratings_total: number | null
+        }
+        Insert: {
+          address?: string | null
+          lat?: number | null
+          lng?: number | null
+          name: string
+          place_id: string
+          price_level?: number | null
+          primary_type?: string | null
+          primary_type_label?: string | null
+          rating?: number | null
+          saved_at?: string
+          user_id: string
+          user_ratings_total?: number | null
+        }
+        Update: {
+          address?: string | null
+          lat?: number | null
+          lng?: number | null
+          name?: string
+          place_id?: string
+          price_level?: number | null
+          primary_type?: string | null
+          primary_type_label?: string | null
+          rating?: number | null
+          saved_at?: string
+          user_id?: string
+          user_ratings_total?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_saved_places_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

@@ -67,7 +67,7 @@ export function placeFromSavedRow(row: SavedPlaceRow, userLocation: UserLocation
 
 export async function listSavedPlaces(userId: string): Promise<SavedPlaceRow[]> {
   const { data, error } = await supabase
-    .from(TABLE as never)
+    .from(TABLE)
     .select('*')
     .eq('user_id', userId)
     .order('saved_at', { ascending: false });
@@ -75,12 +75,12 @@ export async function listSavedPlaces(userId: string): Promise<SavedPlaceRow[]> 
     console.error('listSavedPlaces failed', error);
     return [];
   }
-  return (data || []) as unknown as SavedPlaceRow[];
+  return (data || []) as SavedPlaceRow[];
 }
 
 export async function listSavedPlaceIds(userId: string): Promise<Set<string>> {
   const { data, error } = await supabase
-    .from(TABLE as never)
+    .from(TABLE)
     .select('place_id')
     .eq('user_id', userId);
   if (error) {
@@ -88,7 +88,7 @@ export async function listSavedPlaceIds(userId: string): Promise<Set<string>> {
     return new Set();
   }
   const set = new Set<string>();
-  for (const row of (data || []) as unknown as Array<{ place_id: string }>) {
+  for (const row of data || []) {
     set.add(row.place_id);
   }
   return set;
@@ -99,8 +99,8 @@ export async function savePlace(userId: string, place: NearbyPlace): Promise<{ o
   // upsert so re-tapping save on a place we already have refreshes the
   // snapshot (rating may have changed since the original save).
   const { error } = await supabase
-    .from(TABLE as never)
-    .upsert(row as never, { onConflict: 'user_id,place_id' });
+    .from(TABLE)
+    .upsert(row, { onConflict: 'user_id,place_id' });
   if (error) {
     console.error('savePlace failed', error);
     return { ok: false, error: error.message };
@@ -110,7 +110,7 @@ export async function savePlace(userId: string, place: NearbyPlace): Promise<{ o
 
 export async function unsavePlace(userId: string, placeId: string): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase
-    .from(TABLE as never)
+    .from(TABLE)
     .delete()
     .eq('user_id', userId)
     .eq('place_id', placeId);

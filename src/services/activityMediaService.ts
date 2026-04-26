@@ -428,13 +428,13 @@ export async function getUserSocialStats(userId: string): Promise<UserSocialStat
   const [{ data: imageRows }, { data: videoRows }] = await Promise.all([
     supabase.from('activity_images').select('id').eq('uploaded_by', userId),
     supabase
-      .from('activity_videos' as never)
+      .from('activity_videos')
       .select('id')
       .eq('uploaded_by', userId),
   ]);
 
   const imageIds = (imageRows || []).map((row) => row.id);
-  const videoIds = ((videoRows || []) as unknown as Array<{ id: string }>).map((row) => row.id);
+  const videoIds = (videoRows || []).map((row) => row.id);
   const postCount = imageIds.length + videoIds.length;
 
   if (postCount === 0) {
@@ -458,14 +458,14 @@ export async function getUserSocialStats(userId: string): Promise<UserSocialStat
 
   const videoLikePromise = videoIds.length
     ? supabase
-        .from('activity_video_likes' as never)
+        .from('activity_video_likes')
         .select('video_id', { count: 'exact', head: true })
         .in('video_id', videoIds)
     : Promise.resolve({ count: 0 } as { count: number | null });
 
   const videoCommentPromise = videoIds.length
     ? supabase
-        .from('activity_video_comments' as never)
+        .from('activity_video_comments')
         .select('video_id', { count: 'exact', head: true })
         .in('video_id', videoIds)
         .is('deleted_at', null)
