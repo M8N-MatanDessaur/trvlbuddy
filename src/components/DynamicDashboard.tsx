@@ -54,6 +54,21 @@ const DynamicDashboard: React.FC = () => {
   const [goneTripTitle, setGoneTripTitle] = useState<string | null>(null);
   const [savingToCloud, setSavingToCloud] = useState(false);
 
+  // Surface remote trip edits ("Sara updated this trip") so co-members
+  // notice when the dashboard refreshed under them. The event is fired
+  // by TravelContext's realtime subscription on every postgres_changes
+  // UPDATE except the first.
+  useEffect(() => {
+    if (!currentTripId) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ tripId: string }>).detail;
+      if (detail?.tripId !== currentTripId) return;
+      toast('Trip was updated by a member', 'info');
+    };
+    window.addEventListener('trip-plan-remote-update', handler);
+    return () => window.removeEventListener('trip-plan-remote-update', handler);
+  }, [currentTripId, toast]);
+
   // Verify the loaded trip still exists in supabase. If the owner deleted it,
   // wipe the local cached plan and show TripGoneScreen so the user isn't
   // staring at a phantom dashboard.

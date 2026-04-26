@@ -229,9 +229,12 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // refetch and overwrite local state. Last-write-wins is acceptable for
   // v1 — granular CRDT-style merging is a Phase 5 problem. Without this
   // hook two members editing the same trip would see stale data until
-  // they manually reload.
+  // they manually reload. We also surface a "Trip updated" hint via a
+  // shared event so listeners (e.g. the dashboard) can toast the user
+  // without TravelContext having to know about ToastContext.
   useEffect(() => {
     if (!currentTripId) return;
+    let firstUpdate = true;
     const channel = supabase
       .channel(`trip-plan-${currentTripId}`)
       .on(
@@ -245,6 +248,15 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setValidatedActivities(bundle.activities || []);
           setTranslations(bundle.translations || []);
           setEmergencyContacts(bundle.emergencyContacts || []);
+          // Skip the first event to avoid toasting on the initial mount;
+          // after that, every change is a real co-member edit worth a
+          // heads-up.
+          if (!firstUpdate && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('trip-plan-remote-update', {
+              detail: { tripId: currentTripId },
+            }));
+          }
+          firstUpdate = false;
         },
       )
       .subscribe();
