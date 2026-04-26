@@ -28,23 +28,47 @@ interface ProfileMediaSnapshot {
   videos: UserVideo[];
 }
 
+// Wrap a promise with a timeout that REJECTS if the promise doesn't
+// settle. allSettled only helps if each underlying promise eventually
+// resolves OR rejects -- a hung Supabase query will sit forever on a
+// flaky phone connection. With this guard, each sub-query has at most
+// 12s to respond, then it counts as a rejection and the rest of the
+// data still renders.
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => { clearTimeout(t); resolve(value); },
+      (err) => { clearTimeout(t); reject(err); },
+    );
+  });
+}
+
+const PROFILE_QUERY_TIMEOUT_MS = 12_000;
+
 async function fetchProfileMedia(userId: string): Promise<ProfileMediaSnapshot> {
-  // Promise.allSettled so a single slow / failing query (e.g. a stats
-  // count timing out on a slow phone connection) never blocks the
-  // photo grid from rendering. Each result falls back to its safe
-  // empty shape; whatever resolved gets through to the UI.
+  // Each sub-query is independently timeout-guarded. If photos hangs,
+  // after 12s it counts as rejected; stats + videos still come through.
+  // The grid renders whatever resolved; the user never sits on shimmer
+  // forever.
   const [statsResult, photosResult, videosResult] = await Promise.allSettled([
-    getUserSocialStats(userId),
-    listUserPhotos(userId),
-    listUserVideos(userId),
+    withTimeout(getUserSocialStats(userId), PROFILE_QUERY_TIMEOUT_MS, 'stats'),
+    withTimeout(listUserPhotos(userId), PROFILE_QUERY_TIMEOUT_MS, 'photos'),
+    withTimeout(listUserVideos(userId), PROFILE_QUERY_TIMEOUT_MS, 'videos'),
   ]);
+
+  if (statsResult.status === 'rejected') console.warn('[profile] stats failed', statsResult.reason);
+  if (photosResult.status === 'rejected') console.warn('[profile] photos failed', photosResult.reason);
+  if (videosResult.status === 'rejected') console.warn('[profile] videos failed', videosResult.reason);
+
   const stats = statsResult.status === 'fulfilled'
     ? statsResult.value
     : { postCount: 0, likesReceived: 0, commentsReceived: 0 };
   const photos = photosResult.status === 'fulfilled' ? photosResult.value : [];
   const videos = videosResult.status === 'fulfilled' ? videosResult.value : [];
+
   // If EVERY query rejected, throw so React Query enters an error state
-  // and the next mount retries instead of caching an "all empty" response.
+  // and the next mount retries instead of silently caching empty data.
   if (
     statsResult.status === 'rejected' &&
     photosResult.status === 'rejected' &&
@@ -54,6 +78,7 @@ async function fetchProfileMedia(userId: string): Promise<ProfileMediaSnapshot> 
       ? statsResult.reason
       : new Error('Profile media fetch failed');
   }
+
   try {
     warmImageCache([
       ...photos.map((p) => p.url),
