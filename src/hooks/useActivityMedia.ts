@@ -164,18 +164,34 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     [qc, queryKey],
   );
 
-  // Resolve the activityId, awaiting an in-flight load if needed. This
-  // replaces the old "Activity not ready yet" toasts: actions wait on
-  // the read query rather than failing immediately.
+  // Resolve the activityId, awaiting any in-flight load and falling back
+  // to a direct ensureActivity() call if the cached snapshot somehow
+  // arrived without one. The previous version surfaced "Could not load
+  // activity" whenever the user clicked vote during the first ~200ms of
+  // a card mount because the cache was still EMPTY_SNAPSHOT and
+  // fetchQuery sometimes returned an entry where activityId was
+  // technically present but null on the snapshot shape.
   const ensureActivityId = useCallback(async (): Promise<string | null> => {
+    if (!key) return null;
     const cached = readSnapshot();
     if (cached.activityId) return cached.activityId;
-    if (!key) return null;
-    const fresh = await qc.fetchQuery({
-      queryKey,
-      queryFn: () => fetchActivityMedia(key, viewerId),
-    });
-    return fresh.activityId;
+    // Use ensureQueryData so we (a) wait on an in-flight useQuery rather
+    // than starting a duplicate fetch and (b) get the freshest snapshot
+    // available without forcing a network refetch when the data is
+    // already cached.
+    try {
+      const fresh = await qc.ensureQueryData({
+        queryKey,
+        queryFn: () => fetchActivityMedia(key, viewerId),
+      });
+      if (fresh?.activityId) return fresh.activityId;
+    } catch {
+      // Fall through to a direct ensureActivity below.
+    }
+    // Last-resort direct call. Bypasses the React Query layer entirely
+    // so a transient cache hiccup can't block a vote/upload click.
+    const activity = await ensureActivity(key, viewerId);
+    return activity?.id ?? null;
   }, [readSnapshot, key, qc, queryKey, viewerId]);
 
   // ---- Vote mutation ----
@@ -200,6 +216,12 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) writeSnapshot(ctx.previous);
+    },
+    onSettled: () => {
+      // Reconcile with server truth after the mutation lands. The
+      // optimistic value stays visible because placeholderData keeps
+      // the previous data on screen during a refetch.
+      qc.invalidateQueries({ queryKey });
     },
   });
 
@@ -246,6 +268,9 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     onSuccess: () => {
       refreshProfile().catch(() => {});
     },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey });
+    },
   });
 
   const setImageLiked = useCallback<UseActivityMediaResult['setImageLiked']>(
@@ -283,6 +308,9 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         images: [image, ...prev.images],
       }));
       refreshProfile().catch(() => {});
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey });
     },
   });
 
@@ -331,6 +359,9 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
         videos: [video, ...prev.videos],
       }));
       refreshProfile().catch(() => {});
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey });
     },
   });
 
@@ -385,6 +416,9 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.previous) writeSnapshot(ctx.previous);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey });
     },
   });
 

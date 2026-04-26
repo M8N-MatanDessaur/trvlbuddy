@@ -29,13 +29,31 @@ interface ProfileMediaSnapshot {
 }
 
 async function fetchProfileMedia(userId: string): Promise<ProfileMediaSnapshot> {
-  const [stats, photos, videos] = await Promise.all([
+  // Promise.allSettled so a single slow / failing query (e.g. a stats
+  // count timing out on a slow phone connection) never blocks the
+  // photo grid from rendering. Each result falls back to its safe
+  // empty shape; whatever resolved gets through to the UI.
+  const [statsResult, photosResult, videosResult] = await Promise.allSettled([
     getUserSocialStats(userId),
     listUserPhotos(userId),
     listUserVideos(userId),
   ]);
-  // Warm the SW image cache for the most relevant URLs so the next grid
-  // render hits cache instead of network. Best-effort; never throws.
+  const stats = statsResult.status === 'fulfilled'
+    ? statsResult.value
+    : { postCount: 0, likesReceived: 0, commentsReceived: 0 };
+  const photos = photosResult.status === 'fulfilled' ? photosResult.value : [];
+  const videos = videosResult.status === 'fulfilled' ? videosResult.value : [];
+  // If EVERY query rejected, throw so React Query enters an error state
+  // and the next mount retries instead of caching an "all empty" response.
+  if (
+    statsResult.status === 'rejected' &&
+    photosResult.status === 'rejected' &&
+    videosResult.status === 'rejected'
+  ) {
+    throw statsResult.reason instanceof Error
+      ? statsResult.reason
+      : new Error('Profile media fetch failed');
+  }
   try {
     warmImageCache([
       ...photos.map((p) => p.url),
