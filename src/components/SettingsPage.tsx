@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -11,7 +11,10 @@ import {
   ChevronRight,
   Check,
   UserCog,
+  Bell,
+  BellOff,
 } from 'lucide-react';
+import { ensurePushSubscription, isPushSupported, unsubscribePush } from '../lib/webPush';
 import { useTheme, THEME_OPTIONS } from '../contexts/ThemeContext';
 import { useTravel } from '../contexts/TravelContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,6 +51,65 @@ const SettingsPage: React.FC = () => {
   const [showShareLink, setShowShareLink] = useState(false);
   const [savingToCloud, setSavingToCloud] = useState(false);
   const isLocalMode = appMode === 'local';
+
+  // Push notifications: track current OS-level permission + whether the
+  // browser already has a subscription registered. Used to drive the
+  // toggle row in the Account section so the user can see at a glance if
+  // pushes are on, off, or blocked.
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default',
+  );
+  const [pushSubscribed, setPushSubscribed] = useState<boolean>(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const pushSupported = isPushSupported();
+
+  useEffect(() => {
+    if (!pushSupported) return;
+    let cancelled = false;
+    navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => {
+        if (!cancelled) setPushSubscribed(Boolean(sub));
+      })
+      .catch(() => { /* SW not ready yet */ });
+    return () => {
+      cancelled = true;
+    };
+  }, [pushSupported]);
+
+  const handleTogglePush = async () => {
+    if (!user) {
+      toast('Sign in to enable notifications', 'info');
+      return;
+    }
+    if (!pushSupported) {
+      toast('Push notifications are not available in this browser', 'error');
+      return;
+    }
+    setPushBusy(true);
+    try {
+      if (pushSubscribed) {
+        await unsubscribePush();
+        setPushSubscribed(false);
+        toast('Notifications turned off', 'success');
+      } else {
+        const result = await ensurePushSubscription(user.id);
+        setPushPermission(result.permission);
+        if (!result.ok) {
+          if (result.permission === 'denied') {
+            toast('Enable notifications in your browser settings to turn this on', 'error');
+          } else if (result.error) {
+            toast(result.error, 'error');
+          }
+          return;
+        }
+        setPushSubscribed(true);
+        toast('Notifications turned on', 'success');
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   const goBack = () => {
     if (window.history.length > 1) navigate(-1);
@@ -497,6 +559,40 @@ const SettingsPage: React.FC = () => {
                   </div>
                   <ChevronRight size={16} style={{ color: 'var(--text-tertiary)' }} />
                 </button>
+                {pushSupported && (
+                  <button
+                    onClick={handleTogglePush}
+                    disabled={pushBusy}
+                    className={rowClass}
+                    style={{ borderBottom: '0.33px solid var(--outline)', opacity: pushBusy ? 0.6 : 1 }}
+                  >
+                    <div
+                      className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{
+                        background: pushSubscribed ? 'var(--accent)' : 'var(--surface-container-high)',
+                        color: pushSubscribed ? 'var(--on-accent)' : 'var(--text-primary)',
+                      }}
+                    >
+                      {pushSubscribed ? <Bell size={18} /> : <BellOff size={18} />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[14px] font-semibold">Push notifications</div>
+                      <div className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
+                        {pushPermission === 'denied'
+                          ? 'Blocked in browser settings'
+                          : pushSubscribed
+                          ? 'On — likes, comments, mentions'
+                          : 'Off — tap to enable'}
+                      </div>
+                    </div>
+                    <span
+                      className="text-[11px] font-extrabold"
+                      style={{ color: pushSubscribed ? 'var(--accent)' : 'var(--text-tertiary)' }}
+                    >
+                      {pushSubscribed ? 'On' : 'Off'}
+                    </span>
+                  </button>
+                )}
                 <button onClick={handleSignOut} className={rowClass}>
                   <div
                     className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
