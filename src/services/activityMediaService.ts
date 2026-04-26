@@ -422,34 +422,66 @@ export interface UserSocialStats {
 }
 
 export async function getUserSocialStats(userId: string): Promise<UserSocialStats> {
-  const { data: imageRows } = await supabase
-    .from('activity_images')
-    .select('id')
-    .eq('uploaded_by', userId);
+  // Photos and videos both count as posts. Likes and comments are summed
+  // across both surfaces so the profile counters reflect the user's full
+  // upload activity, not just stills.
+  const [{ data: imageRows }, { data: videoRows }] = await Promise.all([
+    supabase.from('activity_images').select('id').eq('uploaded_by', userId),
+    supabase
+      .from('activity_videos' as never)
+      .select('id')
+      .eq('uploaded_by', userId),
+  ]);
 
   const imageIds = (imageRows || []).map((row) => row.id);
-  const postCount = imageIds.length;
+  const videoIds = ((videoRows || []) as unknown as Array<{ id: string }>).map((row) => row.id);
+  const postCount = imageIds.length + videoIds.length;
 
   if (postCount === 0) {
     return { postCount: 0, likesReceived: 0, commentsReceived: 0 };
   }
 
-  const [{ count: likeCount }, { count: commentCount }] = await Promise.all([
-    supabase
-      .from('activity_image_likes')
-      .select('image_id', { count: 'exact', head: true })
-      .in('image_id', imageIds),
-    supabase
-      .from('activity_image_comments')
-      .select('image_id', { count: 'exact', head: true })
-      .in('image_id', imageIds)
-      .is('deleted_at', null),
+  const imageLikePromise = imageIds.length
+    ? supabase
+        .from('activity_image_likes')
+        .select('image_id', { count: 'exact', head: true })
+        .in('image_id', imageIds)
+    : Promise.resolve({ count: 0 } as { count: number | null });
+
+  const imageCommentPromise = imageIds.length
+    ? supabase
+        .from('activity_image_comments')
+        .select('image_id', { count: 'exact', head: true })
+        .in('image_id', imageIds)
+        .is('deleted_at', null)
+    : Promise.resolve({ count: 0 } as { count: number | null });
+
+  const videoLikePromise = videoIds.length
+    ? supabase
+        .from('activity_video_likes' as never)
+        .select('video_id', { count: 'exact', head: true })
+        .in('video_id', videoIds)
+    : Promise.resolve({ count: 0 } as { count: number | null });
+
+  const videoCommentPromise = videoIds.length
+    ? supabase
+        .from('activity_video_comments' as never)
+        .select('video_id', { count: 'exact', head: true })
+        .in('video_id', videoIds)
+        .is('deleted_at', null)
+    : Promise.resolve({ count: 0 } as { count: number | null });
+
+  const [imageLikes, imageComments, videoLikes, videoComments] = await Promise.all([
+    imageLikePromise,
+    imageCommentPromise,
+    videoLikePromise,
+    videoCommentPromise,
   ]);
 
   return {
     postCount,
-    likesReceived: likeCount ?? 0,
-    commentsReceived: commentCount ?? 0,
+    likesReceived: (imageLikes.count ?? 0) + (videoLikes.count ?? 0),
+    commentsReceived: (imageComments.count ?? 0) + (videoComments.count ?? 0),
   };
 }
 
