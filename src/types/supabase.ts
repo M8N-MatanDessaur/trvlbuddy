@@ -779,6 +779,57 @@ export type Database = {
           },
         ]
       }
+      trip_expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          currency: string
+          id: string
+          note: string | null
+          occurred_at: string
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string
+          currency: string
+          id?: string
+          note?: string | null
+          occurred_at?: string
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          note?: string | null
+          occurred_at?: string
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_expenses_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_members: {
         Row: {
           joined_at: string

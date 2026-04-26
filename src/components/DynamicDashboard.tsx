@@ -14,6 +14,7 @@ import DayDebrief from './trip/DayDebrief';
 import TripMembersStrip from './TripMembersStrip';
 import ShareTripModal from './ShareTripModal';
 import SegmentBrief from './SegmentBrief';
+import BudgetSection from './trip/BudgetSection';
 
 interface WeatherData {
   temp: number;
@@ -569,6 +570,19 @@ const DynamicDashboard: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Trip budget — only when the trip is backed by a supabase row, since
+          expenses are persisted server-side and shared with members. */}
+      {currentTripId && (
+        <div className="mt-3">
+          <BudgetSection
+            tripId={currentTripId}
+            tripCurrencies={Array.from(new Set((currentPlan?.destinations || [])
+              .map((d: any) => d?.currency)
+              .filter((c: unknown): c is string => typeof c === 'string' && c.length === 3)))}
+          />
+        </div>
+      )}
 
       {/* Edit Accommodation Modal */}
       {editingAcc && (
