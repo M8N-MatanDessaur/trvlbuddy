@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { UserPlus } from 'lucide-react';
 import Avatar from './Avatar';
 import { listTripMembers, type TripMemberWithProfile } from '../services/tripMembersService';
+import { useTripPresence } from '../hooks/useTripPresence';
 
 interface Props {
   tripId: string | null;
@@ -12,6 +13,7 @@ interface Props {
 
 const TripMembersStrip: React.FC<Props> = ({ tripId, onInvite, max = 5 }) => {
   const [members, setMembers] = useState<TripMemberWithProfile[]>([]);
+  const { presentUserIds } = useTripPresence(tripId);
 
   useEffect(() => {
     if (!tripId) {
@@ -50,19 +52,38 @@ const TripMembersStrip: React.FC<Props> = ({ tripId, onInvite, max = 5 }) => {
   return (
     <div className="flex items-center gap-2">
       <div className="flex items-center" style={{ marginLeft: visible.length ? '6px' : 0 }}>
-        {visible.map((m, i) => (
-          <div
-            key={m.user_id}
-            title={m.profile?.display_name || m.profile?.email || ''}
-            style={{
-              marginLeft: i === 0 ? '-6px' : '-8px',
-              zIndex: visible.length - i,
-              borderRadius: '9999px',
-            }}
-          >
-            <Avatar profile={m.profile} size={28} />
-          </div>
-        ))}
+        {visible.map((m, i) => {
+          const isOnline = presentUserIds.has(m.user_id);
+          return (
+            <div
+              key={m.user_id}
+              title={`${m.profile?.display_name || m.profile?.email || ''}${isOnline ? ' • online' : ''}`}
+              style={{
+                position: 'relative',
+                marginLeft: i === 0 ? '-6px' : '-8px',
+                zIndex: visible.length - i,
+                borderRadius: '9999px',
+              }}
+            >
+              <Avatar profile={m.profile} size={28} />
+              {isOnline && (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    bottom: -1,
+                    right: -1,
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '9999px',
+                    background: '#22c55e',
+                    border: '2px solid var(--bg-primary)',
+                  }}
+                />
+              )}
+            </div>
+          );
+        })}
         {overflow > 0 && (
           <div
             style={{

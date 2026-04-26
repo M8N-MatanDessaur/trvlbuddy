@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { TravelPlan, GeneratedActivity, Translation, EmergencyContact, JournalEntry } from '../types/TravelData';
 import { useAuth } from './AuthContext';
 import { listMyTrips, loadTrip } from '../services/tripsService';
+import { supabase } from '../lib/supabase';
 
 export type AppMode = 'trip' | 'local' | null;
 
@@ -222,6 +223,35 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // the gate above; intentionally not in deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, profile?.current_trip_id]);
+
+  // Live trip-plan sync: when any member updates the active trip in
+  // Supabase (accommodations, members editing the JSONB plan, etc.) we
+  // refetch and overwrite local state. Last-write-wins is acceptable for
+  // v1 — granular CRDT-style merging is a Phase 5 problem. Without this
+  // hook two members editing the same trip would see stale data until
+  // they manually reload.
+  useEffect(() => {
+    if (!currentTripId) return;
+    const channel = supabase
+      .channel(`trip-plan-${currentTripId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'trips', filter: `id=eq.${currentTripId}` },
+        async () => {
+          const row = await loadTrip(currentTripId);
+          if (!row?.plan?.currentPlan) return;
+          const bundle = row.plan;
+          setCurrentPlan(bundle.currentPlan);
+          setValidatedActivities(bundle.activities || []);
+          setTranslations(bundle.translations || []);
+          setEmergencyContacts(bundle.emergencyContacts || []);
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentTripId]);
 
   return (
     <TravelContext.Provider value={{

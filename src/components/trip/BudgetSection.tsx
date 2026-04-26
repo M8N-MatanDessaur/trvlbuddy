@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Coins, Plus, Trash2, Loader2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { supabase } from '../../lib/supabase';
 import { fetchRates, guessHomeCurrency, type ExchangeRates } from '../../services/currencyService';
 import {
   EXPENSE_CATEGORIES,
@@ -73,8 +74,28 @@ const BudgetSection: React.FC<Props> = ({ tripId, tripCurrencies = [] }) => {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+
+    // Live sync: when a co-member adds / edits / deletes an expense on
+    // this trip, refetch so the budget panel and breakdown stay in sync
+    // without a manual refresh. Postgres_changes on the table is
+    // sufficient — the change set is small (max a few hundred rows per
+    // trip) so a full refetch is cheaper than diffing payloads.
+    const channel = supabase
+      .channel(`trip-expenses-${tripId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'trip_expenses', filter: `trip_id=eq.${tripId}` },
+        () => {
+          listTripExpenses(tripId).then((rows) => {
+            if (!cancelled) setExpenses(rows);
+          });
+        },
+      )
+      .subscribe();
+
     return () => {
       cancelled = true;
+      supabase.removeChannel(channel);
     };
   }, [tripId]);
 
