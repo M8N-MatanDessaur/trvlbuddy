@@ -208,14 +208,21 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     onMutate: async (next) => {
       await qc.cancelQueries({ queryKey });
       const previous = readSnapshot();
-      writeSnapshot((prev) => ({
-        ...prev,
-        vote: computeOptimisticVote(prev.vote, next),
-      }));
-      return { previous };
+      const optimistic = computeOptimisticVote(previous.vote, next);
+      writeSnapshot((prev) => ({ ...prev, vote: optimistic }));
+      return { previous, optimistic };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.previous) writeSnapshot(ctx.previous);
+      if (!ctx) return;
+      // Only roll back if the cache still has THIS mutation's optimistic
+      // value. If another mutation (M2) has since superseded ours (M1),
+      // restoring `previous` would wipe M2's correct optimistic state.
+      // Compare myVote — that's the unique signature of this mutation's
+      // intent — and only rollback when it matches.
+      const current = readSnapshot();
+      if (current.vote.myVote === ctx.optimistic.myVote) {
+        writeSnapshot(ctx.previous);
+      }
     },
     onSettled: () => {
       // Reconcile with server truth after the mutation lands. The
@@ -260,10 +267,18 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
           };
         }),
       }));
-      return { previous };
+      return { previous, imageId: image.id, liked };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.previous) writeSnapshot(ctx.previous);
+      if (!ctx) return;
+      // Only roll back if THIS image still reflects this mutation's
+      // optimistic likedByViewer. If another rapid click toggled it
+      // again, restoring would wipe that newer state.
+      const current = readSnapshot();
+      const currentImage = current.images.find((i) => i.id === ctx.imageId);
+      if (currentImage && currentImage.likedByViewer === ctx.liked) {
+        writeSnapshot(ctx.previous);
+      }
     },
     onSuccess: () => {
       refreshProfile().catch(() => {});
@@ -406,16 +421,25 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
     onMutate: async ({ image }) => {
       await qc.cancelQueries({ queryKey });
       const previous = readSnapshot();
+      const previousCount = previous.images.find((i) => i.id === image.id)?.commentCount ?? 0;
       writeSnapshot((prev) => ({
         ...prev,
         images: prev.images.map((item) =>
           item.id === image.id ? { ...item, commentCount: item.commentCount + 1 } : item,
         ),
       }));
-      return { previous };
+      return { previous, imageId: image.id, expectedCount: previousCount + 1 };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.previous) writeSnapshot(ctx.previous);
+      if (!ctx) return;
+      // Only roll back if the image's commentCount still equals what
+      // this mutation incremented it to. If another comment landed in
+      // between, leave the cache alone — it correctly reflects M2.
+      const current = readSnapshot();
+      const currentImage = current.images.find((i) => i.id === ctx.imageId);
+      if (currentImage && currentImage.commentCount === ctx.expectedCount) {
+        writeSnapshot(ctx.previous);
+      }
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey });

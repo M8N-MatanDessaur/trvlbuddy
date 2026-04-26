@@ -424,14 +424,16 @@ export interface UserVideo {
   commentCount: number;
 }
 
-export async function listUserVideos(userId: string): Promise<UserVideo[]> {
+export async function listUserVideos(userId: string, signal?: AbortSignal): Promise<UserVideo[]> {
+  const sig = signal as AbortSignal;
   const { data: rows, error } = await supabase
     .from('activity_videos')
     .select(
       'id, storage_path, poster_path, thumbhash, duration_ms, start_ms, width, height, created_at, activity_id, activities!inner(name, slug, address, google_place_id, google_maps_url)',
     )
     .eq('uploaded_by', userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .abortSignal(sig);
   if (error || !rows || rows.length === 0) return [];
 
   const ids = rows.map((row) => row.id);
@@ -439,8 +441,8 @@ export async function listUserVideos(userId: string): Promise<UserVideo[]> {
   const commentCounts = new Map<string, number>();
 
   const [{ data: likes }, { data: comments }] = await Promise.all([
-    supabase.from('activity_video_likes').select('video_id').in('video_id', ids),
-    supabase.from('activity_video_comments').select('video_id, deleted_at').in('video_id', ids),
+    supabase.from('activity_video_likes').select('video_id').in('video_id', ids).abortSignal(sig),
+    supabase.from('activity_video_comments').select('video_id, deleted_at').in('video_id', ids).abortSignal(sig),
   ]);
 
   likes?.forEach((row) => {

@@ -322,21 +322,24 @@ export interface UserPhoto {
   commentCount: number;
 }
 
-export async function listUserPhotos(userId: string): Promise<UserPhoto[]> {
+export async function listUserPhotos(userId: string, signal?: AbortSignal): Promise<UserPhoto[]> {
   // Try with thumbhash first; if the column doesn't exist yet (migration
   // hasn't been applied), retry without it so the grid still renders.
+  const sig = signal as AbortSignal;
   let rows: Array<{ id: string; storage_path: string; thumbhash?: string | null; created_at: string; activity_id: string; activities: unknown }> | null = null;
   const withThumb = await supabase
     .from('activity_images')
     .select('id, storage_path, thumbhash, created_at, activity_id, activities!inner(name, slug, address, google_place_id, google_maps_url)')
     .eq('uploaded_by', userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .abortSignal(sig);
   if (withThumb.error) {
     const fallback = await supabase
       .from('activity_images')
       .select('id, storage_path, created_at, activity_id, activities!inner(name, slug, address, google_place_id, google_maps_url)')
       .eq('uploaded_by', userId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .abortSignal(sig);
     rows = fallback.data as typeof rows;
   } else {
     rows = withThumb.data as typeof rows;
@@ -349,8 +352,8 @@ export async function listUserPhotos(userId: string): Promise<UserPhoto[]> {
   const commentCounts = new Map<string, number>();
 
   const [{ data: likes }, { data: comments }] = await Promise.all([
-    supabase.from('activity_image_likes').select('image_id').in('image_id', ids),
-    supabase.from('activity_image_comments').select('image_id, deleted_at').in('image_id', ids),
+    supabase.from('activity_image_likes').select('image_id').in('image_id', ids).abortSignal(sig),
+    supabase.from('activity_image_comments').select('image_id, deleted_at').in('image_id', ids).abortSignal(sig),
   ]);
 
   likes?.forEach((row) => {
@@ -421,16 +424,15 @@ export interface UserSocialStats {
   commentsReceived: number;
 }
 
-export async function getUserSocialStats(userId: string): Promise<UserSocialStats> {
+export async function getUserSocialStats(userId: string, signal?: AbortSignal): Promise<UserSocialStats> {
   // Photos and videos both count as posts. Likes and comments are summed
   // across both surfaces so the profile counters reflect the user's full
-  // upload activity, not just stills.
+  // upload activity, not just stills. The optional AbortSignal lets a
+  // hung query be canceled by the caller's timeout instead of running on.
+  const sig = signal;
   const [{ data: imageRows }, { data: videoRows }] = await Promise.all([
-    supabase.from('activity_images').select('id').eq('uploaded_by', userId),
-    supabase
-      .from('activity_videos')
-      .select('id')
-      .eq('uploaded_by', userId),
+    supabase.from('activity_images').select('id').eq('uploaded_by', userId).abortSignal(sig as AbortSignal),
+    supabase.from('activity_videos').select('id').eq('uploaded_by', userId).abortSignal(sig as AbortSignal),
   ]);
 
   const imageIds = (imageRows || []).map((row) => row.id);
@@ -446,6 +448,7 @@ export async function getUserSocialStats(userId: string): Promise<UserSocialStat
         .from('activity_image_likes')
         .select('image_id', { count: 'exact', head: true })
         .in('image_id', imageIds)
+        .abortSignal(sig as AbortSignal)
     : Promise.resolve({ count: 0 } as { count: number | null });
 
   const imageCommentPromise = imageIds.length
@@ -454,6 +457,7 @@ export async function getUserSocialStats(userId: string): Promise<UserSocialStat
         .select('image_id', { count: 'exact', head: true })
         .in('image_id', imageIds)
         .is('deleted_at', null)
+        .abortSignal(sig as AbortSignal)
     : Promise.resolve({ count: 0 } as { count: number | null });
 
   const videoLikePromise = videoIds.length
@@ -461,6 +465,7 @@ export async function getUserSocialStats(userId: string): Promise<UserSocialStat
         .from('activity_video_likes')
         .select('video_id', { count: 'exact', head: true })
         .in('video_id', videoIds)
+        .abortSignal(sig as AbortSignal)
     : Promise.resolve({ count: 0 } as { count: number | null });
 
   const videoCommentPromise = videoIds.length
@@ -469,6 +474,7 @@ export async function getUserSocialStats(userId: string): Promise<UserSocialStat
         .select('video_id', { count: 'exact', head: true })
         .in('video_id', videoIds)
         .is('deleted_at', null)
+        .abortSignal(sig as AbortSignal)
     : Promise.resolve({ count: 0 } as { count: number | null });
 
   const [imageLikes, imageComments, videoLikes, videoComments] = await Promise.all([
