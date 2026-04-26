@@ -54,6 +54,11 @@ const TripMembersStrip: React.FC<Props> = ({ tripId, onInvite, max = 5 }) => {
       <div className="flex items-center" style={{ marginLeft: visible.length ? '6px' : 0 }}>
         {visible.map((m, i) => {
           const isOnline = presentUserIds.has(m.user_id);
+          // Lock the wrapper to a perfect 28x28 square so the box-shadow
+          // ring stays a circle. Without an explicit width/height it
+          // inherits the Avatar's intrinsic aspect ratio (sometimes
+          // slightly rectangular for emoji or text-fallback avatars) and
+          // the shadow ring follows that, looking oval.
           return (
             <div
               key={m.user_id}
@@ -62,12 +67,14 @@ const TripMembersStrip: React.FC<Props> = ({ tripId, onInvite, max = 5 }) => {
                 position: 'relative',
                 marginLeft: i === 0 ? '-6px' : '-8px',
                 zIndex: visible.length - i,
-                // Green ring for online members reads more naturally than a
-                // corner dot at this size. Box-shadow draws it outside the
-                // avatar bounds without changing layout, so the strip's
-                // overlap geometry stays untouched.
+                width: '28px',
+                height: '28px',
                 borderRadius: '9999px',
                 boxShadow: isOnline ? '0 0 0 2px #22c55e' : 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
               <Avatar profile={m.profile} size={28} />
