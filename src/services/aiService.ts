@@ -1768,6 +1768,11 @@ export async function transcribeAudio(blob: Blob, filename = 'audio.webm'): Prom
 export interface NearbyPromptInterpretation {
   types: string[];
   keyword?: string;
+  // True when the user typed something that looks like a specific business
+  // name (proper noun, possibly misspelled, even a brand). The Nearby feed
+  // uses this to gate the extra Google Places "find specific place" call,
+  // so we don't burn that lookup on generic vibe queries like "ramen".
+  isSpecificPlaceName?: boolean;
 }
 
 // Optional context passed in from ContextEngine. None of these are required
@@ -1825,8 +1830,9 @@ Rules:
 - If the request mentions "walk", "stroll", "outside", prefer "park" and "tourist_attraction".
 - If it mentions "photo", "pictures", "instagram", "scenic", prefer "tourist_attraction" and "park" with a keyword like "scenic" or "viewpoint".
 - If it mentions "tiktok", "viral", "trendy", keep the requested category and add that as the keyword.
+- "isSpecificPlaceName" must be true when the user typed something that reads like a specific business name (proper noun like "bbagels", "Joe's Pizza", "Cafe du Monde", brand names, even when misspelled). Otherwise false. This gates an extra Google "find this place" lookup, so err on the side of false for generic words like "bagels", "ramen", "park".
 
-Return ONLY minified JSON of the form: {"types":["restaurant","cafe"],"keyword":"viral tiktok"}. No markdown, no prose.`;
+Return ONLY minified JSON of the form: {"types":["restaurant","cafe"],"keyword":"viral tiktok","isSpecificPlaceName":false}. No markdown, no prose.`;
 
   try {
     const raw = await callGeminiAPI(prompt, false);
@@ -1841,7 +1847,8 @@ Return ONLY minified JSON of the form: {"types":["restaurant","cafe"],"keyword":
       typeof parsed.keyword === 'string' && parsed.keyword.trim().length > 0
         ? parsed.keyword.trim()
         : undefined;
-    return { types, keyword };
+    const isSpecificPlaceName = parsed.isSpecificPlaceName === true;
+    return { types, keyword, isSpecificPlaceName };
   } catch (err) {
     console.error('interpretNearbyPrompt failed:', err);
     return { types: [] };

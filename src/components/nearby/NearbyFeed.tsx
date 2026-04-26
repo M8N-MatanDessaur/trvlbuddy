@@ -104,6 +104,7 @@ const NearbyFeed: React.FC = () => {
   const [chipsLoading, setChipsLoading] = useState(false);
   const [activeChipLabel, setActiveChipLabel] = useState<string | null>(null);
   const [specificPlace, setSpecificPlace] = useState<NearbyPlace | null>(null);
+  const [isSpecificName, setIsSpecificName] = useState(false);
   const [savedMode, setSavedMode] = useState(false);
   const [savedPlaces, setSavedPlaces] = useState<NearbyPlace[]>([]);
   const [savedLoading, setSavedLoading] = useState(false);
@@ -274,6 +275,10 @@ const NearbyFeed: React.FC = () => {
         setAiPrompt(prompt);
         setAiKeyword(result.keyword);
         setSelectedTypes(result.types);
+        // Stash the AI verdict so the specific-place effect can decide
+        // whether to spend the Places "find specific" lookup. Generic
+        // queries like "ramen" skip it; "bbagel" or "Joe's Pizza" run it.
+        setIsSpecificName(result.isSpecificPlaceName === true);
       } catch (err) {
         console.error('AI interpret error', err);
         toast('Something went wrong interpreting that prompt.', 'error');
@@ -289,6 +294,7 @@ const NearbyFeed: React.FC = () => {
     setAiKeyword(undefined);
     setSelectedTypes([]);
     setActiveChipLabel(null);
+    setIsSpecificName(false);
   }, []);
 
   // Load dynamic, context-aware chips once we have a location. The service
@@ -356,10 +362,14 @@ const NearbyFeed: React.FC = () => {
   // Ask Google "what place did the user mean?" with the raw prompt, not the
   // AI-rewritten keyword. Google's text search forgives typos ("bbagel" ->
   // "bbagels") and partial matches better than any local heuristic — the
-  // result gets pinned to the very top of the feed below.
+  // result gets pinned to the very top of the feed below. Gated on the
+  // Gemini interpreter saying the prompt looks like a specific business
+  // name; otherwise we skip the lookup and save a Places API call on
+  // every generic prompt like "ramen" or "park".
   useEffect(() => {
     setSpecificPlace(null);
     if (!userLocation || !aiPrompt) return;
+    if (!isSpecificName) return;
     const trimmed = aiPrompt.trim();
     if (trimmed.length < 2) return;
     let cancelled = false;
@@ -374,7 +384,7 @@ const NearbyFeed: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [aiPrompt, userLocation]);
+  }, [aiPrompt, userLocation, isSpecificName]);
 
   const selectDynamicChip = useCallback((chip: NearbyChipSuggestion) => {
     // Apply the chip's pre-interpreted types/keyword directly — no extra
@@ -383,6 +393,9 @@ const NearbyFeed: React.FC = () => {
     setAiKeyword(chip.keyword);
     setSelectedTypes(chip.types);
     setActiveChipLabel(chip.label);
+    // Chips are by definition not specific business names; never spend
+    // a Places "find specific" lookup on them.
+    setIsSpecificName(false);
   }, []);
 
   const openPromptBar = useCallback(() => {

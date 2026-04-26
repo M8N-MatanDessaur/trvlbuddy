@@ -1,4 +1,4 @@
-import React, { lazy } from 'react';
+import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { TravelProvider, useTravel } from './contexts/TravelContext';
@@ -10,21 +10,17 @@ import ErrorBoundary from './components/ErrorBoundary';
 import Header from './components/Header';
 import SwipeNavigator from './components/SwipeNavigator';
 import type { PageDef } from './components/SwipeNavigator';
-import ConversationalOnboarding from './components/ConversationalOnboarding';
-import ContributorOnboarding from './components/ContributorOnboarding';
 import WelcomeScreen from './components/WelcomeScreen';
 import SignInScreen from './components/SignInScreen';
 import LoadingScreen from './components/LoadingScreen';
 import AuthSplash from './components/AuthSplash';
-import SettingsPage from './components/SettingsPage';
-import AccountPage from './components/AccountPage';
-import PasswordResetPage from './components/PasswordResetPage';
-import ProfilePage from './components/ProfilePage';
-import NotificationsPage from './components/NotificationsPage';
-import NewTripLauncher from './components/NewTripLauncher';
-import TripJoinPage from './components/TripJoinPage';
 import { MessageCircle, Home, Compass, Languages, Phone, Radar, Plus, Wrench } from 'lucide-react';
 
+// Heavy route-only / modal screens. Lazy-loading these drops them out of
+// the initial bundle (the main entry was ~817 kB before) — they only
+// fetch when the user actually navigates to /settings, /account,
+// /profile, /notifications, /trip/join/<token>, or hits the new-trip /
+// onboarding flow.
 const ChatPage = lazy(() => import('./components/ChatPage'));
 const TripPage = lazy(() => import('./components/DynamicDashboard'));
 const NearbyPage = lazy(() => import('./components/nearby/NearbyFeed'));
@@ -32,6 +28,15 @@ const ExplorePage = lazy(() => import('./components/DynamicActivitiesPage'));
 const LanguagePage = lazy(() => import('./components/DynamicTranslatorPage'));
 const UtilitiesPage = lazy(() => import('./components/DynamicUtilitiesPage'));
 const EmergencyPage = lazy(() => import('./components/EmergencyPage'));
+const ConversationalOnboarding = lazy(() => import('./components/ConversationalOnboarding'));
+const ContributorOnboarding = lazy(() => import('./components/ContributorOnboarding'));
+const SettingsPage = lazy(() => import('./components/SettingsPage'));
+const AccountPage = lazy(() => import('./components/AccountPage'));
+const PasswordResetPage = lazy(() => import('./components/PasswordResetPage'));
+const ProfilePage = lazy(() => import('./components/ProfilePage'));
+const NotificationsPage = lazy(() => import('./components/NotificationsPage'));
+const NewTripLauncher = lazy(() => import('./components/NewTripLauncher'));
+const TripJoinPage = lazy(() => import('./components/TripJoinPage'));
 // Map view is parked on feature/trip-map-v2 -- the data layer (Google
 // Places enrichment of activity coordinates at trip generation) stays on
 // master so when Map comes back it'll have everything it needs.
@@ -61,23 +66,31 @@ const AppContent: React.FC = () => {
   const { session, profile, isLoading: authLoading, recoveryMode } = useAuth();
   const location = useLocation();
 
+  // Suspense fallback for any of the lazy screens below. AuthSplash is
+  // already part of the main bundle and handles the brief network gap
+  // gracefully without flashing layout.
+  const lazyFallback = <AuthSplash />;
+  const wrap = (node: React.ReactNode) => (
+    <Suspense fallback={lazyFallback}>{node}</Suspense>
+  );
+
   if (authLoading) return <AuthSplash />;
   if (!session) return <SignInScreen />;
   // Password-recovery click lands here with a recovery-scoped session. Hold
   // the user on PasswordResetPage until they either complete the flow or
   // cancel — never route to the main app with a recovery session.
-  if (recoveryMode) return <PasswordResetPage />;
+  if (recoveryMode) return wrap(<PasswordResetPage />);
   if (!profile) return <AuthSplash />;
 
   const joinMatch = location.pathname.match(/^\/trip\/join\/([^/]+)/);
-  if (joinMatch) return <TripJoinPage token={joinMatch[1]} />;
+  if (joinMatch) return wrap(<TripJoinPage token={joinMatch[1]} />);
 
-  if (!profile.onboarded_at) return <ContributorOnboarding />;
+  if (!profile.onboarded_at) return wrap(<ContributorOnboarding />);
 
-  if (location.pathname === '/settings') return <SettingsPage />;
-  if (location.pathname === '/account') return <AccountPage />;
-  if (location.pathname === '/notifications') return <NotificationsPage />;
-  if (location.pathname === '/profile' || location.pathname.startsWith('/profile/')) return <ProfilePage />;
+  if (location.pathname === '/settings') return wrap(<SettingsPage />);
+  if (location.pathname === '/account') return wrap(<AccountPage />);
+  if (location.pathname === '/notifications') return wrap(<NotificationsPage />);
+  if (location.pathname === '/profile' || location.pathname.startsWith('/profile/')) return wrap(<ProfilePage />);
 
   // Trip generation / long-running work gets the branded loading screen.
   if (isLoading) return <LoadingScreen />;
@@ -86,7 +99,7 @@ const AppContent: React.FC = () => {
   if (!appMode && !hasCompletedOnboarding) return <WelcomeScreen />;
 
   // Trip mode but onboarding not yet complete -> run the conversational onboarding.
-  if (appMode === 'trip' && !hasCompletedOnboarding) return <ConversationalOnboarding />;
+  if (appMode === 'trip' && !hasCompletedOnboarding) return wrap(<ConversationalOnboarding />);
 
   // Legacy users who completed onboarding before appMode existed: treat as trip mode.
   const effectiveMode = appMode || 'trip';
