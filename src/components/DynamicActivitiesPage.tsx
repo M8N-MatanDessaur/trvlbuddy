@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTravel } from '../contexts/TravelContext';
+import { useToast } from '../contexts/ToastContext';
 import { GeneratedActivity } from '../types/TravelData';
 import DynamicActivityModal from './DynamicActivityModal';
 import PlannerModal from './PlannerModal';
@@ -15,6 +16,7 @@ import { useActivityPhotos } from '../hooks/useActivityPhotos';
 
 const DynamicActivitiesPage: React.FC = () => {
   const { currentPlan, activities, setActivities } = useTravel();
+  const { toast } = useToast();
   useActivityPhotos();
   const { moment } = useContextualContent();
   const [activeFilter, setActiveFilter] = useState('all');
@@ -134,6 +136,21 @@ const DynamicActivitiesPage: React.FC = () => {
 
       if (newActivities.length > 0) {
         setActivities([...activities, ...newActivities]);
+        // Surface what changed: "Discover more" appends silently, so a
+        // brief summary tells the user what was actually added without
+        // making them scan the bottom of the list.
+        const preview = newActivities
+          .slice(0, 2)
+          .map((a) => a.name)
+          .filter(Boolean)
+          .join(', ');
+        const more = newActivities.length > 2 ? ` and ${newActivities.length - 2} more` : '';
+        toast(
+          newActivities.length === 1
+            ? `Added "${newActivities[0]?.name}"`
+            : `Added ${newActivities.length} activities${preview ? `: ${preview}${more}` : ''}`,
+          'success',
+        );
       }
     } catch {
       // silently fail
