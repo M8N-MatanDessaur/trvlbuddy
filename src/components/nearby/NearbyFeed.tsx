@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion';
 import { LocateFixed, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car, Calendar, Plus, Bookmark } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useContextEngine } from '../../contexts/ContextEngineContext';
 import { listSavedPlaces, placeFromSavedRow } from '../../services/savedPlacesService';
 import {
   getCachedLocation,
@@ -108,6 +109,7 @@ const NearbyFeed: React.FC = () => {
   const [savedLoading, setSavedLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { moment } = useContextEngine();
 
   const cursorRef = useRef<NearbyFeedCursor | null>(null);
   const fetchingRef = useRef(false);
@@ -255,7 +257,16 @@ const NearbyFeed: React.FC = () => {
       setAiLoading(true);
       try {
         const allowed = CATEGORIES.map(c => ({ type: c.type, label: c.label }));
-        const result = await interpretNearbyPrompt(prompt, allowed);
+        // Pass trip context (city, time of day, day of trip) so vague
+        // prompts like "something quiet" disambiguate correctly. The
+        // service tolerates an empty context for local-only mode.
+        const result = await interpretNearbyPrompt(prompt, allowed, {
+          city: moment.currentSegment?.city?.name || moment.currentDestination?.name || null,
+          country: moment.currentDestination?.country || null,
+          timeOfDay: moment.timeOfDay,
+          dayOfTrip: moment.dayOfTrip,
+          tripPhase: moment.tripPhase,
+        });
         if (result.types.length === 0 && !result.keyword) {
           toast("Couldn't match that to anything nearby. Try something else.", 'error');
           return;
@@ -270,7 +281,7 @@ const NearbyFeed: React.FC = () => {
         setAiLoading(false);
       }
     },
-    [userLocation, toast],
+    [userLocation, toast, moment],
   );
 
   const handleAiClear = useCallback(() => {
