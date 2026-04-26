@@ -1770,17 +1770,45 @@ export interface NearbyPromptInterpretation {
   keyword?: string;
 }
 
+// Optional context passed in from ContextEngine. None of these are required
+// (Nearby works in local mode with no trip), but every field present
+// sharpens Gemini's interpretation: "something quiet" interpreted in a
+// trip context with city=Seoul + timeOfDay=evening narrows naturally to
+// quiet bars / late-night cafes instead of generic "quiet places".
+export interface NearbyPromptContext {
+  city?: string | null;
+  country?: string | null;
+  timeOfDay?: 'morning' | 'midday' | 'afternoon' | 'evening' | 'night';
+  dayOfTrip?: number;
+  tripPhase?: 'pre-trip' | 'active' | 'post-trip';
+}
+
 export async function interpretNearbyPrompt(
   userPrompt: string,
   allowedTypes: { type: string; label: string }[],
+  context: NearbyPromptContext = {},
 ): Promise<NearbyPromptInterpretation> {
   const trimmed = userPrompt.trim();
   if (!trimmed) return { types: [] };
 
   const typeList = allowedTypes.map(t => `"${t.type}" (${t.label})`).join(', ');
+  const contextLines: string[] = [];
+  if (context.city) {
+    contextLines.push(`The user is in ${context.city}${context.country ? `, ${context.country}` : ''}.`);
+  }
+  if (context.timeOfDay) {
+    contextLines.push(`Local time of day: ${context.timeOfDay}.`);
+  }
+  if (context.tripPhase === 'active' && context.dayOfTrip && context.dayOfTrip > 0) {
+    contextLines.push(`Day ${context.dayOfTrip} of the trip.`);
+  }
+  const contextBlock = contextLines.length
+    ? `\nContext to bias the interpretation (use it to disambiguate vague phrases; do NOT echo it back):\n${contextLines.map((l) => `- ${l}`).join('\n')}\n`
+    : '';
+
   const prompt = `A user of a nearby-places app typed this free-form request:
 "${trimmed}"
-
+${contextBlock}
 Map it to a strict JSON object that tells the app which Google Places categories and what keyword to use. The keyword feeds Google Places Text Search, so it should read like the query a human would type into Google Maps.
 
 Allowed category types (use ONLY these string values): ${typeList}.
@@ -1791,6 +1819,8 @@ Rules:
   * Cuisine / dish / specialty ("ramen", "bagels", "sushi", "poutine", "matcha latte"): keyword is that word or short phrase.
   * Vibe / phrase / intent ("cozy cafe with wifi", "rooftop for sunset", "viral tiktok dessert"): keyword is a short 2-4 word distillation a human would Google.
   * Pure category ("just restaurants", "any park"): keyword is empty.
+- When the city is known and the request mentions a local specialty implicitly ("something authentic", "what locals eat"), pick a keyword tied to that city's signature food/drink/scene.
+- When the time of day is "morning" or "midday", lean toward open-now-friendly verbs (brunch, coffee, market) for vague vibe prompts; in the "evening" or "night" lean toward bars / dinner / nightlife.
 - Return between 0 and 4 category types that best match the intent. Use 0 only when the request is so specific (a unique business name) that no category narrows it. Otherwise pick 1-4. Do NOT invent new types.
 - If the request mentions "walk", "stroll", "outside", prefer "park" and "tourist_attraction".
 - If it mentions "photo", "pictures", "instagram", "scenic", prefer "tourist_attraction" and "park" with a keyword like "scenic" or "viewpoint".
