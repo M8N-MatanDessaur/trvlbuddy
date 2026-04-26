@@ -33,10 +33,12 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
   const { user } = useAuth();
   const { toast } = useToast();
 
-  if (!activity) return null;
-
-  const CategoryIcon = getCategoryIcon(activity.category);
-  const locationQuery = encodeURIComponent(activity.location);
+  // Hooks MUST run on every render in the same order. The previous version
+  // had `if (!activity) return null` between useActivityMedia and the
+  // useMemo below, so the hook count changed when activity toggled between
+  // null and non-null -- React #310 in production builds. Slides only
+  // reads mediaItems, so we can safely compute it before the activity
+  // guard and return null afterwards.
   const slides: MediaSlide[] = useMemo(
     () => mediaItems.map((item) => (
       item.kind === 'image'
@@ -52,6 +54,11 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
     )),
     [mediaItems],
   );
+
+  if (!activity) return null;
+
+  const CategoryIcon = getCategoryIcon(activity.category);
+  const locationQuery = encodeURIComponent(activity.location);
   const hasImages = slides.length > 0;
 
   const handleVote = async (target: 1 | -1) => {
