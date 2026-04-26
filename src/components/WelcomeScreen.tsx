@@ -4,9 +4,10 @@ import { useTravel } from '../contexts/TravelContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
-import { listMyTrips, loadTrip } from '../services/tripsService';
+import { loadTrip } from '../services/tripsService';
 import type { Trip } from '../lib/supabase';
 import TripsCarousel from './TripsCarousel';
+import { useMyTrips } from '../hooks/useMyTrips';
 
 const WelcomeScreen: React.FC = () => {
   const {
@@ -22,28 +23,10 @@ const WelcomeScreen: React.FC = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const [savedTrips, setSavedTrips] = useState<Trip[]>([]);
-  const [tripsLoading, setTripsLoading] = useState(false);
+  // Cached trips list — same SWR snapshot as the profile carousel, so
+  // returning to this screen never re-flashes the shimmer.
+  const { trips: savedTrips, loading: tripsLoading } = useMyTrips(user?.id ?? null);
   const [openingTripId, setOpeningTripId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!user?.id) {
-      setSavedTrips([]);
-      return;
-    }
-    let cancelled = false;
-    setTripsLoading(true);
-    listMyTrips(user.id)
-      .then((trips) => {
-        if (!cancelled) setSavedTrips(trips);
-      })
-      .finally(() => {
-        if (!cancelled) setTripsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
 
   const chooseTrip = () => {
     setAppMode('trip');

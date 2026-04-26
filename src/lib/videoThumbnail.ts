@@ -32,19 +32,40 @@ export function captureVideoFirstFrame(url: string): Promise<string | null> {
 }
 
 async function decode(url: string): Promise<string | null> {
+  // CORS-anonymous is required so toDataURL can read pixels back. Without
+  // it the canvas is tainted and we can't generate a thumbnail at all --
+  // VideoThumbnail's caller falls through to the upload-time poster (or
+  // a blank surface) when this returns null.
   try {
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.muted = true;
-    video.playsInline = true;
-    // metadata is enough to start drawing the first frame in Chromium /
-    // Safari; some Firefox builds need a tiny play() nudge before the
-    // pixel data lands in the canvas, so we issue one and immediately
-    // pause once we've grabbed the frame.
-    video.preload = 'auto';
-    video.src = url;
+    return await decodeOnce(url, true);
+  } catch {
+    return null;
+  }
+}
 
-    await waitForEvent(video, 'loadeddata', 4000);
+async function decodeOnce(url: string, withCors: boolean): Promise<string | null> {
+  const video = document.createElement('video');
+  if (withCors) video.crossOrigin = 'anonymous';
+  video.muted = true;
+  video.playsInline = true;
+  // preload=auto pulls enough of the file that a seek to 0 lands on a
+  // real frame instead of the black pre-roll some encoders emit.
+  video.preload = 'auto';
+  video.src = url;
+
+  try {
+    // loadedmetadata gives us videoWidth/videoHeight; we then nudge the
+    // currentTime so the browser commits a frame to the decoder before we
+    // try to drawImage. Without the seek + 'seeked' wait, Chrome will
+    // sometimes draw a black square because no frame has been painted yet.
+    await waitForEvent(video, 'loadedmetadata', 6000);
+    try {
+      video.currentTime = Math.min(0.1, (video.duration || 0.5) / 2);
+      await waitForEvent(video, 'seeked', 4000);
+    } catch {
+      // Some browsers won't seek until 'canplay'; fall back to that.
+      await waitForEvent(video, 'canplay', 4000).catch(() => undefined);
+    }
 
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth || 720;
@@ -53,14 +74,20 @@ async function decode(url: string): Promise<string | null> {
     if (!ctx) return null;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
+    let dataUrl: string;
+    try {
+      dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+    } catch {
+      // Tainted canvas (CORS mismatch) -- can't read back. Caller's
+      // outer fallback handles the no-CORS retry. Returning null lets
+      // VideoThumbnail keep showing the poster URL.
+      return null;
+    }
+    return dataUrl.length > 100 ? dataUrl : null;
+  } finally {
     try { video.pause(); } catch { /* noop */ }
     video.removeAttribute('src');
-    video.load();
-
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-    return dataUrl.length > 100 ? dataUrl : null;
-  } catch {
-    return null;
+    try { video.load(); } catch { /* noop */ }
   }
 }
 
