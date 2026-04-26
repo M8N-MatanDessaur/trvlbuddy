@@ -6,10 +6,12 @@ import {
   ChevronUp,
   ChevronDown,
   ExternalLink,
+  Bookmark,
 } from 'lucide-react';
 import { NearbyPlace, formatDistance, priceLevelLabel } from '../../services/nearbyService';
 import { useActivityMedia } from '../../hooks/useActivityMedia';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSavedPlace } from '../../hooks/useSavedPlaces';
 import MediaCarousel, { type MediaSlide } from '../MediaCarousel';
 import UploadMediaButton from '../UploadMediaButton';
 import Avatar from '../Avatar';
@@ -118,6 +120,20 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
     navigate(`/profile/${poster.id}`);
   };
 
+  const { saved, toggle: toggleSaved, busy: savingBusy } = useSavedPlace(place);
+  const handleToggleSaved = async () => {
+    if (!user) {
+      toast('Sign in to save places', 'info');
+      return;
+    }
+    const result = await toggleSaved();
+    if (!result.ok) {
+      toast(result.error || 'Could not update saved places', 'error');
+      return;
+    }
+    toast(result.nextSaved ? 'Saved to your places' : 'Removed from saved', 'success');
+  };
+
   const ratingCount = place.userRatingsTotal
     ? place.userRatingsTotal > 999
       ? `${(place.userRatingsTotal / 1000).toFixed(1)}k`
@@ -163,6 +179,34 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
     border: 'none',
     padding: 0,
   });
+
+  const savedButton = (
+    <button
+      onClick={handleToggleSaved}
+      className="flex items-center justify-center transition-all active:scale-90 disabled:opacity-60"
+      style={{
+        ...solidCircleStyle(saved),
+      }}
+      disabled={savingBusy}
+      aria-label={saved ? 'Unsave place' : 'Save place'}
+      aria-pressed={saved}
+    >
+      <Bookmark size={16} fill={saved ? 'currentColor' : 'none'} />
+    </button>
+  );
+
+  const savedOverlayButton = (
+    <button
+      onClick={handleToggleSaved}
+      className="flex items-center justify-center transition-all active:scale-90 disabled:opacity-60"
+      style={overlayCircleStyle(false, saved)}
+      disabled={savingBusy}
+      aria-label={saved ? 'Unsave place' : 'Save place'}
+      aria-pressed={saved}
+    >
+      <Bookmark size={15} fill={saved ? 'currentColor' : 'none'} />
+    </button>
+  );
 
   const pillBaseStyle: React.CSSProperties = {
     height: `${ACTION_SIZE}px`,
@@ -350,6 +394,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
               size={16}
               ariaLabel="Add the first photo or video"
             />
+            {savedButton}
             {votePill}
           </div>
         </div>
@@ -434,8 +479,9 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
             </button>
           </div>
 
-          {/* Bottom-right: plus */}
-          <div className="absolute right-3 bottom-3 z-10">
+          {/* Bottom-right: save + plus */}
+          <div className="absolute right-3 bottom-3 z-10 flex items-center gap-2">
+            {savedOverlayButton}
             <UploadMediaButton
               onPhotoFile={upload}
               onVideoResult={uploadVideo}
@@ -448,10 +494,11 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
 
         {/* Second layer */}
         <div className="px-4 pt-3 pb-4">
-          {/* Action row: distance pill, vote pill, open-external */}
+          {/* Action row: distance pill, vote + save pill, open-external */}
           <div className="flex items-center justify-between gap-2 mb-2.5">
             {distancePill}
             <div className="flex items-center gap-2">
+              {savedButton}
               {votePill}
               {openMapsButton}
             </div>

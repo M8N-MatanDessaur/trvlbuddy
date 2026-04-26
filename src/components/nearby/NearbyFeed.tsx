@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LocateFixed, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car, Calendar, Plus } from 'lucide-react';
+import { LocateFixed, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car, Calendar, Plus, Bookmark } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { listSavedPlaces, placeFromSavedRow } from '../../services/savedPlacesService';
 import {
   getCachedLocation,
   getCurrentLocation,
@@ -101,7 +103,11 @@ const NearbyFeed: React.FC = () => {
   const [chipsLoading, setChipsLoading] = useState(false);
   const [activeChipLabel, setActiveChipLabel] = useState<string | null>(null);
   const [specificPlace, setSpecificPlace] = useState<NearbyPlace | null>(null);
+  const [savedMode, setSavedMode] = useState(false);
+  const [savedPlaces, setSavedPlaces] = useState<NearbyPlace[]>([]);
+  const [savedLoading, setSavedLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const cursorRef = useRef<NearbyFeedCursor | null>(null);
   const fetchingRef = useRef(false);
@@ -301,6 +307,40 @@ const NearbyFeed: React.FC = () => {
       cancelled = true;
     };
   }, [userLocation, transportMode]);
+
+  // Saved-only view: bypass the cursor and stream the user's bookmarked
+  // places straight from Supabase. Distance is recomputed against the
+  // current user location so a place saved last week shows its real
+  // distance now. Re-runs whenever the user toggles into Saved mode or
+  // their location refreshes (so distances update on the move).
+  useEffect(() => {
+    if (!savedMode) return;
+    if (!user?.id) {
+      setSavedPlaces([]);
+      return;
+    }
+    let cancelled = false;
+    setSavedLoading(true);
+    listSavedPlaces(user.id)
+      .then((rows) => {
+        if (cancelled) return;
+        const places = rows.map((row) => placeFromSavedRow(row, userLocation));
+        // Sort by distance ascending, but only when we have a location.
+        if (userLocation) places.sort((a, b) => a.distance - b.distance);
+        setSavedPlaces(places);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setSavedLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [savedMode, user?.id, userLocation]);
+
+  const toggleSavedMode = useCallback(() => {
+    setSavedMode((prev) => !prev);
+  }, []);
 
   // Ask Google "what place did the user mean?" with the raw prompt, not the
   // AI-rewritten keyword. Google's text search forgives typos ("bbagel" ->
@@ -670,15 +710,28 @@ const NearbyFeed: React.FC = () => {
       {!aiPrompt && (status === 'ready' || (status === 'loading' && places.length > 0)) && userLocation && (
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 mb-4" style={{ scrollbarWidth: 'none' }}>
           <button
-            onClick={clearTypes}
+            onClick={() => { if (savedMode) toggleSavedMode(); clearTypes(); }}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
             style={{
-              background: selectedTypes.length === 0 && !activeChipLabel ? 'var(--accent)' : 'var(--surface-container)',
-              color: selectedTypes.length === 0 && !activeChipLabel ? 'var(--on-accent)' : 'var(--text-secondary)',
+              background: !savedMode && selectedTypes.length === 0 && !activeChipLabel ? 'var(--accent)' : 'var(--surface-container)',
+              color: !savedMode && selectedTypes.length === 0 && !activeChipLabel ? 'var(--on-accent)' : 'var(--text-secondary)',
             }}
           >
             <Globe size={14} />
             All
+          </button>
+
+          <button
+            onClick={toggleSavedMode}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
+            style={{
+              background: savedMode ? 'var(--accent)' : 'var(--surface-container)',
+              color: savedMode ? 'var(--on-accent)' : 'var(--text-secondary)',
+            }}
+            aria-pressed={savedMode}
+          >
+            <Bookmark size={14} fill={savedMode ? 'currentColor' : 'none'} />
+            Saved
           </button>
 
           {chipsLoading && dynamicChips.length === 0 &&
@@ -784,7 +837,33 @@ const NearbyFeed: React.FC = () => {
         </div>
       )}
 
-      {(status === 'locating' || status === 'loading' || status === 'ready') && (
+      {savedMode && (
+        <>
+          {savedLoading && savedPlaces.length === 0 && (
+            <div className="space-y-8">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="w-full">
+                  <div className="w-full activity-card-shimmer" style={{ aspectRatio: '4 / 5', borderRadius: '22px', background: 'var(--surface-container-high)' }} />
+                  <div className="h-4 rounded-full mt-3 activity-card-shimmer" style={{ width: '60%', background: 'var(--surface-container-high)' }} />
+                </div>
+              ))}
+            </div>
+          )}
+          {!savedLoading && savedPlaces.length === 0 && (
+            <div className="text-center py-16 px-6">
+              <h3 className="text-base font-bold mb-1">No saved places yet</h3>
+              <p className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>
+                Tap the bookmark on any place to save it for later.
+              </p>
+            </div>
+          )}
+          {savedPlaces.map((place) => (
+            <NearbyPost key={place.placeId} place={place} />
+          ))}
+        </>
+      )}
+
+      {!savedMode && (status === 'locating' || status === 'loading' || status === 'ready') && (
         <>
           {places.length === 0 && (status === 'loading' || status === 'locating') && (
             <div className="space-y-8">
