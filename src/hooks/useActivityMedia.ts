@@ -187,16 +187,11 @@ async function fetchAndCache(
 ): Promise<State> {
   const existing = inFlight.get(cacheKey);
   if (existing) return existing;
-  // Same timeout guard as useProfileMedia — protect every shared cache
-  // entry against a hung Supabase query so cards never stay on shimmer
-  // forever. 8s is generous; real responses are typically <500ms.
-  const TIMEOUT_MS = 8_000;
-  const promise = Promise.race([
-    loadFresh(key, viewerId),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('activity fetch timeout')), TIMEOUT_MS),
-    ),
-  ])
+  // No client-side timeout: a slow network must NOT trigger a fake
+  // empty fallback that overwrites the user's real data. The network
+  // promise settles naturally; on real failure we keep the prior
+  // cache (if any) instead of flipping to an empty state.
+  const promise = loadFresh(key, viewerId)
     .then((state) => {
       setCache(cacheKey, state);
       if (state.activityId) {
@@ -207,13 +202,12 @@ async function fetchAndCache(
     .catch((err) => {
       console.warn('[useActivityMedia] fetch failed', err);
       const cached = cache.get(cacheKey);
-      if (cached) {
-        // Keep showing what we had instead of wiping to shimmer.
-        return cached.state;
-      }
+      if (cached) return cached.state;
       const msg = err instanceof Error ? err.message : String(err);
       const state: State = { ...EMPTY_STATE, error: msg };
-      setCache(cacheKey, state);
+      // DO NOT cache the error state with a fresh timestamp — leaving
+      // it uncached lets the next mount retry against the network.
+      emit(cacheKey, state);
       return state;
     })
     .finally(() => {
