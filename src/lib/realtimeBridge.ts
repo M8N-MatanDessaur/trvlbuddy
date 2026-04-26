@@ -13,6 +13,26 @@ import { queryKeys } from './queryKeys';
 // resolved activityId. We can't pre-compute the cached activityId from
 // the key, so we narrow via a predicate that inspects each query's
 // cached snapshot data.
+//
+// Self-write suppression: postgres_changes echoes back to the SAME client
+// that made the write. Without filtering, the actor's optimistic update
+// gets overwritten by a refetch that races the trigger fanout — this
+// produced the "click upvote, see 1, then see 0, click again to make it
+// stick" UX bug. We track the current auth user and skip invalidations
+// when the row's actor (user_id / uploaded_by) is the current user; their
+// optimistic cache is already correct. Other users' echoes still fire.
+
+let currentUserId: string | null = null;
+supabase.auth.getUser().then(({ data }) => {
+  currentUserId = data.user?.id ?? null;
+}).catch(() => { /* unauthenticated — leave as null */ });
+supabase.auth.onAuthStateChange((_event, session) => {
+  currentUserId = session?.user?.id ?? null;
+});
+
+function isSelfWrite(actorId: string | undefined): boolean {
+  return Boolean(actorId && currentUserId && actorId === currentUserId);
+}
 
 // Shape of an activity-media cache entry. Local copy to keep this file
 // independent of the hook module.
@@ -85,9 +105,9 @@ export function installRealtimeBridge(qc: QueryClient): () => void {
     supabase
       .channel('rt-activity-images')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_images' }, (payload) => {
-        const activityId = pickField(payload as Payload, 'activity_id');
         const uploadedBy = pickField(payload as Payload, 'uploaded_by');
-        invalidateByActivityId(qc, activityId);
+        if (isSelfWrite(uploadedBy)) return;
+        invalidateByActivityId(qc, pickField(payload as Payload, 'activity_id'));
         invalidateProfileForUser(qc, uploadedBy);
       })
       .subscribe(),
@@ -95,9 +115,9 @@ export function installRealtimeBridge(qc: QueryClient): () => void {
     supabase
       .channel('rt-activity-videos')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_videos' }, (payload) => {
-        const activityId = pickField(payload as Payload, 'activity_id');
         const uploadedBy = pickField(payload as Payload, 'uploaded_by');
-        invalidateByActivityId(qc, activityId);
+        if (isSelfWrite(uploadedBy)) return;
+        invalidateByActivityId(qc, pickField(payload as Payload, 'activity_id'));
         invalidateProfileForUser(qc, uploadedBy);
       })
       .subscribe(),
@@ -105,40 +125,45 @@ export function installRealtimeBridge(qc: QueryClient): () => void {
     supabase
       .channel('rt-activity-votes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_votes' }, (payload) => {
-        const activityId = pickField(payload as Payload, 'activity_id');
-        invalidateByActivityId(qc, activityId);
+        const userId = pickField(payload as Payload, 'user_id');
+        if (isSelfWrite(userId)) return;
+        invalidateByActivityId(qc, pickField(payload as Payload, 'activity_id'));
       })
       .subscribe(),
 
     supabase
       .channel('rt-activity-image-likes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_image_likes' }, (payload) => {
-        const imageId = pickField(payload as Payload, 'image_id');
-        invalidateByImageId(qc, imageId);
+        const userId = pickField(payload as Payload, 'user_id');
+        if (isSelfWrite(userId)) return;
+        invalidateByImageId(qc, pickField(payload as Payload, 'image_id'));
       })
       .subscribe(),
 
     supabase
       .channel('rt-activity-image-comments')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_image_comments' }, (payload) => {
-        const imageId = pickField(payload as Payload, 'image_id');
-        invalidateByImageId(qc, imageId);
+        const userId = pickField(payload as Payload, 'user_id');
+        if (isSelfWrite(userId)) return;
+        invalidateByImageId(qc, pickField(payload as Payload, 'image_id'));
       })
       .subscribe(),
 
     supabase
       .channel('rt-activity-video-likes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_video_likes' }, (payload) => {
-        const videoId = pickField(payload as Payload, 'video_id');
-        invalidateByVideoId(qc, videoId);
+        const userId = pickField(payload as Payload, 'user_id');
+        if (isSelfWrite(userId)) return;
+        invalidateByVideoId(qc, pickField(payload as Payload, 'video_id'));
       })
       .subscribe(),
 
     supabase
       .channel('rt-activity-video-comments')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_video_comments' }, (payload) => {
-        const videoId = pickField(payload as Payload, 'video_id');
-        invalidateByVideoId(qc, videoId);
+        const userId = pickField(payload as Payload, 'user_id');
+        if (isSelfWrite(userId)) return;
+        invalidateByVideoId(qc, pickField(payload as Payload, 'video_id'));
       })
       .subscribe(),
   ];
