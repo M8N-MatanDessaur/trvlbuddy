@@ -1,11 +1,49 @@
-import React from 'react';
-import { Plane, Radar, ArrowRight, Sparkles } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plane, Radar, ArrowRight, Sparkles, Briefcase } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
+import { listMyTrips, loadTrip } from '../services/tripsService';
+import type { Trip } from '../lib/supabase';
+import TripsCarousel from './TripsCarousel';
 
 const WelcomeScreen: React.FC = () => {
-  const { setAppMode } = useTravel();
+  const {
+    setAppMode,
+    setCurrentPlan,
+    setActivities,
+    setTranslations,
+    setEmergencyContacts,
+    setHasCompletedOnboarding,
+    setCurrentTripId,
+  } = useTravel();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const navigate = useNavigate();
+
+  const [savedTrips, setSavedTrips] = useState<Trip[]>([]);
+  const [tripsLoading, setTripsLoading] = useState(false);
+  const [openingTripId, setOpeningTripId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setSavedTrips([]);
+      return;
+    }
+    let cancelled = false;
+    setTripsLoading(true);
+    listMyTrips(user.id)
+      .then((trips) => {
+        if (!cancelled) setSavedTrips(trips);
+      })
+      .finally(() => {
+        if (!cancelled) setTripsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const chooseTrip = () => {
     setAppMode('trip');
@@ -15,6 +53,24 @@ const WelcomeScreen: React.FC = () => {
   const chooseLocal = () => {
     setAppMode('local');
     navigate('/nearby', { replace: true });
+  };
+
+  const openSavedTrip = async (trip: Trip) => {
+    setOpeningTripId(trip.id);
+    const row = await loadTrip(trip.id);
+    setOpeningTripId(null);
+    if (!row?.plan?.currentPlan) {
+      toast('Could not open trip', 'error');
+      return;
+    }
+    const bundle = row.plan;
+    setCurrentPlan(bundle.currentPlan);
+    setActivities(bundle.activities || []);
+    setTranslations(bundle.translations || []);
+    setEmergencyContacts(bundle.emergencyContacts || []);
+    setAppMode('trip');
+    setHasCompletedOnboarding(true);
+    setCurrentTripId(row.id);
   };
 
   return (
@@ -100,6 +156,36 @@ const WelcomeScreen: React.FC = () => {
           </div>
         </button>
       </div>
+
+      {/* Saved trips: lets a returning user jump directly into an existing
+          trip instead of being forced through "Plan a Trip" again. Only
+          appears when the signed-in user actually has trips on file. */}
+      {savedTrips.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-3 px-1">
+            <Briefcase size={14} style={{ color: 'var(--text-secondary)' }} />
+            <h2 className="text-[12px] font-extrabold uppercase tracking-[0.12em]" style={{ color: 'var(--text-secondary)' }}>
+              Continue a saved trip
+            </h2>
+          </div>
+          <TripsCarousel
+            trips={savedTrips}
+            onSelect={openSavedTrip}
+            busyTripId={openingTripId}
+            selectLabel="Open"
+          />
+        </div>
+      )}
+
+      {tripsLoading && savedTrips.length === 0 && (
+        <div className="mt-6">
+          <div
+            className="rounded-2xl activity-card-shimmer"
+            style={{ height: '110px', background: 'var(--surface-container-high)' }}
+            aria-hidden="true"
+          />
+        </div>
+      )}
 
       {/* Footer note */}
       <p
