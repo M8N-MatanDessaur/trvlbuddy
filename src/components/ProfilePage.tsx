@@ -100,22 +100,6 @@ const ProfilePage: React.FC = () => {
     };
   }, [isOwn, routeUserId]);
 
-  useEffect(() => {
-    if (!isOwn || !user) return;
-    let alive = true;
-    setTripsLoading(true);
-    listMyTrips(user.id)
-      .then((rows) => {
-        if (alive) setTrips(rows);
-      })
-      .finally(() => {
-        if (alive) setTripsLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [isOwn, user?.id]);
-
   const goBack = () => {
     if (window.history.length > 1) navigate(-1);
     else navigate('/');
