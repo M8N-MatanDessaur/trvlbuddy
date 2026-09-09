@@ -1,4 +1,4 @@
-import { supabase, type Profile, type TripMember } from '../lib/supabase';
+import { supabase, PROFILE_COLUMNS, type Profile, type TripMember } from '../lib/supabase';
 
 export interface TripMemberWithProfile extends TripMember {
   profile: Profile | null;
@@ -7,7 +7,7 @@ export interface TripMemberWithProfile extends TripMember {
 export async function listTripMembers(tripId: string): Promise<TripMemberWithProfile[]> {
   const { data, error } = await supabase
     .from('trip_members')
-    .select('trip_id, user_id, role, joined_at, profiles:profiles!trip_members_user_id_fkey(*)')
+    .select(`trip_id, user_id, role, joined_at, profiles:profiles!trip_members_user_id_fkey(${PROFILE_COLUMNS})`)
     .eq('trip_id', tripId)
     .order('joined_at', { ascending: true });
   if (error) {

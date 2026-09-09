@@ -177,7 +177,7 @@ const SettingsPage: React.FC = () => {
     navigate('/nearby', { replace: true });
   };
 
-  const displayName = profile?.display_name || profile?.email || 'Traveler';
+  const displayName = profile?.display_name || 'Traveler';
   const influence = profile?.influence ?? 0;
 
   const rowClass =
@@ -243,12 +243,12 @@ const SettingsPage: React.FC = () => {
                 <div className="text-[17px] font-extrabold tracking-tight truncate">
                   {displayName}
                 </div>
-                {profile?.email && displayName !== profile.email && (
+                {user?.email && displayName !== user.email && (
                   <div
                     className="text-[12.5px] truncate"
                     style={{ color: 'var(--text-secondary)' }}
                   >
-                    {profile.email}
+                    {user.email}
                   </div>
                 )}
                 <div
@@ -609,7 +609,7 @@ const SettingsPage: React.FC = () => {
                       className="text-[12px]"
                       style={{ color: 'var(--text-secondary)' }}
                     >
-                      {profile?.email || 'Signed in'}
+                      {user?.email || 'Signed in'}
                     </div>
                   </div>
                   <ChevronRight size={16} style={{ color: 'var(--text-tertiary)' }} />

@@ -16,7 +16,19 @@ export const supabase = createClient<Database>(url, anonKey, {
   },
 });
 
-export type Profile = Database['public']['Tables']['profiles']['Row'];
+// 'email' is omitted deliberately: the column privilege is revoked for anon
+// and authenticated, so the browser never receives it. Read your own address
+// from the auth session (useAuth().user.email) instead.
+export type Profile = Omit<Database['public']['Tables']['profiles']['Row'], 'email'>;
+
+// Every column of profiles the browser is allowed to read. `email` is
+// deliberately absent: the column privilege is revoked for anon and
+// authenticated (see 20260909_ai_quota_and_email_privacy.sql) because the
+// read policy is `using (true)`, so a select('*') here would hand every
+// user's address to anyone holding the anon key. Read your own address from
+// the auth session instead, never from this table.
+export const PROFILE_COLUMNS =
+  'id, display_name, avatar_url, influence, onboarded_at, created_at, current_trip_id, theme';
 export type Activity = Database['public']['Tables']['activities']['Row'];
 export type ActivityImage = Database['public']['Tables']['activity_images']['Row'];
 export type ActivityImageLike = Database['public']['Tables']['activity_image_likes']['Row'];

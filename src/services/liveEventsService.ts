@@ -1,5 +1,4 @@
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`;
+import { callGeminiProxy } from '../lib/geminiProxy';
 
 export interface LocalEvent {
   name: string;
@@ -67,16 +66,10 @@ Return ONLY a JSON array (no markdown, no explanation) with up to 6 events. Each
 
 If you cannot find any qualifying events within the radius, return an empty array [].`;
 
-    const response = await fetch(GEMINI_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        tools: [{ google_search: {} }],
-      }),
+    const result = await callGeminiProxy({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      tools: [{ google_search: {} }],
     });
-
-    const result = await response.json();
     const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
 
     const jsonMatch = text.match(/\[[\s\S]*\]/);

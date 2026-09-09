@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase, type Profile } from '../lib/supabase';
+import { supabase, PROFILE_COLUMNS, type Profile } from '../lib/supabase';
 import { getAuthRedirectUrl } from '../lib/authRedirect';
 
 interface AuthContextValue {
@@ -36,7 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const fetchProfile = async (userId: string) => {
     profileFetchRef.current = userId;
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
+    const { data, error } = await supabase.from('profiles').select(PROFILE_COLUMNS).eq('id', userId).maybeSingle();
     if (profileFetchRef.current !== userId) return;
     if (error) {
       console.error('profile fetch failed', error);

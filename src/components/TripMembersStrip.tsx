@@ -62,7 +62,7 @@ const TripMembersStrip: React.FC<Props> = ({ tripId, onInvite, max = 5 }) => {
           return (
             <div
               key={m.user_id}
-              title={`${m.profile?.display_name || m.profile?.email || ''}${isOnline ? ' • online' : ''}`}
+              title={`${m.profile?.display_name || 'Traveler'}${isOnline ? ' • online' : ''}`}
               style={{
                 position: 'relative',
                 marginLeft: i === 0 ? '-6px' : '-8px',

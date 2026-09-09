@@ -3,7 +3,6 @@ import CachedImage from './CachedImage';
 
 export interface AvatarProfile {
   display_name?: string | null;
-  email?: string | null;
   avatar_url?: string | null;
 }
 
@@ -15,7 +14,7 @@ interface Props {
 }
 
 function initialOf(profile: AvatarProfile | null | undefined): string {
-  const name = profile?.display_name || profile?.email || '';
+  const name = profile?.display_name || '';
   const trimmed = name.trim();
   if (!trimmed) return '?';
   return trimmed.charAt(0).toUpperCase();
