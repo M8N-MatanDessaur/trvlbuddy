@@ -245,16 +245,21 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
     </span>
   );
 
+  // Each fact is one unwrappable unit, and the row wraps between them.
+  // Previously this was inline text, so a narrow card broke it mid-item and
+  // pushed "$$" onto a line of its own next to the action buttons.
   const ratingPriceText = (place.rating != null || price) && (
-    <p className="text-[12.5px] mt-2" style={{ color: 'var(--text-secondary)' }}>
+    <p
+      className="text-[12.5px] mt-2 flex items-center flex-wrap"
+      style={{ color: 'var(--text-secondary)', gap: '2px 8px' }}
+    >
       {place.rating != null && (
-        <>
+        <span style={{ whiteSpace: 'nowrap' }}>
           <span style={{ color: 'var(--accent)', fontWeight: 700 }}>★ {place.rating.toFixed(1)}</span>
           {ratingCount && <span style={{ opacity: 0.7 }}> ({ratingCount})</span>}
-        </>
+        </span>
       )}
-      {place.rating != null && price && <span style={{ opacity: 0.45 }}> &nbsp;|&nbsp; </span>}
-      {price && <span style={{ fontWeight: 700 }}>{price}</span>}
+      {price && <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{price}</span>}
     </p>
   );
 

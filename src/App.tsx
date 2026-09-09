@@ -9,10 +9,14 @@ import { ChatProvider } from './contexts/ChatContext';
 import { ContextEngineProvider } from './contexts/ContextEngineContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
-import AppShell from './components/AppShell';
+import Header from './components/Header';
+import SwipeNavigator from './components/SwipeNavigator';
+import type { PageDef } from './components/SwipeNavigator';
+import WelcomeScreen from './components/WelcomeScreen';
 import SignInScreen from './components/SignInScreen';
 import LoadingScreen from './components/LoadingScreen';
 import AuthSplash from './components/AuthSplash';
+import { MessageCircle, Home, Compass, Languages, Phone, Radar, Plus, Wrench } from 'lucide-react';
 
 // Heavy route-only / modal screens. Lazy-loading these drops them out of
 // the initial bundle (the main entry was ~817 kB before) — they only
@@ -21,7 +25,7 @@ import AuthSplash from './components/AuthSplash';
 // onboarding flow.
 const ChatPage = lazy(() => import('./components/ChatPage'));
 const TripPage = lazy(() => import('./components/DynamicDashboard'));
-const NearbyPage = lazy(() => import('./components/nearby/DiscoveryFeed'));
+const NearbyPage = lazy(() => import('./components/nearby/NearbyFeed'));
 const ExplorePage = lazy(() => import('./components/DynamicActivitiesPage'));
 const LanguagePage = lazy(() => import('./components/DynamicTranslatorPage'));
 const UtilitiesPage = lazy(() => import('./components/DynamicUtilitiesPage'));
@@ -39,15 +43,28 @@ const TripJoinPage = lazy(() => import('./components/TripJoinPage'));
 // Places enrichment of activity coordinates at trip generation) stays on
 // master so when Map comes back it'll have everything it needs.
 
-// One set of destinations, whether or not you have a trip. The old build had
-// tripPages and localPages and switched between them on appMode, which meant
-// anyone with a trip lost Nearby entirely -- the screen the app is for.
-//
-// Trip is a destination of its own now (/trips), and opening one takes you
-// into that trip rather than rearranging the whole app around it.
+const tripPages: PageDef[] = [
+  { path: '/chat', component: ChatPage, icon: MessageCircle, label: 'AI' },
+  { path: '/', component: TripPage, icon: Home, label: 'Trip' },
+  { path: '/explore', component: ExplorePage, icon: Compass, label: 'Explore' },
+  { path: '/language', component: LanguagePage, icon: Languages, label: 'Language' },
+  { path: '/utilities', component: UtilitiesPage, icon: Wrench, label: 'Tools' },
+  { path: '/emergency', component: EmergencyPage, icon: Phone, label: 'SOS' },
+  { path: '/new-trip', component: NewTripLauncher, icon: Plus, label: 'New' },
+];
+
+// Local mode: no trip-scoped tabs. Nearby sits at index 1 so it is the
+// fallback when the URL does not match (SwipeNavigator defaults to index 1).
+const localPages: PageDef[] = [
+  { path: '/chat', component: ChatPage, icon: MessageCircle, label: 'AI' },
+  { path: '/nearby', component: NearbyPage, icon: Radar, label: 'Nearby' },
+  { path: '/utilities', component: UtilitiesPage, icon: Wrench, label: 'Tools' },
+  { path: '/emergency', component: EmergencyPage, icon: Phone, label: 'SOS' },
+  { path: '/new-trip', component: NewTripLauncher, icon: Plus, label: 'New' },
+];
 
 const AppContent: React.FC = () => {
-  const { isLoading } = useTravel();
+  const { hasCompletedOnboarding, isLoading, appMode } = useTravel();
   const { session, profile, isLoading: authLoading, recoveryMode } = useAuth();
   const location = useLocation();
 
@@ -80,44 +97,42 @@ const AppContent: React.FC = () => {
   // Trip generation / long-running work gets the branded loading screen.
   if (isLoading) return <LoadingScreen />;
 
-  // No mode chooser. A signed-in person lands on Nearby, because "what should
-  // I do today" is answerable without knowing anything about them -- and being
-  // asked to declare yourself a traveller or a local before seeing anything is
-  // a toll gate in front of the only screen that matters.
-  //
-  // Planning a trip is a thing you do from the Trips tab when you want to,
-  // and the conversational trip onboarding now belongs to that flow rather
-  // than standing in front of the whole app.
+  // Legacy fallback for pre-onboarding users: no mode chosen -> chooser.
+  if (!appMode && !hasCompletedOnboarding) return <WelcomeScreen />;
 
-  // appMode used to choose between two different tab sets here. It no longer
-  // decides navigation -- Nearby is always present -- so it only matters for
-  // whether trip-shaped onboarding has run.
+  // Trip mode but onboarding not yet complete -> run the conversational onboarding.
+  if (appMode === 'trip' && !hasCompletedOnboarding) return wrap(<ConversationalOnboarding />);
+
+  // Legacy users who completed onboarding before appMode existed: treat as trip mode.
+  const effectiveMode = appMode || 'trip';
+  const pages = effectiveMode === 'local' ? localPages : tripPages;
 
   return (
-    <ErrorBoundary>
-      <Routes>
-        <Route element={<AppShell />}>
-          {/* Nearby is the front door: it answers the question the app is for. */}
-          <Route path="/nearby" element={<NearbyPage />} />
-          <Route path="/trips" element={<TripPage />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/utilities" element={<UtilitiesPage />} />
-          <Route path="/emergency" element={<EmergencyPage />} />
-          <Route path="/explore" element={<ExplorePage />} />
-          <Route path="/language" element={<LanguagePage />} />
-          <Route path="/new-trip" element={<NewTripLauncher />} />
-          {/* Trip planning asks its questions here, not in front of the app. */}
-          <Route path="/trips/new" element={<ConversationalOnboarding />} />
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ paddingTop: 'calc(3.75rem + env(safe-area-inset-top))' }}
+    >
+      <Header pages={pages} />
 
-          {/* Old paths, kept working. */}
-          <Route path="/" element={<Navigate to="/nearby" replace />} />
-          <Route path="/activities" element={<Navigate to="/explore" replace />} />
-          <Route path="/translator" element={<Navigate to="/language" replace />} />
-          <Route path="/planner" element={<Navigate to="/explore" replace />} />
-          <Route path="*" element={<Navigate to="/nearby" replace />} />
-        </Route>
+      {/* Hidden routes for redirects */}
+      <Routes>
+        <Route path="/activities" element={<Navigate to="/explore" replace />} />
+        <Route path="/translator" element={<Navigate to="/language" replace />} />
+        <Route path="/planner" element={<Navigate to="/explore" replace />} />
+        {effectiveMode === 'local' && (
+          <>
+            <Route path="/" element={<Navigate to="/nearby" replace />} />
+            <Route path="/explore" element={<Navigate to="/nearby" replace />} />
+            <Route path="/language" element={<Navigate to="/nearby" replace />} />
+          </>
+        )}
+        <Route path="*" element={null} />
       </Routes>
-    </ErrorBoundary>
+
+      <ErrorBoundary>
+        <SwipeNavigator pages={pages} />
+      </ErrorBoundary>
+    </div>
   );
 };
 
@@ -127,9 +142,15 @@ const AppContentWrapped: React.FC = () => (
   </ErrorBoundary>
 );
 
-// The DesktopFrame that used to live here rendered the whole app as a
-// 412x915 phone mockup on any screen wider than 760px, complete with rounded
-// corners and a drop shadow. AppShell is responsive instead.
+// On desktop we constrain the app to a phone-sized viewport so it renders
+// the way it's designed for (touch, narrow cards, bottom-nav reach). On
+// actual phones/tablets the container simply fills the screen.
+// The backdrop and centring existed only to float a phone-shaped frame in the
+// middle of a desktop window. The frame is gone (see .app-frame in
+// index.css); this is now just the app's outermost element.
+const DesktopFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="app-frame">{children}</div>
+);
 
 // One QueryClient per app instance. Defaults: stale-after-30s so revisits
 // to a screen feel instant from cache while a background refetch lands;
@@ -176,7 +197,9 @@ function App() {
             <TravelProvider>
               <ContextEngineProvider>
                 <ChatProvider>
-                  <AppContentWrapped />
+                  <DesktopFrame>
+                    <AppContentWrapped />
+                  </DesktopFrame>
                 </ChatProvider>
               </ContextEngineProvider>
             </TravelProvider>

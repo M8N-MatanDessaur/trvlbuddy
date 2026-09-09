@@ -55,28 +55,31 @@ html, body {
   width: 0;
   height: 0;
 }
+/* Wider than a phone, the app used to become a 412x915 phone mockup floating
+   on a backdrop -- rounded corners, drop shadow, a picture of a phone on a
+   1400px monitor. The frame is gone; the app fills the window and the content
+   inside it is what gets wider.
+
+   Everything else about the layout is unchanged. This is deliberately the
+   only thing being altered here. */
 @media (min-width: 760px) {
   .app-frame {
-    width: 412px;
-    height: 915px;
-    min-height: 915px;
-    max-height: 915px;
-    border-radius: 34px;
-    box-shadow:
-      0 40px 80px -30px rgba(0, 0, 0, 0.55),
-      0 20px 40px -20px rgba(0, 0, 0, 0.4),
-      0 0 0 1px rgba(255, 255, 255, 0.06);
+    width: 100%;
+    max-width: none;
+    min-height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
   }
-  /* Inside the frame, any `min-h-screen` block should fill the frame height,
-     not the desktop viewport height. */
-  .app-frame .min-h-screen {
-    min-height: 100% !important;
-    height: 100%;
+
+  /* Content columns widen instead of the frame. Beyond this the lines get
+     too long to read comfortably. */
+  .app-frame .page,
+  .app-frame .container {
+    max-width: 1120px;
+    margin-inline: auto;
   }
-  .app-frame .auth-screen {
-    height: 100%;
-    min-height: 100%;
-  }
+  .app-frame .min-h-screen { min-height: 100dvh; }
+  .app-frame .auth-screen { min-height: 100dvh; }
 }
 
 :root {

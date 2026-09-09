@@ -252,7 +252,12 @@ const NearbyLiveEvents: React.FC<Props> = ({ userLocation, focus }) => {
       <div
         ref={scrollRef}
         className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory"
-        style={{ scrollbarWidth: 'none' }}
+        style={{
+          // The next card should peek deliberately rather than be sliced off
+          // at the viewport edge, and the strip should not show a scrollbar.
+          scrollPaddingInline: '0.25rem',
+          scrollbarWidth: 'none',
+        }}
       >
         {events.map((event, i) => {
           const TypeIcon = typeIcons[event.type] || Tag;

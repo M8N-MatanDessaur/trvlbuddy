@@ -17,6 +17,7 @@ import { haversineMeters } from '../utils/geolocation';
 import { NEARBY_ICON_REGISTRY } from './nearbyIconRegistry';
 
 import { placesCallSafe } from '../lib/placesProxy';
+import { curatePlaces } from './placeScore';
 // Photos come exclusively from user uploads in Supabase -- never from
 // Places Photo (the single biggest cost item pre-pivot).
 
@@ -344,7 +345,20 @@ export class NearbyFeedCursor {
       const cat = this.categories[this.categoryIndex];
       const radius = this.radiusSteps[this.radiusIndex];
       const batch = await this.fetchCategory(cat, radius);
-      for (const place of batch) {
+
+      // Curate before anything reaches the feed. Without this the page is
+      // whatever is physically nearest, which is how it came to read: a kids'
+      // park, another very small park, another very small park, a Tim
+      // Hortons, a McDonald's, a small grocery store.
+      //
+      // placeScore drops the errands and the chains, requires enough reviews
+      // to count as somewhere worth going, and orders by how much someone
+      // would actually want to be there rather than by metres. Dropping
+      // results here is safe: the loop simply advances the cursor and asks
+      // for more, so the page still fills.
+      const curated = curatePlaces(batch);
+
+      for (const place of curated) {
         if (this.seenPlaceIds.has(place.placeId)) continue;
         this.seenPlaceIds.add(place.placeId);
         results.push(place);
