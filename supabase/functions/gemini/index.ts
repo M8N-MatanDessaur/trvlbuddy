@@ -108,6 +108,7 @@ Deno.serve(async (req) => {
   });
   const { data: allowed, error: quotaError } = await admin.rpc('consume_ai_quota', {
     p_user: userId,
+    p_feature: 'gemini',
     p_hourly_limit: HOURLY_LIMIT,
     p_daily_limit: DAILY_LIMIT,
   });

@@ -2,6 +2,14 @@
   command = "npm run build"
   publish = "dist"
 
+# The VAPID public key identifies this app server to the browser push
+# services. It is public by design -- the browser needs it to create a
+# subscription, so it ships in the bundle regardless -- which is why it lives
+# here rather than in the Netlify UI. The matching PRIVATE key is an edge
+# function secret (VAPID_PRIVATE_KEY) and must never appear in this file.
+[build.environment]
+  VITE_VAPID_PUBLIC_KEY = "BBhl4DsQ8_MM29hCfiZdvILQmyk7UMUl3z_Dllwu2JOTxzcE0LNdtqwmsnbzJHC26WYtra4dDpvdRs7Em3tCV1Q"
+
 # Places API (New) endpoints. Explicit per-method rules instead of a splat
 # because Netlify decodes the URL before matching redirects -- a path like
 # /api/placesv1/places:searchNearby (or its %3A-encoded form) collides with
