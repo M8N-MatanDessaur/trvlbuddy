@@ -45,7 +45,7 @@ const ContributorOnboarding: React.FC = () => {
   );
   const themesInFamily = THEME_OPTIONS.filter((t) => t.isDark === (themeFamily === 'dark'));
 
-  const firstName = (profile?.display_name || profile?.email || '').split(/[@\s]/)[0] || 'traveler';
+  const firstName = (profile?.display_name || '').split(/[@\s]/)[0] || 'traveler';
 
   const steps: Step[] = [
     {

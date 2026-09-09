@@ -23,3 +23,12 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Scratch space for AI-assisted work (never committed)
+.ai-workspace/
+
+# Supabase CLI local link state (machine-specific)
+supabase/.temp/
+
+# Symphonee local metadata
+.symphonee/

@@ -1,5 +1,4 @@
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const GEMINI_VISION_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`;
+import { callGeminiProxy } from '../lib/geminiProxy';
 
 export interface ImageAnalysis {
   translation?: string;
@@ -65,23 +64,17 @@ Return ONLY valid JSON (no markdown, no explanation) with this structure:
 The menuItems array should only be populated if the image is a menu or food-related. Otherwise set it to null.
 The recommendations array should contain 1-3 practical tips.`;
 
-  const response = await fetch(GEMINI_VISION_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: 'image/jpeg', data: base64 } },
-          ],
-        },
-      ],
-    }),
+  const result = await callGeminiProxy({
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inline_data: { mime_type: 'image/jpeg', data: base64 } },
+        ],
+      },
+    ],
   });
-
-  const result = await response.json();
   const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
   // Extract JSON

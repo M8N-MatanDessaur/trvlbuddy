@@ -14,7 +14,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useTravel } from '../contexts/TravelContext';
-import { supabase, type Profile, type Trip } from '../lib/supabase';
+import { supabase, PROFILE_COLUMNS, type Profile, type Trip } from '../lib/supabase';
 import { type UserPhoto } from '../services/activityMediaService';
 import { type UserVideo } from '../services/activityVideoService';
 import { useProfileMedia } from '../hooks/useProfileMedia';
@@ -88,7 +88,7 @@ const ProfilePage: React.FC = () => {
     (async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('*')
+        .select(PROFILE_COLUMNS)
         .eq('id', routeUserId!)
         .maybeSingle();
       if (!alive) return;
@@ -147,7 +147,7 @@ const ProfilePage: React.FC = () => {
     : -1;
   const initialIndex = openIndex >= 0 ? openIndex : null;
 
-  const displayName = profile?.display_name || profile?.email || (isOwn ? 'Traveler' : 'Traveler');
+  const displayName = profile?.display_name || 'Traveler';
   const influence = profile?.influence ?? 0;
 
   const sectionLabelClass = 'text-[11px] font-bold uppercase tracking-[0.12em] px-1 mb-2';
@@ -228,9 +228,9 @@ const ProfilePage: React.FC = () => {
                 <div className="text-[18px] font-extrabold tracking-tight truncate">
                   {profileLoading ? 'Loading...' : displayName}
                 </div>
-                {isOwn && profile?.email && displayName !== profile.email && (
+                {isOwn && user?.email && displayName !== user.email && (
                   <div className="text-[12.5px] truncate" style={{ color: 'var(--text-secondary)' }}>
-                    {profile.email}
+                    {user.email}
                   </div>
                 )}
                 <div
@@ -465,7 +465,7 @@ const ProfilePage: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <div className="text-[14px] font-semibold">Sign out</div>
                     <div className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>
-                      {profile?.email || 'Signed in'}
+                      {user?.email || 'Signed in'}
                     </div>
                   </div>
                 </button>

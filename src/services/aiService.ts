@@ -1,7 +1,6 @@
 import { TravelPlan, GeneratedActivity, Translation, EmergencyContact, Destination, TripSegment, City } from '../types/TravelData';
+import { callGeminiProxy } from '../lib/geminiProxy';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key=${GEMINI_API_KEY}`;
 const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
 
 async function callGeminiAPI(prompt: string, useGrounding: boolean = false): Promise<string> {
@@ -15,16 +14,14 @@ async function callGeminiAPI(prompt: string, useGrounding: boolean = false): Pro
       requestBody.tools = [{ google_search: {} }];
     }
 
-    const response = await fetch(GEMINI_API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
+    const result = await callGeminiProxy(requestBody);
     
-    const result = await response.json();
-    
-    if (result.candidates?.[0]?.content?.parts?.[0]) {
-      return result.candidates[0].content.parts[0].text;
+    // Check for the text itself, not just the part: a blocked or truncated
+    // generation comes back as a candidate with a part that has no text, and
+    // returning that handed callers `undefined` typed as a string.
+    const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (typeof text === 'string' && text.length > 0) {
+      return text;
     } else {
       // Log the full error response from the API for better debugging
       console.error('Gemini API Error Response:', JSON.stringify(result, null, 2));

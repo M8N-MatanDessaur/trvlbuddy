@@ -25,7 +25,6 @@ const AccountPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const {
-    profile,
     user,
     updateEmail,
     updatePassword,
@@ -151,7 +150,7 @@ const AccountPage: React.FC = () => {
                     <div className="flex-1 min-w-0">
                       <div className="text-[14px] font-semibold">Change email</div>
                       <div className="text-[12px] truncate" style={{ color: 'var(--text-secondary)' }}>
-                        {profile?.email || user?.email || ''}
+                        {user?.email || ''}
                       </div>
                     </div>
                   </button>
