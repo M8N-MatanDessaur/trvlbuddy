@@ -87,8 +87,16 @@ Deno.serve(async (req) => {
 
     // Trips: owner rows and membership rows. Leave shared trips intact for
     // other owners if that table schema supports co-ownership.
-    await admin.from('trip_members').delete().eq('user_id', userId).catch(() => {});
-    await admin.from('trips').delete().eq('owner_id', userId).catch(() => {});
+    //
+    // These are deliberately best-effort, but NOT via .catch(): a PostgREST
+    // query builder is a thenable without a .catch method, so calling it threw
+    // "admin.from(...).delete(...).eq(...).catch is not a function" and turned
+    // every account deletion into a 500. Take the error off the result and
+    // ignore it instead.
+    const { error: memberErr } = await admin.from('trip_members').delete().eq('user_id', userId);
+    if (memberErr) console.warn('trip_members cleanup skipped:', memberErr.message);
+    const { error: tripsErr } = await admin.from('trips').delete().eq('owner_id', userId);
+    if (tripsErr) console.warn('trips cleanup skipped:', tripsErr.message);
 
     // Profile row last so anything with a FK to profiles is gone first.
     await admin.from('profiles').delete().eq('id', userId);
