@@ -1,7 +1,7 @@
 import { TravelPlan, GeneratedActivity, Translation, EmergencyContact, Destination, TripSegment, City } from '../types/TravelData';
 import { callGeminiProxy } from '../lib/geminiProxy';
+import { placesCallSafe } from '../lib/placesProxy';
 
-const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
 
 async function callGeminiAPI(prompt: string, useGrounding: boolean = false): Promise<string> {
   try {
@@ -116,24 +116,9 @@ Create 2-3 search strategies with different approaches. Return ONLY valid JSON.
     // Execute each search strategy from Gemini
     for (const strategy of searchConfig.searchStrategies || []) {
       try {
-        let url = '';
-        
-        if (strategy.type === 'nearbysearch') {
-          const params = new URLSearchParams({
-            ...strategy.params,
-            key: GOOGLE_PLACES_API_KEY
-          });
-          url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?${params}`;
-        } else if (strategy.type === 'textsearch') {
-          const params = new URLSearchParams({
-            ...strategy.params,
-            key: GOOGLE_PLACES_API_KEY
-          });
-          url = `https://maps.googleapis.com/maps/api/place/textsearch/json?${params}`;
-        }
-
-        const response = await fetch(url);
-        const data = await response.json();
+        // Through the proxy: shared cache, server-held key, per-user quota.
+        const op = strategy.type === 'nearbysearch' ? 'nearbysearch' : 'textsearch';
+        const data = (await placesCallSafe<any>(op, { ...strategy.params })) ?? { status: 'UNAVAILABLE' };
         
         if (data.status === 'OK' && data.results && data.results.length > 0) {
           const validPlaces = [];
@@ -270,12 +255,26 @@ async function searchRealPlacesFallback(
     const searchStrategies = [
       // Strategy 1: Keyword search with opennow=true
       {
-        url: `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&radius=${radius}&keyword=${encodeURIComponent(processedQuery)}&opennow=true&key=${GOOGLE_PLACES_API_KEY}${typeFilter ? `&type=${typeFilter}` : ''}`,
+        op: 'nearbysearch' as const,
+        params: {
+          location: `${location.lat},${location.lng}`,
+          radius: String(radius),
+          keyword: processedQuery,
+          opennow: 'true',
+          ...(typeFilter ? { type: typeFilter } : {}),
+        },
         priority: 'high'
       },
       // Strategy 2: Text search for better cuisine matching
       {
-        url: `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(processedQuery + ' near me')}&location=${location.lat},${location.lng}&radius=${radius}&opennow=true&key=${GOOGLE_PLACES_API_KEY}${typeFilter ? `&type=${typeFilter}` : ''}`,
+        op: 'textsearch' as const,
+        params: {
+          query: processedQuery + ' near me',
+          location: `${location.lat},${location.lng}`,
+          radius: String(radius),
+          opennow: 'true',
+          ...(typeFilter ? { type: typeFilter } : {}),
+        },
         priority: 'high'
       }
     ];
@@ -284,8 +283,8 @@ async function searchRealPlacesFallback(
     
     for (const strategy of searchStrategies) {
       try {
-        const response = await fetch(strategy.url);
-        const data = await response.json();
+        const data = (await placesCallSafe<any>(strategy.op, strategy.params))
+          ?? { status: 'UNAVAILABLE' };
         
         if (data.status === 'OK' && data.results && data.results.length > 0) {
           const validPlaces = [];
@@ -361,9 +360,8 @@ async function searchRealPlacesFallback(
 // Helper function to fetch detailed restaurant information
 async function fetchPlaceDetails(placeId: string, userLocation: { lat: number; lng: number }) {
   try {
-    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,geometry,photos,price_level,rating,opening_hours,website,url,types,formatted_phone_number,business_status&key=${GOOGLE_PLACES_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    // The field list is chosen server side: it decides the price of the call.
+    const data = (await placesCallSafe<any>('details', { place_id: placeId })) ?? { status: 'UNAVAILABLE' };
 
     if (data.status !== "OK") {
       throw new Error(`Google API error: ${data.status}`);
@@ -376,12 +374,12 @@ async function fetchPlaceDetails(placeId: string, userLocation: { lat: number; l
       address: result.formatted_address || "No Address Available",
       rating: result.rating || "No Rating Available",
       priceLevel: result.price_level || "Not Specified",
-      photos: result.photos
-        ? result.photos.map(
-            (photo: any) =>
-              `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${photo.photo_reference}&key=${GOOGLE_PLACES_API_KEY}`
-          )
-        : [],
+      // Google photo URLs are deliberately not built here any more. Each one
+      // embedded the API key, so every <img> shipped the key to the browser,
+      // and every load was a billed request. The app's own photos come from
+      // activity_images; a place with no contributed photo simply has none
+      // until somebody adds one, which is the point of the app.
+      photos: [] as string[],
       openingHours: result.opening_hours?.weekday_text || [],
       isOpen: result.opening_hours?.open_now || false,
       website: result.website || "No Website Available",

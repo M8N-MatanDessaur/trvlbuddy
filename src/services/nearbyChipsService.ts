@@ -7,7 +7,7 @@ import {
 import { CATEGORIES } from './nearbyService';
 import { iconKeyList } from './nearbyIconRegistry';
 
-const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
+import { placesCallSafe } from '../lib/placesProxy';
 
 // How long a suggestion set stays fresh. Tied to time-of-day transitions:
 // morning vs afternoon vs evening produce different chips, but within a
@@ -83,15 +83,11 @@ async function scanTypeCounts(
   userLocation: UserLocation,
   radius: number,
 ): Promise<Record<string, number>> {
-  if (!GOOGLE_PLACES_API_KEY) return {};
   try {
-    const params = new URLSearchParams({
+    const data = (await placesCallSafe<any>('nearbysearch', {
       location: `${userLocation.lat},${userLocation.lng}`,
       radius: String(radius),
-      key: GOOGLE_PLACES_API_KEY,
-    });
-    const res = await fetch(`/api/places/nearbysearch/json?${params.toString()}`);
-    const data = await res.json();
+    })) ?? { status: 'UNAVAILABLE' };
     if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
       console.warn('Chip scan non-OK status:', data.status, data.error_message);
       return {};

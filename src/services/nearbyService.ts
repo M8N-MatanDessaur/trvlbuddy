@@ -16,7 +16,7 @@ import { UserLocation } from '../utils/geolocation';
 import { haversineMeters } from '../utils/geolocation';
 import { NEARBY_ICON_REGISTRY } from './nearbyIconRegistry';
 
-const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
+import { placesCallSafe } from '../lib/placesProxy';
 // Photos come exclusively from user uploads in Supabase -- never from
 // Places Photo (the single biggest cost item pre-pivot).
 
@@ -223,21 +223,9 @@ interface PlacesV1Response {
   error?: { status?: string; message?: string };
 }
 
-const PLACES_V1_FIELD_MASK = [
-  'places.id',
-  'places.displayName',
-  'places.formattedAddress',
-  'places.shortFormattedAddress',
-  'places.location',
-  'places.rating',
-  'places.userRatingCount',
-  'places.priceLevel',
-  'places.currentOpeningHours.openNow',
-  'places.regularOpeningHours.openNow',
-  'places.types',
-  'places.primaryType',
-  'places.primaryTypeDisplayName',
-].join(',');
+// The v1 field mask now lives in the places edge function. The mask decides
+// the billing SKU for a Places call, so the server owns it rather than the
+// browser being able to ask for expensive fields.
 
 // Google's legacy `types` list usually leads with the most specific type,
 // followed by very generic ones. We skip the generic end of the list when
@@ -379,7 +367,8 @@ export class NearbyFeedCursor {
   }
 
   private async fetchCategory(cat: CategoryDef, radius: number): Promise<NearbyPlace[]> {
-    if (!GOOGLE_PLACES_API_KEY) return [];
+    // The key lives in the places edge function now; an unavailable lookup
+    // is handled by placesCallSafe returning null.
     if (!this.v1Disabled) {
       const v1Result = await this.fetchCategoryV1(cat, radius);
       if (v1Result !== null) return v1Result;
@@ -397,11 +386,9 @@ export class NearbyFeedCursor {
   ): Promise<NearbyPlace[] | null> {
     try {
       const useTextSearch = Boolean(cat.noTypeSearch && this.globalKeyword);
-      // Colon-less client path; netlify.toml has explicit per-method
-      // redirects that map to the real /v1/places:<method> URL on Google.
-      const endpoint = useTextSearch
-        ? '/api/placesv1/searchText'
-        : '/api/placesv1/searchNearby';
+      // Through the places edge function. The netlify.toml redirects are gone
+      // -- they hid the URL but still carried the API key from the browser.
+      const op = useTextSearch ? 'searchText' : 'searchNearby';
 
       const body: Record<string, unknown> = { maxResultCount: 20 };
       if (useTextSearch) {
@@ -434,25 +421,16 @@ export class NearbyFeedCursor {
         };
       }
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
-          'X-Goog-FieldMask': PLACES_V1_FIELD_MASK,
-        },
-        body: JSON.stringify(body),
-      });
-
-      const data: PlacesV1Response = await res.json();
-      if (!res.ok) {
+      // The field mask lives server side now: it decides the billing SKU.
+      const data = (await placesCallSafe<PlacesV1Response>(op, body)) as PlacesV1Response | null;
+      if (!data) {
         if (!v1PermissionWarned) {
           v1PermissionWarned = true;
           console.warn(
             '[nearby] Places API (New) request failed — falling back to legacy API.',
             'Enable "Places API (New)" in Google Cloud Console and allow it on the API key.',
             'If you just enabled it, give it 1–2 minutes to propagate.',
-            { status: data.error?.status, message: data.error?.message },
+            { reason: 'places proxy returned no payload' },
           );
         }
         return null;
@@ -501,21 +479,20 @@ export class NearbyFeedCursor {
       const effectiveRadius = useTextSearch
         ? Math.max(radius, TEXT_SEARCH_BIAS_RADIUS_M)
         : radius;
-      const params = new URLSearchParams({
+      const params: Record<string, string> = {
         location: `${this.userLocation.lat},${this.userLocation.lng}`,
         radius: String(effectiveRadius),
-        key: GOOGLE_PLACES_API_KEY,
-      });
-      if (!useTextSearch) params.set('opennow', 'true');
+      };
+      if (!useTextSearch) params.opennow = 'true';
       if (useTextSearch) {
-        params.set('query', this.globalKeyword!);
+        params.query = this.globalKeyword!;
       } else {
-        if (!cat.noTypeSearch) params.set('type', cat.type);
+        if (!cat.noTypeSearch) params.type = cat.type;
         const keyword = [this.globalKeyword, cat.keyword].filter(Boolean).join(' ').trim();
-        if (keyword) params.set('keyword', keyword);
+        if (keyword) params.keyword = keyword;
       }
-      const res = await fetch(`/api/places/${endpoint}/json?${params.toString()}`);
-      const data = await res.json();
+      const data = (await placesCallSafe<any>(endpoint as 'nearbysearch' | 'textsearch', params))
+        ?? { status: 'UNAVAILABLE' };
       if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
         console.warn('[nearby] Legacy Places non-OK:', endpoint, data.status, data.error_message);
         return [];
@@ -611,7 +588,7 @@ export async function findSpecificPlace(
   query: string,
   userLocation: UserLocation,
 ): Promise<NearbyPlace | null> {
-  if (!GOOGLE_PLACES_API_KEY) return null;
+  // Key handling moved to the places edge function.
   const trimmed = query.trim();
   if (!trimmed) return null;
 
@@ -626,17 +603,8 @@ export async function findSpecificPlace(
         },
       },
     };
-    const res = await fetch('/api/placesv1/searchText', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
-        'X-Goog-FieldMask': PLACES_V1_FIELD_MASK,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) return null;
-    const data: PlacesV1Response = await res.json();
+    const data = (await placesCallSafe<PlacesV1Response>('searchText', body)) as PlacesV1Response | null;
+    if (!data) return null;
     const raw = data.places?.[0];
     if (!raw?.id || raw.location?.latitude == null || raw.location?.longitude == null) {
       return null;

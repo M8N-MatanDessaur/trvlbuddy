@@ -10,27 +10,12 @@
 [build.environment]
   VITE_VAPID_PUBLIC_KEY = "BBhl4DsQ8_MM29hCfiZdvILQmyk7UMUl3z_Dllwu2JOTxzcE0LNdtqwmsnbzJHC26WYtra4dDpvdRs7Em3tCV1Q"
 
-# Places API (New) endpoints. Explicit per-method rules instead of a splat
-# because Netlify decodes the URL before matching redirects -- a path like
-# /api/placesv1/places:searchNearby (or its %3A-encoded form) collides with
-# Netlify's :param syntax and the splat rule never matches, returning 404.
-[[redirects]]
-  from = "/api/placesv1/searchNearby"
-  to = "https://places.googleapis.com/v1/places:searchNearby"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/placesv1/searchText"
-  to = "https://places.googleapis.com/v1/places:searchText"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/api/places/*"
-  to = "https://maps.googleapis.com/maps/api/place/:splat"
-  status = 200
-  force = true
+# The Google Places redirects that used to live here are gone. They proxied
+# /api/places/* and /api/placesv1/* straight through to Google, which solved
+# the CORS problem but still carried the API key from the browser -- and made
+# this domain a convenient open proxy for anyone who had read the key out of
+# the bundle. Everything now goes through the `places` edge function, which
+# holds the key, requires a session, caps each user and caches for everybody.
 
 [[redirects]]
   from = "/*"

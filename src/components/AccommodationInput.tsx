@@ -96,7 +96,6 @@ const AccommodationInput: React.FC<AccommodationInputProps> = ({
                 value={acc.address}
                 className="w-full"
                 types={['establishment', 'geocode']}
-                apiKey={import.meta.env.VITE_GOOGLE_PLACES_API_KEY || ''}
               />
               {acc.coordinates && (
                 <div className="mt-2 flex items-center gap-1">
