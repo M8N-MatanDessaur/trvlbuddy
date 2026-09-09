@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:emergency": "node scripts/verify-emergency-numbers.mjs"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^1.16.2",

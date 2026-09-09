@@ -1,37 +1,57 @@
 // Supabase Edge Function: transcribe
 //
-// Relays a client audio blob to OpenAI Whisper using a server-held
-// OPENAI_API_KEY, so the client never sees the key.
+// Speech to text via Gemini, using a server-held GEMINI_API_KEY.
 //
-// The first version of this stopped there, which made it an open proxy to a
-// billed API: no authentication, no quota, and CORS is no defence because
-// curl ignores it. Anyone could have posted 25MB of audio in a loop and put it
-// on our bill. It was never deployed, so that stayed theoretical -- these are
-// the rules that had to exist before it could be.
+// It used to relay to OpenAI Whisper, which meant a second vendor and a
+// second key for one feature. Gemini is already paid for here, and
+// gemini-3.5-transcribe is a purpose-built transcription model, so voice now
+// goes the same way as everything else AI-shaped in this app.
 //
-//   1. You must be signed in. Identity comes from the session token; we never
-//      accept a user id from the request.
-//   2. You get a budget. Per-user, per-hour and per-day, counted in Postgres
-//      so it holds across function instances.
-//   3. The file is bounded and has to look like audio.
+// The first version of this function stopped at "the client never sees the
+// key", which made it an open proxy to a billed API: no authentication, no
+// quota, 25MB a request, and CORS is no defence because curl ignores it. It
+// was never deployed, so that stayed theoretical. The rules that had to exist
+// before it could be:
+//
+//   1. You must be signed in. Identity comes from the session token; a user
+//      id in the request is never accepted.
+//   2. You get a budget, counted in Postgres so it holds across instances.
+//   3. The upload is bounded and has to look like audio.
 //   4. Upstream errors do not pass through verbatim.
+//
+// The response shape is { text } either way, so the client did not change.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.103.3';
 
-// Whisper's own ceiling is 25MB. This is lower on purpose: the client records
-// short voice notes, and every megabyte we accept is a megabyte someone can
-// make us pay to process.
+// A purpose-built transcription model, pinned server side so the client cannot
+// point our key at something costlier.
+const MODEL = 'gemini-3.5-transcribe';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+
+// Short voice notes. Every megabyte we accept is a megabyte someone can make
+// us pay to process, and inline audio has to fit in a request body.
 const MAX_BYTES = 8 * 1024 * 1024;
 
-// Audio costs more per request than a text prompt, so the budget is smaller
-// than the gemini one.
+// Audio costs more per request than a text prompt, so a smaller budget.
 const HOURLY_LIMIT = 20;
 const DAILY_LIMIT = 120;
 
-const ALLOWED_AUDIO = [
-  'audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/mp3',
-  'audio/wav', 'audio/x-wav', 'audio/m4a', 'audio/x-m4a', 'audio/flac',
-];
+// What the browser's MediaRecorder actually produces, plus the common
+// container formats Gemini accepts.
+const ALLOWED_AUDIO: Record<string, string> = {
+  'audio/webm': 'audio/webm',
+  'audio/ogg': 'audio/ogg',
+  'audio/oga': 'audio/ogg',
+  'audio/mp4': 'audio/mp4',
+  'audio/m4a': 'audio/mp4',
+  'audio/x-m4a': 'audio/mp4',
+  'audio/mpeg': 'audio/mpeg',
+  'audio/mp3': 'audio/mp3',
+  'audio/wav': 'audio/wav',
+  'audio/x-wav': 'audio/wav',
+  'audio/flac': 'audio/flac',
+  'audio/aac': 'audio/aac',
+};
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '*')
   .split(',')
@@ -57,6 +77,17 @@ function json(body: unknown, status: number, headers: Record<string, string>) {
   });
 }
 
+// Chunked so a multi-megabyte recording does not blow the argument limit the
+// way String.fromCharCode(...bytes) would.
+function toBase64(bytes: Uint8Array): string {
+  let out = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    out += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(out);
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get('origin');
   const corsHeaders = cors(origin);
@@ -71,8 +102,8 @@ Deno.serve(async (req) => {
     return json({ error: 'Server not configured' }, 500, corsHeaders);
   }
 
-  // 1. Who is calling. This runs before the OPENAI_API_KEY check so a stranger
-  // is told to sign in rather than which secrets are missing.
+  // 1. Who is calling. Before any mention of server configuration, so a
+  // stranger is told to sign in rather than which secrets are missing.
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
   if (!token) return json({ error: 'Sign in to use this' }, 401, corsHeaders);
 
@@ -83,31 +114,29 @@ Deno.serve(async (req) => {
   if (userError || !userData.user) return json({ error: 'Invalid session' }, 401, corsHeaders);
   const userId = userData.user.id;
 
-  const openaiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!openaiKey) {
-    return json({ error: 'Transcription is not configured' }, 500, corsHeaders);
-  }
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+  if (!GEMINI_API_KEY) return json({ error: 'Transcription is not configured' }, 500, corsHeaders);
 
-  // 2. Content-Length first, so an oversized upload is refused before we read
-  // it into memory. The real size is checked again below, because a client can
-  // lie about or omit the header.
+  // 2. Refuse an oversized upload before reading it into memory. Checked
+  // again below, because a client can lie about or omit the header.
   const declared = Number(req.headers.get('content-length') || 0);
   if (declared && declared > MAX_BYTES) {
     return json({ error: 'Recording too long' }, 413, corsHeaders);
   }
 
-  const incoming = await req.formData().catch(() => null);
-  if (!incoming) return json({ error: 'Expected multipart/form-data' }, 400, corsHeaders);
+  const form = await req.formData().catch(() => null);
+  if (!form) return json({ error: 'Expected multipart/form-data' }, 400, corsHeaders);
 
-  const file = incoming.get('file');
+  const file = form.get('file');
   if (!(file instanceof File)) return json({ error: 'Missing file field' }, 400, corsHeaders);
   if (file.size === 0) return json({ error: 'Empty recording' }, 400, corsHeaders);
   if (file.size > MAX_BYTES) return json({ error: 'Recording too long' }, 413, corsHeaders);
 
-  // 3. It has to look like audio. Browsers append codec parameters, so compare
-  // the media type only.
-  const mime = (file.type || '').split(';')[0].trim().toLowerCase();
-  if (mime && !ALLOWED_AUDIO.includes(mime)) {
+  // 3. It has to look like audio. Browsers append codec parameters
+  // ("audio/webm;codecs=opus"), so compare the media type only.
+  const declaredType = (file.type || '').split(';')[0].trim().toLowerCase();
+  const mimeType = ALLOWED_AUDIO[declaredType];
+  if (declaredType && !mimeType) {
     return json({ error: 'Unsupported audio format' }, 415, corsHeaders);
   }
 
@@ -133,36 +162,61 @@ Deno.serve(async (req) => {
     );
   }
 
-  // 5. Forward. The key is attached here and only here.
-  const outbound = new FormData();
-  outbound.append('file', file, file.name || 'audio.webm');
-  outbound.append('model', 'whisper-1');
+  // 5. Transcribe. The key is attached here and only here.
+  const audioBase64 = toBase64(new Uint8Array(await file.arrayBuffer()));
 
   let upstream: Response;
   try {
-    upstream = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    upstream = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${openaiKey}` },
-      body: outbound,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        // Audio only, no instruction. gemini-3.5-transcribe is a dedicated
+        // transcription model: it transcribes what it is given, and a prompt
+        // only adds tokens (verified -- identical output with and without).
+        contents: [{
+          role: 'user',
+          parts: [
+            { inline_data: { mime_type: mimeType || 'audio/webm', data: audioBase64 } },
+          ],
+        }],
+        generationConfig: { temperature: 0 },
+      }),
       signal: AbortSignal.timeout(120_000),
     });
   } catch (err) {
-    console.error('whisper upstream failed', String(err));
+    console.error('transcribe upstream failed', String(err));
     return json({ error: 'Transcription is unavailable right now' }, 502, corsHeaders);
   }
 
-  const text = await upstream.text();
+  const raw = await upstream.text();
 
-  // Never relay an upstream error body: it can echo request details and a
-  // billing or quota message from OpenAI is not the caller's business.
+  // Never relay an upstream error body: a billing or quota message from
+  // Google is not the caller's business.
   if (!upstream.ok) {
-    console.error('whisper returned', upstream.status, text.slice(0, 500));
-    const status = upstream.status === 429 ? 429 : 502;
-    return json({ error: 'Transcription is unavailable right now' }, status, corsHeaders);
+    console.error('transcribe returned', upstream.status, raw.slice(0, 400));
+    return json(
+      { error: 'Transcription is unavailable right now' },
+      upstream.status === 429 ? 429 : 502,
+      corsHeaders,
+    );
   }
 
-  return new Response(text, {
-    status: 200,
-    headers: { ...corsHeaders, 'Content-Type': upstream.headers.get('content-type') || 'application/json' },
-  });
+  let parsed: any;
+  try { parsed = JSON.parse(raw); } catch { return json({ error: 'Bad upstream response' }, 502, corsHeaders); }
+
+  // The transcription models answer with a part shaped
+  // { audioTranscription: { text } } rather than the { text } a chat model
+  // returns -- reading only `.text` silently yields an empty transcript, which
+  // is exactly what happened the first time this was wired up. Handle both, so
+  // this keeps working if the model is ever swapped for a general one.
+  //
+  // An empty transcript is a legitimate answer (silence), not an error.
+  const text = (parsed?.candidates?.[0]?.content?.parts ?? [])
+    .map((p: { text?: string; audioTranscription?: { text?: string } }) =>
+      p?.audioTranscription?.text ?? p?.text ?? '')
+    .join(' ')
+    .trim();
+
+  return json({ text }, 200, corsHeaders);
 });
