@@ -1,14 +1,15 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Phone, Shield, Building2, Globe, Loader2, LocateFixed } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Phone, Shield, Building2, Globe } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
 import { EmergencyContact } from '../types/TravelData';
-import { getCachedLocation, getCurrentLocation, UserLocation } from '../utils/geolocation';
-import { generateEmergencyContactsForCoordinates } from '../services/aiService';
-import {
-  canReuseCache,
-  readEmergencyCache,
-  writeEmergencyCache,
-} from '../services/emergencyCache';
+import LocalEmergency from './LocalEmergency';
+
+// Trip mode only. The contacts here were generated when the trip plan was
+// created and are stored with it, so this path works offline already.
+//
+// Without a trip we hand over to LocalEmergency, which reads bundled numbers.
+// That used to be an AI call made at the moment of need -- see the note in
+// LocalEmergency for why that was the wrong shape for an SOS screen.
 
 interface CountryInfo { id: string; name: string; languages: string[]; }
 
@@ -16,87 +17,6 @@ const EmergencyPage: React.FC = () => {
   const { currentPlan, emergencyContacts, appMode } = useTravel();
   const isLocalMode = appMode === 'local' || !currentPlan;
   const [selectedCountry, setSelectedCountry] = useState('');
-
-  // Local mode state: geolocation-derived country + fetched contacts.
-  // Emergency info is country-scoped and static, so we prime from localStorage
-  // immediately and only re-fetch when the user has moved far enough to have
-  // plausibly crossed into a different country (see emergencyCache).
-  const initialCache = readEmergencyCache();
-  const [localLocation, setLocalLocation] = useState<UserLocation | null>(getCachedLocation());
-  const [localCountry, setLocalCountry] = useState<{ name: string; code: string } | null>(
-    initialCache ? { name: initialCache.countryName, code: initialCache.countryCode } : null,
-  );
-  const [localContacts, setLocalContacts] = useState<EmergencyContact[] | null>(
-    initialCache ? initialCache.contacts : null,
-  );
-  const [localStatus, setLocalStatus] = useState<'idle' | 'locating' | 'fetching' | 'ready' | 'denied' | 'error'>(
-    initialCache ? 'ready' : 'idle',
-  );
-
-  useEffect(() => {
-    if (!isLocalMode) return;
-    let cancelled = false;
-    (async () => {
-      let loc = localLocation;
-      if (!loc) {
-        // If we already have cached contacts, surface them while we try to
-        // get a fresh location in the background -- don't flash "locating...".
-        if (!initialCache) setLocalStatus('locating');
-        try {
-          loc = await getCurrentLocation();
-          if (cancelled) return;
-          setLocalLocation(loc);
-        } catch (err) {
-          if (cancelled) return;
-          // If geolocation fails but we already have cached contacts, stay on
-          // those. Only surface the denied/error state when we have nothing.
-          if (initialCache) return;
-          const code = (err as GeolocationPositionError | undefined)?.code;
-          setLocalStatus(code === 1 ? 'denied' : 'error');
-          return;
-        }
-      }
-
-      const cached = readEmergencyCache();
-      if (cached && canReuseCache(cached, loc)) {
-        setLocalCountry({ name: cached.countryName, code: cached.countryCode });
-        setLocalContacts(cached.contacts);
-        setLocalStatus('ready');
-        return;
-      }
-
-      if (!initialCache) setLocalStatus('fetching');
-      const result = await generateEmergencyContactsForCoordinates(loc.lat, loc.lng);
-      if (cancelled) return;
-      if (!result || result.contacts.length === 0) {
-        // Fetch failed -- if we have any prior cache at all, keep showing it
-        // rather than rendering an error for a static, country-level payload.
-        if (cached) {
-          setLocalCountry({ name: cached.countryName, code: cached.countryCode });
-          setLocalContacts(cached.contacts);
-          setLocalStatus('ready');
-        } else {
-          setLocalStatus('error');
-        }
-        return;
-      }
-      setLocalCountry({ name: result.countryName, code: result.countryCode });
-      setLocalContacts(result.contacts);
-      writeEmergencyCache({
-        countryCode: result.countryCode,
-        countryName: result.countryName,
-        contacts: result.contacts,
-        lat: loc.lat,
-        lng: loc.lng,
-        fetchedAt: Date.now(),
-      });
-      setLocalStatus('ready');
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLocalMode]);
 
   const allCountries = useMemo((): CountryInfo[] => {
     if (!currentPlan) return [];
@@ -112,51 +32,12 @@ const EmergencyPage: React.FC = () => {
     return Array.from(countries.values());
   }, [currentPlan]);
 
-  // Local-mode early returns for loading / error / denied states
   if (isLocalMode) {
-    if (localStatus === 'locating' || localStatus === 'fetching' || (localStatus === 'ready' && !localContacts)) {
-      return (
-        <section className="page">
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent)' }} />
-            <p className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-              {localStatus === 'locating' ? 'Getting your location...' : 'Loading emergency info...'}
-            </p>
-          </div>
-        </section>
-      );
-    }
-    if (localStatus === 'denied') {
-      return (
-        <section className="page">
-          <div className="flex flex-col items-center justify-center py-16 text-center gap-3 px-6">
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center"
-              style={{ background: 'var(--surface-container-high)', color: 'var(--text-secondary)' }}
-            >
-              <LocateFixed size={22} />
-            </div>
-            <h3 className="text-base font-bold">Location needed</h3>
-            <p className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-              Emergency info is based on your current country. Enable location to see relevant numbers.
-            </p>
-          </div>
-        </section>
-      );
-    }
-    if (localStatus === 'error') {
-      return (
-        <section className="page">
-          <div className="text-center py-16">
-            <h3 className="text-base font-bold mb-1">Couldn't load emergency info</h3>
-            <p className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>
-              Please try again in a moment.
-            </p>
-          </div>
-        </section>
-      );
-    }
-  } else if (!currentPlan) {
+    return <LocalEmergency />;
+  }
+
+  if (!currentPlan) {
+
     return (
       <section className="page">
         <div className="text-center py-16">
@@ -167,15 +48,12 @@ const EmergencyPage: React.FC = () => {
     );
   }
 
-  const currentCountryId = isLocalMode
-    ? (localCountry ? `local_${localCountry.code}` : '')
-    : selectedCountry || allCountries[0]?.id || '';
-  const currentCountry = isLocalMode
-    ? (localCountry ? { id: currentCountryId, name: localCountry.name, languages: [] } : null)
-    : allCountries.find(c => c.id === currentCountryId) || null;
-  const filteredContacts = isLocalMode
-    ? (localContacts || [])
-    : emergencyContacts.filter(c => c.destinationId === currentCountryId && !c.cityId);
+  // Trip mode from here down: LocalEmergency already returned above.
+  const currentCountryId = selectedCountry || allCountries[0]?.id || '';
+  const currentCountry = allCountries.find(c => c.id === currentCountryId) || null;
+  const filteredContacts: EmergencyContact[] = emergencyContacts.filter(
+    (c: EmergencyContact) => c.destinationId === currentCountryId && !c.cityId,
+  );
   const mainEmergency = filteredContacts.find(c => c.type === 'emergency') || filteredContacts[0];
   const otherContacts = filteredContacts.filter(c => c !== mainEmergency);
 

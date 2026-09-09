@@ -1,4 +1,4 @@
-const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
+import { placesCallSafe } from '../lib/placesProxy';
 
 interface AddressComponent {
   long_name: string;
@@ -11,12 +11,11 @@ interface GeocodeResult {
 }
 
 export async function reverseGeocodeLocality(lat: number, lng: number): Promise<string | null> {
-  if (!GOOGLE_PLACES_API_KEY) return null;
   try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_PLACES_API_KEY}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.status !== 'OK' || !data.results?.length) return null;
+    // Reverse geocoding is cached for 30 days server side: the country a
+    // coordinate sits in does not move.
+    const data = await placesCallSafe<any>('geocode', { latlng: `${lat},${lng}` });
+    if (!data || data.status !== 'OK' || !data.results?.length) return null;
     const results: GeocodeResult[] = data.results;
     for (const r of results) {
       const comps = r.address_components || [];
@@ -43,12 +42,9 @@ export interface CountryInfo {
 }
 
 export async function reverseGeocodeCountry(lat: number, lng: number): Promise<CountryInfo | null> {
-  if (!GOOGLE_PLACES_API_KEY) return null;
   try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_PLACES_API_KEY}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.status !== 'OK' || !data.results?.length) return null;
+    const data = await placesCallSafe<any>('geocode', { latlng: `${lat},${lng}` });
+    if (!data || data.status !== 'OK' || !data.results?.length) return null;
     const results: GeocodeResult[] = data.results;
     for (const r of results) {
       const comps = r.address_components || [];

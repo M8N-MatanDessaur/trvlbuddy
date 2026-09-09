@@ -2,7 +2,7 @@
 // Map tab's on-the-fly fallback. Far more accurate than Photon at matching a
 // named place ("Tim Hortons", "Gyeongbokgung Palace") to the right city.
 
-const GOOGLE_PLACES_API_KEY = import.meta.env.VITE_GOOGLE_PLACES_API_KEY || '';
+import { placesCallSafe } from '../lib/placesProxy';
 
 // Quota / auth gate. When Google returns OVER_QUERY_LIMIT or REQUEST_DENIED,
 // we short-circuit every subsequent call for the rest of the session so we
@@ -94,34 +94,30 @@ export async function findPlaceFromText(
   query: string,
   options: FindPlaceOptions = {},
 ): Promise<GooglePlaceHit | null> {
-  if (!GOOGLE_PLACES_API_KEY) return null;
+  // The key now lives in the places edge function, so there is nothing to
+  // check here; an unavailable lookup is handled by placesCallSafe.
   if (_placesBlocked) return null;
   const trimmed = query.trim();
   if (!trimmed) return null;
   if (isNegativelyCached(trimmed)) return null;
 
-  const params = new URLSearchParams({
+  const params: Record<string, string> = {
     input: trimmed,
     inputtype: 'textquery',
-    fields: 'place_id,geometry,formatted_address',
-    key: GOOGLE_PLACES_API_KEY,
-  });
+  };
   if (options.near) {
     const radius = options.near.radiusMeters ?? 50000; // 50km default
-    params.set('locationbias', `circle:${radius}@${options.near.lat},${options.near.lng}`);
+    params.locationbias = `circle:${radius}@${options.near.lat},${options.near.lng}`;
   }
 
   try {
-    // Route through the Netlify proxy /api/places/* (defined in netlify.toml)
-    // so the call doesn't hit Google directly from the browser -- Google's
-    // legacy Places API doesn't send CORS headers, so direct calls fail.
-    const url = `/api/places/findplacefromtext/json?${params.toString()}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.warn('[places] findPlace HTTP', res.status, 'for', query);
-      return null;
-    }
-    const data: {
+    // Through the places edge function. It used to go via the Netlify
+    // /api/places/* redirect, which solved the CORS problem (Google's legacy
+    // Places API sends no CORS headers) but still carried the API key from
+    // the browser -- and made our own domain a convenient open proxy for
+    // anyone who had read the key out of the bundle. The proxy solves CORS
+    // too, and holds the key server side.
+    const data = await placesCallSafe<{
       status?: string;
       error_message?: string;
       candidates?: Array<{
@@ -129,7 +125,11 @@ export async function findPlaceFromText(
         geometry?: { location?: { lat: number; lng: number } };
         formatted_address?: string;
       }>;
-    } = await res.json();
+    }>('findplace', params);
+    if (!data) {
+      console.warn('[places] findPlace unavailable for', query);
+      return null;
+    }
     const status = data.status;
     if (status && status !== 'OK' && status !== 'ZERO_RESULTS') {
       console.warn('[places] findPlace status', status, data.error_message || '', 'for', query);
@@ -166,29 +166,21 @@ export async function searchPlaceByText(
   query: string,
   options: FindPlaceOptions = {},
 ): Promise<GooglePlaceHit | null> {
-  if (!GOOGLE_PLACES_API_KEY) return null;
+  // The key now lives in the places edge function, so there is nothing to
+  // check here; an unavailable lookup is handled by placesCallSafe.
   if (_placesBlocked) return null;
   const trimmed = query.trim();
   if (!trimmed) return null;
 
-  const params = new URLSearchParams({
-    query: trimmed,
-    key: GOOGLE_PLACES_API_KEY,
-  });
+  const params: Record<string, string> = { query: trimmed };
   if (options.near) {
     const radius = options.near.radiusMeters ?? 50000;
-    params.set('location', `${options.near.lat},${options.near.lng}`);
-    params.set('radius', String(radius));
+    params.location = `${options.near.lat},${options.near.lng}`;
+    params.radius = String(radius);
   }
 
   try {
-    const url = `/api/places/textsearch/json?${params.toString()}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.warn('[places] textSearch HTTP', res.status, 'for', query);
-      return null;
-    }
-    const data: {
+    const data = await placesCallSafe<{
       status?: string;
       error_message?: string;
       results?: Array<{
@@ -196,7 +188,11 @@ export async function searchPlaceByText(
         geometry?: { location?: { lat: number; lng: number } };
         formatted_address?: string;
       }>;
-    } = await res.json();
+    }>('textsearch', params);
+    if (!data) {
+      console.warn('[places] textSearch unavailable for', query);
+      return null;
+    }
     const status = data.status;
     if (status && status !== 'OK' && status !== 'ZERO_RESULTS') {
       console.warn('[places] textSearch status', status, data.error_message || '', 'for', query);
