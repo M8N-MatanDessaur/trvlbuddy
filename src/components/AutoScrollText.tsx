@@ -65,7 +65,13 @@ const AutoScrollText: React.FC<Props> = ({
 
   // Drive the animation based on overflow + in-view.
   useEffect(() => {
-    if (overflow <= 2 || !inView) {
+    // Someone who has asked their system for less motion should not have text
+    // drifting while they read it. The overflow is still reachable -- the
+    // element scrolls -- it just does not move on its own.
+    const stillness = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    if (stillness || overflow <= 2 || !inView) {
       controls.stop();
       controls.set({ y: 0 });
       return;

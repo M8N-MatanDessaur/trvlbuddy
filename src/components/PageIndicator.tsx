@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import type { PageDef } from './SwipeNavigator';
 
@@ -10,11 +10,27 @@ interface Props {
 
 const SWIPE_THRESHOLD = 40;
 const VELOCITY_THRESHOLD = 200;
+// Movement under this is a press, not a swipe.
+const TAP_SLOP = 8;
 
 const PageIndicator: React.FC<Props> = ({ pages, currentIndex, onPageSelect }) => {
+  // Whether the last gesture actually moved. framer-motion fires onDragEnd
+  // for a press that shifts a pixel, and the buttons live inside the draggable
+  // element -- so a tap became a drag, the drag changed page, and the button's
+  // own click was swallowed. Tracking real movement lets a tap be a tap.
+  const dragged = useRef(false);
 
-  const handleDragEnd = (_: any, info: PanInfo) => {
+  const handleDragStart = () => { dragged.current = false; };
+
+  const handleDrag = (_: unknown, info: PanInfo) => {
+    if (Math.abs(info.offset.x) > TAP_SLOP) dragged.current = true;
+  };
+
+  const handleDragEnd = (_: unknown, info: PanInfo) => {
     const { offset, velocity } = info;
+    // A gesture that never travelled is a tap on whichever tab was pressed,
+    // and that button's onClick has already handled it.
+    if (Math.abs(offset.x) <= TAP_SLOP && Math.abs(velocity.x) < VELOCITY_THRESHOLD) return;
     if (offset.x < -SWIPE_THRESHOLD || velocity.x < -VELOCITY_THRESHOLD) {
       onPageSelect(currentIndex + 1);
     } else if (offset.x > SWIPE_THRESHOLD || velocity.x > VELOCITY_THRESHOLD) {
@@ -34,6 +50,8 @@ const PageIndicator: React.FC<Props> = ({ pages, currentIndex, onPageSelect }) =
       drag="x"
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={0.1}
+      onDragStart={handleDragStart}
+      onDrag={handleDrag}
       onDragEnd={handleDragEnd}
     >
       {pages.map((page, i) => {
@@ -43,9 +61,26 @@ const PageIndicator: React.FC<Props> = ({ pages, currentIndex, onPageSelect }) =
         return (
           <button
             key={page.path}
+            type="button"
             onClick={() => onPageSelect(i)}
-            style={{ display: 'contents' }}
             aria-label={page.label}
+            aria-current={isActive ? 'page' : undefined}
+            style={{
+              // Was `display: contents`, which gives a button no box at all --
+              // no hit area of its own, and a known source of broken
+              // accessibility. It is a real flex item now, sized by its
+              // content so the pill looks identical.
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'none',
+              border: 0,
+              padding: 0,
+              // Comfortable to hit without changing how the bar looks.
+              minHeight: '44px',
+              cursor: 'pointer',
+              WebkitTapHighlightColor: 'transparent',
+            }}
           >
             <div
               className="flex items-center justify-center gap-1.5 transition-all"
@@ -54,7 +89,8 @@ const PageIndicator: React.FC<Props> = ({ pages, currentIndex, onPageSelect }) =
                 padding: isActive ? '6px 14px' : '6px 4px',
                 background: isActive ? 'var(--accent-container)' : 'transparent',
                 borderRadius: '20px',
-                minHeight: '32px',
+                // 32px was under the comfortable minimum for a thumb.
+                minHeight: '40px',
                 cursor: 'pointer',
               }}
             >
