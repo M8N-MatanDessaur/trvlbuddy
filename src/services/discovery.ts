@@ -109,6 +109,49 @@ function kindFromText(title: string, description = '', fallback = 'Landmark'): s
   return fallback;
 }
 
+// Wikipedia opening sentences carry apparatus a reader here does not want.
+// Raw, the Pantheon reads:
+//
+//   "The Pantheon (UK: , US: ; Latin: Pantheum, from Ancient Greek Πάνθειον
+//    (Pantheion) '[temple] of all the gods') is an ancient temple in Rome..."
+//
+// The empty "(UK: , US: ;)" is where the plaintext extract dropped the IPA,
+// and the etymology belongs in an encyclopedia, not on a card someone is
+// reading while deciding whether to walk somewhere.
+function cleanBlurb(extract: string): string | undefined {
+  let text = extract;
+
+  // Drop parentheticals that are pronunciation, transliteration or
+  // etymology. Nested parens are handled by running the pass twice.
+  const APPARATUS = /\s*\((?:[^()]|\([^()]*\))*?(?:UK|US|IPA|English|Latin|Ancient Greek|Greek|Korean|Hanja|Japanese|Chinese|Italian|French|Spanish|German|Arabic|Hebrew|Russian|pronounced|lit\.|romanized|MR|Hepburn)[^()]*(?:\([^()]*\)[^()]*)*\)/gi;
+  text = text.replace(APPARATUS, '').replace(APPARATUS, '');
+
+  // Any parenthetical left with no letters in it, e.g. "( , ;)".
+  text = text.replace(/\s*\([^A-Za-z)]*\)/g, '');
+
+  // Leading IPA in square brackets, and stray spacing the removals leave.
+  text = text.replace(/\s*\[[^\]]*\]\s*/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.;:])/g, '$1')
+    .trim();
+
+  // First sentence -- but ". " is not a reliable boundary in this material:
+  // "constructed c. 25 BC" and "St. Peter's" both break it, which is how a
+  // card ended up reading "was an ancient Roman basilica constructed c.".
+  const ABBREV = /(?:\b(?:c|ca|circa|St|Mt|Ft|approx|no|vs|etc|Dr|Mr|Mrs|Ms|Jr|Sr|Prof|fl|d|b|r|AD|BC|BCE|CE)\.)$/i;
+  const parts = text.split(/(?<=\.)\s+/);
+  let sentence = '';
+  for (const part of parts) {
+    sentence = sentence ? `${sentence} ${part}` : part;
+    // Keep going while the piece ends in an abbreviation or is still short.
+    if (!ABBREV.test(sentence.trim()) && sentence.length > 40) break;
+    if (sentence.length > 260) break;
+  }
+  sentence = sentence.trim();
+
+  return sentence.length > 20 ? sentence : undefined;
+}
+
 interface WikiGeoHit { pageid: number; title: string; lat: number; lon: number; dist: number }
 
 /**
@@ -157,12 +200,13 @@ export async function wikipediaNearby(
     .map((h) => {
       const page = byTitle.get(h.title);
       const extract: string = page?.extract ?? '';
-      const blurb = extract.split(/(?<=\.)\s/)[0]?.trim();
       return {
         id: `wiki:${h.pageid}`,
         source: 'wikipedia' as const,
-        name: h.title,
-        blurb: blurb && blurb.length > 20 ? blurb : undefined,
+        // Wikipedia disambiguates titles with the city ("Pantheon, Rome"),
+        // which is noise on a card that already says where you are.
+        name: h.title.replace(/,\s+[^,]+$/, (m) => (m.length > 18 ? m : '')),
+        blurb: cleanBlurb(extract),
         imageUrl: page?.thumbnail?.source,
         location: { lat: h.lat, lng: h.lon },
         distance: Math.round(h.dist),
