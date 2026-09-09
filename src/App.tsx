@@ -168,10 +168,16 @@ const DesktopFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
-      gcTime: 5 * 60_000,
+      // Five minutes, and no refetch merely because the window regained
+      // focus. The old 30s + refetchOnWindowFocus meant every glance away and
+      // back re-ran every query on screen -- fine for a free database read,
+      // expensive when a screen is backed by a billed API, and the reason the
+      // app felt like it was constantly reloading. Realtime invalidations
+      // still push genuinely-changed social data through immediately.
+      staleTime: 5 * 60_000,
+      gcTime: 30 * 60_000,
       retry: 1,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
       refetchOnReconnect: true,
     },
     mutations: {
