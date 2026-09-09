@@ -1,6 +1,7 @@
 import { TravelPlan, GeneratedActivity, Translation, EmergencyContact, Destination, TripSegment, City } from '../types/TravelData';
 import { callGeminiProxy } from '../lib/geminiProxy';
 import { placesCallSafe } from '../lib/placesProxy';
+import { supabase } from '../lib/supabase';
 
 
 async function callGeminiAPI(prompt: string, useGrounding: boolean = false): Promise<string> {
@@ -1742,10 +1743,19 @@ export async function transcribeAudio(blob: Blob, filename = 'audio.webm'): Prom
   const form = new FormData();
   form.append('file', blob, filename);
 
+  // The user's session token, not the anon key. The transcribe function
+  // identifies the caller from this and holds them to a per-user budget --
+  // sending the anon key (which this used to do) is rejected as an invalid
+  // session, because the anon key is public and identifies nobody.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error('Sign in to use voice input');
+  }
+
   const res = await fetch(`${SUPABASE_URL}/functions/v1/transcribe`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      Authorization: `Bearer ${session.access_token}`,
       apikey: SUPABASE_ANON_KEY,
     },
     body: form,
