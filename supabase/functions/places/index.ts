@@ -25,6 +25,57 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.103.3';
 const HOURLY_LIMIT = 120;
 const DAILY_LIMIT = 800;
 
+// A ceiling for the whole app, per day, not per person. The per-user quota
+// stops one person hammering the API; this stops the app as a whole -- or a
+// render loop, or a retry storm -- from running up a bill nobody authorised.
+// When it is spent we serve stale cache rather than calling Google.
+//
+// 300 misses a day is generous for a handful of users once locations are
+// snapped to a grid and results live for a week: expected real usage is a few
+// dozen. It is also about $10 a day if something were to spend all of it,
+// which is a survivable mistake rather than a $500 one.
+const GLOBAL_DAILY_CALLS = 300;
+
+// Coordinates are snapped to a grid before they are used, for both the cache
+// key AND the request sent to Google. Without this the cache barely works: two
+// people standing twenty metres apart produce different keys and pay for two
+// separate searches, which at 100 users a day is ~$595/month against ~$1 with
+// snapping. 0.005 degrees is roughly 550m of latitude -- immaterial inside a
+// 1.5km radius sweep, and it means everyone in a neighbourhood shares one
+// paid lookup.
+const GRID_DEGREES = 0.005;
+
+function snap(value: number): number {
+  return Math.round(value / GRID_DEGREES) * GRID_DEGREES;
+}
+
+// "45.50191,-73.56742" -> "45.5,-73.565"
+function snapLatLngPair(pair: string): string {
+  const [a, b] = pair.split(',').map((n) => Number(n.trim()));
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return pair;
+  return `${snap(a).toFixed(4)},${snap(b).toFixed(4)}`;
+}
+
+// The v1 endpoints carry coordinates inside a JSON circle.
+function snapCircle(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const v = value as Record<string, any>;
+  const centre = v?.circle?.center;
+  if (centre && Number.isFinite(centre.latitude) && Number.isFinite(centre.longitude)) {
+    return {
+      ...v,
+      circle: {
+        ...v.circle,
+        center: {
+          latitude: Number(snap(centre.latitude).toFixed(4)),
+          longitude: Number(snap(centre.longitude).toFixed(4)),
+        },
+      },
+    };
+  }
+  return value;
+}
+
 type OpName =
   | 'textsearch' | 'nearbysearch' | 'details' | 'findplace'
   | 'autocomplete' | 'geocode' | 'searchText' | 'searchNearby';
@@ -68,24 +119,24 @@ const OPS: Record<OpName, {
   textsearch: {
     kind: 'legacy', path: 'https://maps.googleapis.com/maps/api/place/textsearch/json',
     allow: ['query', 'location', 'radius', 'opennow', 'type', 'language', 'region', 'minprice', 'maxprice', 'pagetoken'],
-    ttlSeconds: 24 * 3600,
+    ttlSeconds: 7 * 24 * 3600,
   },
   nearbysearch: {
     kind: 'legacy', path: 'https://maps.googleapis.com/maps/api/place/nearbysearch/json',
     allow: ['location', 'radius', 'keyword', 'opennow', 'type', 'rankby', 'language', 'minprice', 'maxprice', 'pagetoken'],
-    ttlSeconds: 24 * 3600,
+    ttlSeconds: 7 * 24 * 3600,
   },
   details: {
     kind: 'legacy', path: 'https://maps.googleapis.com/maps/api/place/details/json',
     // `fields` is NOT passthrough: the field list decides the price of the
     // call, so the server picks it.
     allow: ['place_id', 'language'],
-    ttlSeconds: 7 * 24 * 3600,
+    ttlSeconds: 30 * 24 * 3600,
   },
   findplace: {
     kind: 'legacy', path: 'https://maps.googleapis.com/maps/api/place/findplacefromtext/json',
     allow: ['input', 'inputtype', 'locationbias', 'language'],
-    ttlSeconds: 7 * 24 * 3600,
+    ttlSeconds: 30 * 24 * 3600,
   },
   autocomplete: {
     kind: 'legacy', path: 'https://maps.googleapis.com/maps/api/place/autocomplete/json',
@@ -100,13 +151,13 @@ const OPS: Record<OpName, {
   searchText: {
     kind: 'v1', path: 'https://places.googleapis.com/v1/places:searchText',
     allow: ['textQuery', 'pageSize', 'locationBias', 'locationRestriction', 'includedType', 'openNow', 'languageCode', 'rankPreference'],
-    ttlSeconds: 24 * 3600,
+    ttlSeconds: 7 * 24 * 3600,
     fieldMask: V1_FIELD_MASK,
   },
   searchNearby: {
     kind: 'v1', path: 'https://places.googleapis.com/v1/places:searchNearby',
     allow: ['locationRestriction', 'includedTypes', 'excludedTypes', 'maxResultCount', 'languageCode', 'rankPreference'],
-    ttlSeconds: 24 * 3600,
+    ttlSeconds: 7 * 24 * 3600,
     fieldMask: V1_FIELD_MASK,
   },
 };
@@ -232,6 +283,16 @@ Deno.serve(async (req) => {
     return json({ error: 'No usable parameters for this operation' }, 400, corsHeaders);
   }
 
+  // Snap every coordinate to the grid, so neighbours share a cache entry.
+  if (params.location) params.location = snapLatLngPair(params.location);
+  if (params.latlng) params.latlng = snapLatLngPair(params.latlng);
+  for (const field of ['locationBias', 'locationRestriction']) {
+    if (!params[field]) continue;
+    try {
+      params[field] = JSON.stringify(snapCircle(JSON.parse(params[field])));
+    } catch { /* leave it; the allow-list already vetted the shape */ }
+  }
+
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -249,6 +310,28 @@ Deno.serve(async (req) => {
     admin.from('places_cache').update({ hits: (cached.hits ?? 0) + 1 }).eq('cache_key', key)
       .then(() => {}, () => {});
     return json({ cached: true, payload: cached.payload }, 200, corsHeaders);
+  }
+
+  // The app's ceiling for the day. Checked before the per-user quota because
+  // it protects the bill rather than the person: when it is spent, an expired
+  // cache entry is a far better answer than either an error or a charge.
+  const { data: withinBudget, error: budgetError } = await admin.rpc('consume_api_budget', {
+    p_provider: 'google-places',
+    p_daily_limit: GLOBAL_DAILY_CALLS,
+  });
+  if (budgetError) {
+    console.error('budget check failed', budgetError.message);
+    if (cached) return json({ cached: true, stale: true, payload: cached.payload }, 200, corsHeaders);
+    return json({ error: 'Place lookup is unavailable right now' }, 503, corsHeaders);
+  }
+  if (withinBudget === false) {
+    console.warn('daily google-places budget exhausted; serving stale or refusing');
+    if (cached) return json({ cached: true, stale: true, payload: cached.payload }, 200, corsHeaders);
+    return json(
+      { error: 'Place lookups are paused for today. Everything already saved still works.' },
+      503,
+      { ...corsHeaders, 'Retry-After': '3600' },
+    );
   }
 
   // 2. A miss is about to cost money, so it needs quota.

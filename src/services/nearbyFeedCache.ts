@@ -8,15 +8,29 @@ import {
 import { haversineMeters } from '../utils/geolocation';
 
 // Bump this when the shape of the cached value changes.
-const CACHE_KEY_PREFIX = 'nearby-feed-cache-v1';
-const TTL_MS = 30 * 60 * 1000;
+const CACHE_KEY_PREFIX = 'nearby-feed-cache-v2';
 
-// How far the user can move before the cache for a given transport mode is
-// considered stale. Set to the tightest ring of that mode's radius sweep so
-// cached results are still meaningfully centered on the user.
+// Twelve hours, not thirty minutes.
+//
+// The old half-hour TTL, combined with a 500m location tolerance, meant the
+// feed refetched if you switched tabs and came back, or walked down the
+// street, or simply opened the app twice in a morning. Every refetch is six
+// category searches against a billed API. That is the "it loads again and
+// again and again" problem, and it is what a previous version of this app
+// spent real money on.
+//
+// A restaurant does not stop existing over lunch, so there is no reason to
+// pay to re-discover the same places. The server-side cache would now absorb
+// most of these anyway, but not asking at all is faster and free.
+const TTL_MS = 12 * 60 * 60 * 1000;
+
+// How far the user can move before the cache is considered stale. Loosened
+// deliberately: the sweep radius is far larger than these numbers, so a place
+// found from a point 1km away is still nearby. Tight tolerances here just buy
+// repeat charges for nearly identical results.
 const LOCATION_TOLERANCE_BY_MODE: Record<TransportMode, number> = {
-  foot: 500,
-  car: 3000,
+  foot: 1200,
+  car: 8000,
 };
 
 export interface FeedCacheContext {
