@@ -146,6 +146,32 @@ html, body {
   .tb-slide-progress { animation: none; width: 100%; }
 }
 
+/* The feed's placeholder picture: a slow drift, not a blink. It can be on
+   screen for a second or two, and something calm is a better thing to wait in
+   front of than something flashing. */
+@keyframes tb-skeleton-drift {
+  0%   { transform: scale(1.04) translate3d(0, 0, 0); opacity: 0.9; }
+  50%  { transform: scale(1.08) translate3d(0, -1.5%, 0); opacity: 1; }
+  100% { transform: scale(1.04) translate3d(0, 0, 0); opacity: 0.9; }
+}
+.tb-skeleton-drift {
+  animation: tb-skeleton-drift 6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tb-skeleton-drift { animation: none; }
+}
+
+/* The moment the app tells you where you are. One reveal, not an effect on
+   every screen. */
+@keyframes tb-onboard-reveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+.tb-onboard-reveal { animation: tb-onboard-reveal 420ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .tb-onboard-reveal { animation: none; }
+}
+
 :root {
   --bg-primary: #F5F5F5;
   --bg-secondary: #EBEBEB;

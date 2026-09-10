@@ -10,8 +10,8 @@
     <meta name="apple-mobile-web-app-title" content="TravelBuddy" />
     
     <!-- SEO Meta Tags -->
-    <title>TravelBuddy - AI-Powered Travel Planning & Discovery</title>
-    <meta name="description" content="Your intelligent travel companion powered by AI. Plan perfect itineraries, discover local activities, translate languages, and access essential travel tools for any destination worldwide." />
+    <title>TrvlBuddy: what is worth doing, right where you are</title>
+    <meta name="description" content="Find what is worth doing right where you are: places people have actually been, what they said about them, and the trip you are planning together." />
     <meta name="keywords" content="travel planner, AI travel guide, itinerary planner, travel app, destination guide, language translator, travel tools, trip planning, vacation planner, travel companion" />
     <meta name="author" content="TravelBuddy" />
     <meta name="robots" content="index, follow" />
@@ -21,13 +21,14 @@
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://trvlbuddy.com/" />
-    <meta property="og:title" content="TravelBuddy - AI-Powered Travel Planning & Discovery" />
-    <meta property="og:description" content="Your intelligent travel companion powered by AI. Plan perfect itineraries, discover local activities, translate languages, and access essential travel tools for any destination worldwide." />
-    <meta property="og:image" content="https://trvlbuddy.com/appicon-512.png" />
-    <meta property="og:image:alt" content="TravelBuddy - AI Travel Planning App" />
-    <meta property="og:image:width" content="512" />
-    <meta property="og:image:height" content="512" />
-    <meta property="og:site_name" content="TravelBuddy" />
+    <meta property="og:title" content="TrvlBuddy: what is worth doing, right where you are" />
+    <meta property="og:description" content="Find what is worth doing right where you are: places people have actually been, what they said about them, and the trip you are planning together." />
+    <meta property="og:image" content="https://trvlbuddy.com/og.png" />
+    <meta property="og:image:alt" content="TrvlBuddy: what is worth doing, right where you are" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:site_name" content="TrvlBuddy" />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:locale" content="en_US" />
     
     <!-- Twitter -->
@@ -35,9 +36,10 @@
     <meta name="twitter:site" content="@travelbuddypwa" />
     <meta name="twitter:creator" content="@travelbuddypwa" />
     <meta name="twitter:url" content="https://trvlbuddy.com/" />
-    <meta name="twitter:title" content="TravelBuddy - AI-Powered Travel Planning & Discovery" />
-    <meta name="twitter:description" content="Your intelligent travel companion powered by AI. Plan perfect itineraries, discover local activities, translate languages, and access essential travel tools for any destination worldwide." />
-    <meta name="twitter:image" content="https://trvlbuddy.com/appicon-512.png" />
+    <meta name="twitter:title" content="TrvlBuddy: what is worth doing, right where you are" />
+    <meta name="twitter:description" content="Find what is worth doing right where you are: places people have actually been, what they said about them, and the trip you are planning together." />
+    <meta name="twitter:image" content="https://trvlbuddy.com/og.png" />
+    <meta name="twitter:image:alt" content="TrvlBuddy: what is worth doing, right where you are" />
     <meta name="twitter:image:alt" content="TravelBuddy - AI Travel Planning App" />
     
     <!-- Additional Social Media Meta Tags -->
@@ -103,6 +105,29 @@
       }
     }
     </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "TrvlBuddy",
+        "url": "https://trvlbuddy.com/",
+        "applicationCategory": "TravelApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "description": "Find what is worth doing right where you are: places people have actually been, what they said about them, and the trip you are planning together.",
+        "image": "https://trvlbuddy.com/og.png",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "featureList": [
+          "Discover places near you",
+          "Tips from other travellers",
+          "Plan a trip with other people",
+          "Offline travel facts: tipping, plugs, water, transit",
+          "Emergency numbers by country",
+          "Language phrases and photo translation"
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
@@ -146,13 +171,24 @@
       });
       window.addEventListener('vite:preloadError', recoverFromStaleCache);
 
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/sw.js')
-            .then(function (registration) { console.log('SW registered: ', registration); })
-            .catch(function (err) { console.log('SW registration failed: ', err); });
-        });
-      }
+      // A white screen with nothing in the console and nothing in the network
+      // tab means the app never mounted, and the usual cause is something
+      // stale being served from the worker's cache. There is no error to
+      // listen for in that case, so watch for the outcome instead: if the
+      // root is still empty a few seconds in, clear everything and reload
+      // once. The flag makes it once, never a loop.
+      window.addEventListener('load', function () {
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && root.childElementCount > 0) return;
+          try {
+            if (sessionStorage.getItem('tb-recovered') === '1') return;
+            sessionStorage.setItem('tb-recovered', '1');
+          } catch (_) { return; }
+          recoverFromStaleCache();
+        }, 8000);
+      });
+
     </script>
   </body>
 </html>

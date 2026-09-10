@@ -60,3 +60,22 @@ createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </StrictMode>
 );
+
+// The service worker ships with the build, and only with the build.
+//
+// It was registered from index.html, which cannot tell a development server
+// from a real one: every module Vite serves went through a worker written for
+// hashed production assets, and the stale copies it kept could only be
+// cleared with a hard reload. Here the mode is known for certain.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.log('SW registration failed:', err);
+    });
+  });
+} else if ('serviceWorker' in navigator) {
+  // And clear one left behind from before this rule existed.
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((r) => r.unregister());
+  });
+}

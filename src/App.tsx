@@ -14,6 +14,7 @@ import DesktopNav from './components/DesktopNav';
 import { useIsDesktop } from './hooks/useMediaQuery';
 import { pathIn, scopeOf, type Scope } from './hooks/useScope';
 import { useTripFromUrl } from './hooks/useTripFromUrl';
+import { useDocumentTitle } from './hooks/useDocumentTitle';
 import { ChromeProvider } from './contexts/ChromeContext';
 import SwipeNavigator from './components/SwipeNavigator';
 import type { PageDef } from './components/SwipeNavigator';
@@ -36,7 +37,7 @@ const LanguagePage = lazy(() => import('./components/DynamicTranslatorPage'));
 const UtilitiesPage = lazy(() => import('./components/DynamicUtilitiesPage'));
 const EmergencyPage = lazy(() => import('./components/EmergencyPage'));
 const ConversationalOnboarding = lazy(() => import('./components/ConversationalOnboarding'));
-const ContributorOnboarding = lazy(() => import('./components/ContributorOnboarding'));
+const Onboarding = lazy(() => import('./components/Onboarding'));
 const SettingsPage = lazy(() => import('./components/SettingsPage'));
 const AccountPage = lazy(() => import('./components/AccountPage'));
 const PasswordResetPage = lazy(() => import('./components/PasswordResetPage'));
@@ -98,19 +99,29 @@ function pagesFor(scope: Scope): PageDef[] {
 }
 
 const AppContent: React.FC = () => {
-  const { hasCompletedOnboarding, isLoading, appMode, currentTripId } = useTravel();
+  const { hasCompletedOnboarding, isLoading, appMode, currentTripId, currentPlan } = useTravel();
   const { session, profile, isLoading: authLoading, recoveryMode } = useAuth();
   const location = useLocation();
-  // Sticky across routes that belong to both sets, so it survives a trip to
-  // Tools and back. Derived from the path during render rather than in an
-  // effect: an effect would render one frame with the wrong set first.
-  // The scope is the address now, not a remembered flag: /trip/<id>/tools is
-  // the trip's tools, /tools is the tools for where you are standing. Nothing
-  // to keep in sync, and a link to either one lands in the right place.
+  // The scope is the address: /trip/<id>/tools is the trip's tools, /tools is
+  // the tools for where you are standing. Nothing to keep in sync, and a link
+  // to either one lands in the right place.
   const isDesktop = useIsDesktop();
   // A trip's sections name their trip in the address, so opening one brings
   // that trip with it rather than showing whichever was loaded last.
   useTripFromUrl(scopeOf(location.pathname));
+
+  // What the tab, the history entry and the bookmark say. Named for the
+  // screen, and on a trip, for the trip.
+  const titleScope = scopeOf(location.pathname);
+  const sectionLabel = [...TRIP_SECTIONS, ...LOCAL_SECTIONS, NEW_TRIP]
+    .find((s) => pathIn(titleScope, s.section) === location.pathname)?.label ?? null;
+  useDocumentTitle(
+    titleScope.kind === 'trip' && currentPlan?.title
+      ? (sectionLabel && sectionLabel !== 'Trip'
+          ? `${sectionLabel}, ${currentPlan.title}`
+          : currentPlan.title)
+      : sectionLabel,
+  );
 
   // Suspense fallback for any of the lazy screens below. AuthSplash is
   // already part of the main bundle and handles the brief network gap
@@ -131,7 +142,7 @@ const AppContent: React.FC = () => {
   const joinMatch = location.pathname.match(/^\/trip\/join\/([^/]+)/);
   if (joinMatch) return wrap(<TripJoinPage token={joinMatch[1]} />);
 
-  if (!profile.onboarded_at) return wrap(<ContributorOnboarding />);
+  if (!profile.onboarded_at) return wrap(<Onboarding />);
 
   if (location.pathname === '/settings') return wrap(<SettingsPage />);
   if (location.pathname === '/account') return wrap(<AccountPage />);
