@@ -177,27 +177,41 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
     if (restoreAttemptedRef.current) return;
-    if (currentTripId || currentPlan) {
-      // Local state is intact, nothing to restore.
+    if (currentPlan) {
+      // The plan is what makes the state intact. Remembering which trip you
+      // were on is not the same thing: a session can hold the id with no
+      // plan behind it, and then the app behaves as though you had no trip
+      // at all. That is how "Invite to this trip" could be missing from
+      // Settings for someone who plainly has one.
       restoreAttemptedRef.current = true;
       return;
     }
     restoreAttemptedRef.current = true;
 
-    let cancelled = false;
+    // Whether the restore actually finished. React runs an effect, tears it
+    // down and runs it again in development: the first run was fetching the
+    // trip while the flag turned the second one away, and the first run's
+    // result was then thrown away as cancelled. The trip loaded and nothing
+    // ever saw it, which is why "Invite to this trip" could be missing from
+    // Settings for someone who obviously has one.
+    let landed = false;
     setIsLoading(true);
     (async () => {
       try {
         const trips = await listMyTrips(user.id);
-        if (cancelled || trips.length === 0) return;
+        if (trips.length === 0) return;
 
+        // The trip this session was already on wins, then the one pinned to
+        // the profile, then the most recent.
+        const remembered = currentTripId && trips.some((t) => t.id === currentTripId)
+          ? currentTripId
+          : null;
         const pinnedId = profile?.current_trip_id;
-        const targetId = pinnedId && trips.some((t) => t.id === pinnedId)
-          ? pinnedId
-          : trips[0].id;
+        const targetId = remembered
+          ?? (pinnedId && trips.some((t) => t.id === pinnedId) ? pinnedId : trips[0].id);
 
         const row = await loadTrip(targetId);
-        if (cancelled || !row?.plan?.currentPlan) return;
+        if (!row?.plan?.currentPlan) return;
 
         const bundle = row.plan;
         setCurrentPlan(bundle.currentPlan);
@@ -207,16 +221,18 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setAppMode('trip');
         setHasCompletedOnboarding(true);
         setCurrentTripId(row.id);
+        landed = true;
       } catch (err) {
         console.error('trip auto-restore failed', err);
       } finally {
-        if (!cancelled) setIsLoading(false);
+        setIsLoading(false);
       }
     })();
 
     return () => {
-      cancelled = true;
       setIsLoading(false);
+      // Let the next run try again if this one did not get there.
+      if (!landed) restoreAttemptedRef.current = false;
     };
     // profile arrives after user; we depend on both so a pinned current_trip_id
     // is honored when it lands. currentPlan/currentTripId are read once via

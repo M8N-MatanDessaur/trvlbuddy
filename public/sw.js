@@ -235,14 +235,37 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Hashed JS/CSS chunks: always from network, never cached (names change
-  // per build so a cached copy would point at a file that no longer exists).
-  if (isHashedAsset) {
+  // Code always comes from the network: hashed chunks under /assets, and in
+  // development every module Vite hands out. A cached copy points at a file
+  // that no longer exists, or worse, one that does and is stale.
+  const isCode =
+    isHashedAsset ||
+    event.request.destination === 'script' ||
+    event.request.destination === 'style' ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/node_modules/');
+  if (isCode) {
     event.respondWith(fetch(event.request));
     return;
   }
 
-  // Everything else (icons, manifest, fonts, etc.): cache-first.
+  // Icons, fonts, the manifest: cache-first, because they are the same bytes
+  // for the life of a build and they are what makes the app open instantly.
+  //
+  // Named explicitly rather than "everything else". Code must never land in
+  // here: a script served from cache after the rest of the app moved on is a
+  // white screen with nothing in the console and nothing in the network tab,
+  // and the only way out is the hard reload that bypasses this worker. In
+  // development that is every module Vite serves.
+  const cacheable =
+    event.request.destination === 'image' ||
+    event.request.destination === 'font' ||
+    event.request.destination === 'manifest' ||
+    url.pathname === '/manifest.json';
+
+  if (!cacheable) return;
+
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;

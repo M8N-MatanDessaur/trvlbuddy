@@ -26,6 +26,7 @@ import {
 import { useIsDesktop } from '../../hooks/useMediaQuery';
 import { pulseForSlugs, type PlacePulse } from '../../services/placePulse';
 import NearbyPost from './NearbyPost';
+import NearbyPageSkeleton from './NearbyPageSkeleton';
 import NearbyPager from './NearbyPager';
 import { resolveImages } from '../../services/imageLookup';
 import { wikipediaNearby, osmNearby, mergeDiscoveries, type DiscoveryPlace } from '../../services/discovery';
@@ -140,7 +141,6 @@ const NearbyFeed: React.FC = () => {
   const heroImages: Record<string, string> = {};
   const [viewMode, setViewMode] = useState<ViewMode>(readStoredViewMode);
   // Whether the panel under the avatar is open.
-  const [controlsOpen, setControlsOpen] = useState<'filters' | null>(null);
   const isDesktop = useIsDesktop();
   // Where we think you are, shown in the pager where the page header used to
   // say it.
@@ -1184,6 +1184,26 @@ const NearbyFeed: React.FC = () => {
             </div>
           )}
 
+          {/* Nothing to show yet. The pager used to render nothing at all
+              here, so opening Nearby was a black screen until the first
+              place arrived. */}
+          {viewMode === 'one' && feedItems.length === 0 && (
+            <div
+              className="relative flex-1 min-h-0 pager-frame"
+              style={{
+                marginTop: '-0.5rem',
+                marginLeft: '-1.25rem',
+                marginRight: '-1.25rem',
+                marginBottom: '-2rem',
+              }}
+            >
+              <NearbyPageSkeleton
+                locality={localityLabel}
+                locating={status === 'locating'}
+              />
+            </div>
+          )}
+
           {/* One at a time. Same places, same order, same everything on each
               one, only how many of them you see at once changes. */}
           {viewMode === 'one' && feedItems.length > 0 && (
@@ -1275,77 +1295,6 @@ const NearbyFeed: React.FC = () => {
                       {profile ? <Avatar profile={profile} size={44} /> : <User size={17} color="#fff" />}
                     </button>
 
-                    {/* Preferences and filters, under the avatar where they
-                        belong. Nothing sits on the feed until it is asked for. */}
-                    {controlsOpen && (
-                      <div
-                        className="absolute right-0 rounded-2xl p-3"
-                        style={{
-                          top: '3rem',
-                          width: 'min(88vw, 26rem)',
-                          background: 'var(--bg-secondary)',
-                          border: '0.5px solid var(--outline)',
-                          boxShadow: 'var(--shadow-lg)',
-                        }}
-                      >
-                        <div onClick={() => setControlsOpen(null)}>{filterChips}</div>
-
-                        <div className="flex items-center gap-2 pt-1">
-                          <span className="text-[11px] font-semibold" style={{ color: 'var(--text-tertiary)' }}>
-                            Within
-                          </span>
-                          {([['foot', Footprints, 'A walk'], ['car', Car, 'A drive']] as const).map(
-                            ([mode, Icon, label]) => (
-                              <button
-                                key={mode}
-                                onClick={() => selectTransportMode(mode)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold"
-                                style={{
-                                  background: transportMode === mode ? 'var(--accent)' : 'var(--surface-container)',
-                                  color: transportMode === mode ? 'var(--on-accent)' : 'var(--text-secondary)',
-                                  border: 'none',
-                                }}
-                                aria-pressed={transportMode === mode}
-                              >
-                                <Icon size={13} />
-                                {label}
-                              </button>
-                            ),
-                          )}
-                        </div>
-
-                        <div
-                          className="flex items-center gap-2 pt-3 mt-2"
-                          style={{ borderTop: '0.5px solid var(--outline)' }}
-                        >
-                          <button
-                            onClick={() => { setControlsOpen(null); navigate('/profile'); }}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[12px] font-bold"
-                            style={{ background: 'var(--accent)', color: 'var(--on-accent)', border: 'none' }}
-                          >
-                            <User size={13} />
-                            Your profile
-                          </button>
-                          <button
-                            onClick={() => { setControlsOpen(null); requestLocation(); }}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[12px] font-semibold"
-                            style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)', border: 'none' }}
-                          >
-                            <LocateFixed size={13} />
-                            Update location
-                          </button>
-                          <button
-                            onClick={() => { setControlsOpen(null); selectViewMode('list'); }}
-                            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[12px] font-semibold"
-                            style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)', border: 'none' }}
-                            aria-label="Show all as a list"
-                          >
-                            <Rows3 size={13} />
-                            List
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </>
                 )}
               />
