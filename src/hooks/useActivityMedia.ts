@@ -217,8 +217,8 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       // Only roll back if the cache still has THIS mutation's optimistic
       // value. If another mutation (M2) has since superseded ours (M1),
       // restoring `previous` would wipe M2's correct optimistic state.
-      // Compare myVote — that's the unique signature of this mutation's
-      // intent — and only rollback when it matches.
+      // Compare myVote, that's the unique signature of this mutation's
+      // intent, and only rollback when it matches.
       const current = readSnapshot();
       if (current.vote.myVote === ctx.optimistic.myVote) {
         writeSnapshot(ctx.previous);
@@ -434,7 +434,7 @@ export function useActivityMedia(key: ActivityKey | null): UseActivityMediaResul
       if (!ctx) return;
       // Only roll back if the image's commentCount still equals what
       // this mutation incremented it to. If another comment landed in
-      // between, leave the cache alone — it correctly reflects M2.
+      // between, leave the cache alone, it correctly reflects M2.
       const current = readSnapshot();
       const currentImage = current.images.find((i) => i.id === ctx.imageId);
       if (currentImage && currentImage.commentCount === ctx.expectedCount) {

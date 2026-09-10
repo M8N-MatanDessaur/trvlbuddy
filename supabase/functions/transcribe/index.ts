@@ -173,7 +173,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         // Audio only, no instruction. gemini-3.5-transcribe is a dedicated
         // transcription model: it transcribes what it is given, and a prompt
-        // only adds tokens (verified -- identical output with and without).
+        // only adds tokens (verified, identical output with and without).
         contents: [{
           role: 'user',
           parts: [
@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
 
   // The transcription models answer with a part shaped
   // { audioTranscription: { text } } rather than the { text } a chat model
-  // returns -- reading only `.text` silently yields an empty transcript, which
+  // returns, reading only `.text` silently yields an empty transcript, which
   // is exactly what happened the first time this was wired up. Handle both, so
   // this keeps working if the model is ever swapped for a general one.
   //

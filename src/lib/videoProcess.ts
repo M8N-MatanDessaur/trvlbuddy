@@ -61,7 +61,7 @@ export interface TrimResult {
   poster: File;      // jpeg captured from the chosen start frame, 4:5 cropped
   durationMs: number;
   startMs: number;   // offset into the source where playback should begin
-  width: number;     // poster width — what the feed renders at
+  width: number;     // poster width, what the feed renders at
   height: number;    // poster height
 }
 

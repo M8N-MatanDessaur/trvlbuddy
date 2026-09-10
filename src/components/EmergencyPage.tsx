@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Phone, Shield, Building2, Globe } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
+import { useScope } from '../hooks/useScope';
 import { EmergencyContact } from '../types/TravelData';
 import LocalEmergency from './LocalEmergency';
 
@@ -8,14 +9,19 @@ import LocalEmergency from './LocalEmergency';
 // created and are stored with it, so this path works offline already.
 //
 // Without a trip we hand over to LocalEmergency, which reads bundled numbers.
-// That used to be an AI call made at the moment of need -- see the note in
+// That used to be an AI call made at the moment of need, see the note in
 // LocalEmergency for why that was the wrong shape for an SOS screen.
 
 interface CountryInfo { id: string; name: string; languages: string[]; }
 
 const EmergencyPage: React.FC = () => {
-  const { currentPlan, emergencyContacts, appMode } = useTravel();
-  const isLocalMode = appMode === 'local' || !currentPlan;
+  const { currentPlan: loadedPlan, emergencyContacts, appMode } = useTravel();
+  // At /emergency this is the country you are standing in. At
+  // /trip/<id>/emergency it is the trip's. The address decides, so a loaded
+  // trip cannot hand you Korean emergency numbers while you are in Montreal.
+  const scope = useScope();
+  const currentPlan = scope.kind === 'trip' ? loadedPlan : null;
+  const isLocalMode = scope.kind === 'local' || appMode === 'local' || !currentPlan;
   const [selectedCountry, setSelectedCountry] = useState('');
 
   const allCountries = useMemo((): CountryInfo[] => {

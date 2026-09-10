@@ -773,7 +773,7 @@ async function enrichActivitiesWithPlaces(
   const { findPlaceFromText } = await import('./googlePlacesService');
 
   // Index activities by their place context so the query lands on the right city.
-  // Skip activities that already have coords + placeId -- nothing to enrich,
+  // Skip activities that already have coords + placeId, nothing to enrich,
   // and re-running burns quota for no value (e.g. partial re-enrichment of
   // a trip that was already processed).
   const queries: Array<{
@@ -1907,7 +1907,7 @@ Rules:
 - "keyword": short phrase (1-3 words) for specific flavor (e.g. "ramen", "brunch", "rooftop", "cherry blossom"). Leave empty if the chip is a pure category.
 - Prefer chips that match the time of day and day of week (breakfast in the morning, bars/live music late night, brunch on weekend mornings, etc).
 - If the city has a well-known local specialty and the types are present, include one chip for it (e.g. poutine in Montreal, ramen in Tokyo, bagels in Montreal/NYC).
-- Avoid generic duplicates — each chip should feel distinct.
+- Avoid generic duplicates. Each chip should feel distinct.
 - Do not suggest chips for categories that are 0 nearby.
 
 Return ONLY minified JSON array. No markdown, no prose.`;

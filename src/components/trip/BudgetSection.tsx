@@ -78,7 +78,7 @@ const BudgetSection: React.FC<Props> = ({ tripId, tripCurrencies = [] }) => {
     // Live sync: when a co-member adds / edits / deletes an expense on
     // this trip, refetch so the budget panel and breakdown stay in sync
     // without a manual refresh. Postgres_changes on the table is
-    // sufficient — the change set is small (max a few hundred rows per
+    // sufficient, the change set is small (max a few hundred rows per
     // trip) so a full refetch is cheaper than diffing payloads.
     const channel = supabase
       .channel(`trip-expenses-${tripId}`)
@@ -232,7 +232,7 @@ const BudgetSection: React.FC<Props> = ({ tripId, tripCurrencies = [] }) => {
       {/* Total */}
       <div className="px-4 pb-3">
         <div className="text-[28px] font-extrabold leading-none tracking-tight">
-          {rates ? formatMoney(summary.total, homeCurrency) : '—'}
+          {rates ? formatMoney(summary.total, homeCurrency) : '...'}
         </div>
         <div className="text-[11px] mt-1" style={{ color: 'var(--text-secondary)' }}>
           Total spent in {homeCurrency}

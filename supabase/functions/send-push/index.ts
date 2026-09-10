@@ -6,7 +6,7 @@
 //
 // CALLER MUST BE THE DATABASE. This function takes recipient_id, title, body
 // and url straight from the request, so an unauthenticated version of it is a
-// way to push arbitrary text to any user's phone -- a phishing pipe with our
+// way to push arbitrary text to any user's phone, a phishing pipe with our
 // name on the notification. It is invoked by the notifications trigger with
 // the service role key as the bearer (see
 // 20260424_push_webhook_template.sql), so that is exactly what it checks, in
@@ -68,8 +68,8 @@ Deno.serve(async (req) => {
     return json({ error: 'Server not configured' }, 500, corsHeaders);
   }
 
-  // Only the database may call this. Anything else -- including a valid user
-  // session -- is refused, because the payload decides who gets notified and
+  // Only the database may call this. Anything else, including a valid user
+  // session, is refused, because the payload decides who gets notified and
   // what it says. Checked before the VAPID config so an unauthorised caller
   // learns nothing about how the server is set up.
   //

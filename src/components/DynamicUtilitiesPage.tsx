@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { AlertTriangle, ArrowRightLeft } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ArrowRightLeft } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
+import { useScope } from '../hooks/useScope';
+import { factsFor } from '../data/countryFacts';
+import { reverseGeocodeCountry } from '../utils/geocoding';
 import PhotoScanner from './tools/PhotoScanner';
 import PackingList from './tools/PackingList';
+import WhereYouAreCard from './tools/WhereYouAreCard';
 
 interface CurrencyInfo { code: string; rate: number; }
 
@@ -10,14 +14,56 @@ const COMMON_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'KRW', 'CHF
 const QUICK_AMOUNTS = [10, 20, 50, 100];
 
 const DynamicUtilitiesPage: React.FC = () => {
-  const { currentPlan, appMode } = useTravel();
-  const isLocalMode = appMode === 'local' || !currentPlan;
+  const { currentPlan: loadedPlan, appMode } = useTravel();
+  // The address decides what this screen is about. At /tools it is where you
+  // are standing, so the trip that happens to be loaded is not consulted at
+  // all -- that is how the currency and the plugs for South Korea ended up on
+  // a Tools screen opened from Nearby in Montreal.
+  const scope = useScope();
+  const currentPlan = scope.kind === 'trip' ? loadedPlan : null;
+  const isLocalMode = scope.kind === 'local' || appMode === 'local' || !currentPlan;
   const [selectedCurrency, setSelectedCurrency] = useState('');
   const [localAmount, setLocalAmount] = useState('');
   const [homeAmount, setHomeAmount] = useState('');
   const [homeCurrency, setHomeCurrency] = useState(() => localStorage.getItem('homeCurrency') || 'USD');
   const [exchangeRates, setExchangeRates] = useState<{ [key: string]: number }>({});
   const [ratesLoading, setRatesLoading] = useState(true);
+  // Where the practical facts are about. On a trip that is the destination.
+  // Off one it is wherever you are standing, which is the whole point of the
+  // Tools tab in Nearby: it used to refuse to open at all without a plan.
+  const [hereCountry, setHereCountry] = useState<{ code: string; name: string } | null>(null);
+  const [locating, setLocating] = useState(false);
+
+  const tripCountry = useMemo(() => {
+    if (!currentPlan) return null;
+    const dest = currentPlan.destination || currentPlan.destinations?.[0];
+    const code = (dest as { countryCode?: string; country?: string } | undefined)?.countryCode
+      ?? (dest as { country?: string } | undefined)?.country
+      ?? null;
+    const name = (dest as { country?: string } | undefined)?.country ?? null;
+    return code ? { code, name: name ?? code } : null;
+  }, [currentPlan]);
+
+  useEffect(() => {
+    // Only ask the browser where we are when there is no trip to answer for
+    // us. Position is not needed to convert currency, and asking for it when
+    // it changes nothing is rude.
+    if (tripCountry || hereCountry || locating) return;
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const found = await reverseGeocodeCountry(pos.coords.latitude, pos.coords.longitude);
+        setHereCountry(found ? { code: found.code, name: found.name } : null);
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { timeout: 8000, maximumAge: 600000 },
+    );
+  }, [tripCountry, hereCountry, locating]);
+
+  const country = tripCountry ?? hereCountry;
+  const facts = useMemo(() => factsFor(country?.code ?? null), [country?.code]);
 
   const getAllCurrencies = (): CurrencyInfo[] => {
     if (isLocalMode) {
@@ -87,28 +133,23 @@ const DynamicUtilitiesPage: React.FC = () => {
     return rate > 0 ? (homeAmt * rate).toFixed(0) : '...';
   };
 
-  if (allCurrencies.length === 0) {
-    return (
-      <section className="page">
-        <div className="text-center py-16">
-          <AlertTriangle size={32} style={{ color: 'var(--error)', margin: '0 auto 12px' }} />
-          <h2 className="mb-2">No Destinations</h2>
-          <p className="text-[var(--text-secondary)]">Complete onboarding to access tools.</p>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <section className="page space-y-5">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight mb-1">Tools</h1>
         <p className="text-[13px] text-[var(--text-secondary)]">
-          {isLocalMode ? 'Currency and photo translator' : 'Currency, photos, and packing'}
+          {country ? `What to know in ${country.name}` : 'The practical things'}
         </p>
       </div>
 
+      <WhereYouAreCard
+        place={country?.name ?? null}
+        facts={facts}
+        loading={locating}
+      />
+
       {/* Currency converter */}
+      {allCurrencies.length > 0 && (
       <div className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-bold text-[var(--text-tertiary)] uppercase tracking-[0.1em]">Currency</span>
@@ -150,6 +191,7 @@ const DynamicUtilitiesPage: React.FC = () => {
 
         {ratesLoading && <div className="text-[10px] text-center text-[var(--text-tertiary)]">Loading rates...</div>}
       </div>
+      )}
 
       {/* Photo Scanner */}
       <PhotoScanner />

@@ -23,7 +23,7 @@ const WelcomeScreen: React.FC = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Cached trips list — same SWR snapshot as the profile carousel, so
+  // Cached trips list, same SWR snapshot as the profile carousel, so
   // returning to this screen never re-flashes the shimmer.
   const { trips: savedTrips, loading: tripsLoading } = useMyTrips(user?.id ?? null);
   const [openingTripId, setOpeningTripId] = useState<string | null>(null);

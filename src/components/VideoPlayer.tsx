@@ -121,7 +121,7 @@ const VideoPlayer: React.FC<Props> = ({
         playsInline
         autoPlay={autoplay}
         preload="metadata"
-        // No native `loop` — we manage the window bounds via timeupdate.
+        // No native `loop`, we manage the window bounds via timeupdate.
         style={{
           width: '100%',
           height: '100%',

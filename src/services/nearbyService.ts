@@ -18,7 +18,7 @@ import { NEARBY_ICON_REGISTRY } from './nearbyIconRegistry';
 
 import { placesCallSafe } from '../lib/placesProxy';
 import { curatePlaces } from './placeScore';
-// Photos come exclusively from user uploads in Supabase -- never from
+// Photos come exclusively from user uploads in Supabase, never from
 // Places Photo (the single biggest cost item pre-pivot).
 
 export interface NearbyPlace {
@@ -58,7 +58,7 @@ export interface NearbyCursorSnapshot {
 }
 
 // Used as the taxonomy for the sweep loop and for constraining AI chip /
-// prompt interpretation — NOT for rendering card labels. Card labels come
+// prompt interpretation, NOT for rendering card labels. Card labels come
 // straight from Google's primaryTypeDisplayName.
 export const CATEGORIES: CategoryDef[] = [
   { type: 'restaurant', label: 'Restaurant', icon: UtensilsCrossed },
@@ -123,7 +123,7 @@ const EXCLUDED_PLACE_TYPES = new Set<string>([
 ]);
 
 // Icon fallbacks keyed by Google primaryType values that don't match the
-// NEARBY_ICON_REGISTRY keys 1:1. Purely for icon selection — labels come
+// NEARBY_ICON_REGISTRY keys 1:1. Purely for icon selection, labels come
 // from primaryTypeDisplayName so we never need a label table.
 const PRIMARY_TYPE_ICON_ALIASES: Record<string, string> = {
   grocery_store: 'market',
@@ -159,7 +159,7 @@ const PRIMARY_TYPE_ICON_ALIASES: Record<string, string> = {
 
 // Resolves an icon from the dynamic API data. Preference: primaryType exact
 // match → primaryType alias → types list (first hit) → suffix heuristics
-// (_restaurant/_store/_shop) → MapPin. No label logic — the card label is
+// (_restaurant/_store/_shop) → MapPin. No label logic, the card label is
 // always Google's primaryTypeDisplayName.text.
 export function iconForPrimaryType(primaryType?: string, types: string[] = []): LucideIcon {
   const candidates = [primaryType, ...types].filter((c): c is string => Boolean(c));
@@ -181,7 +181,7 @@ export function iconForPrimaryType(primaryType?: string, types: string[] = []): 
 
 // Snake_case → Title Case fallback for the rare case where the API omits
 // primaryTypeDisplayName but gives us a primaryType (e.g. "ice_cream_shop"
-// → "Ice Cream Shop"). Still dynamic — no lookup table.
+// → "Ice Cream Shop"). Still dynamic, no lookup table.
 function titleCaseType(type: string): string {
   return type
     .split('_')
@@ -393,7 +393,7 @@ export class NearbyFeedCursor {
 
   // Returns null on any v1 failure (network, non-2xx, etc.) so the caller
   // can fall back to legacy. Empty-but-OK responses return an empty array
-  // (no failure — there just aren't any places of this type in radius).
+  // (no failure, there just aren't any places of this type in radius).
   private async fetchCategoryV1(
     cat: CategoryDef,
     radius: number,
@@ -401,7 +401,7 @@ export class NearbyFeedCursor {
     try {
       const useTextSearch = Boolean(cat.noTypeSearch && this.globalKeyword);
       // Through the places edge function. The netlify.toml redirects are gone
-      // -- they hid the URL but still carried the API key from the browser.
+      //, they hid the URL but still carried the API key from the browser.
       const op = useTextSearch ? 'searchText' : 'searchNearby';
 
       const body: Record<string, unknown> = { maxResultCount: 20 };
@@ -409,7 +409,7 @@ export class NearbyFeedCursor {
         // Free-text searches (e.g. a specific place name like "Bee Bagels"
         // or a phrase like "best ramen") need a much wider net than a
         // category sweep. Bias toward the user but don't restrict to the
-        // tight nearby radius -- otherwise a place 3km away vanishes.
+        // tight nearby radius, otherwise a place 3km away vanishes.
         // We still rank by Haversine distance below so far results sink.
         const biasRadius = Math.max(radius, TEXT_SEARCH_BIAS_RADIUS_M);
         body.textQuery = this.globalKeyword;
@@ -441,9 +441,9 @@ export class NearbyFeedCursor {
         if (!v1PermissionWarned) {
           v1PermissionWarned = true;
           console.warn(
-            '[nearby] Places API (New) request failed — falling back to legacy API.',
+            '[nearby] Places API (New) request failed, falling back to legacy API.',
             'Enable "Places API (New)" in Google Cloud Console and allow it on the API key.',
-            'If you just enabled it, give it 1–2 minutes to propagate.',
+            'If you just enabled it, give it a minute or two to propagate.',
             { reason: 'places proxy returned no payload' },
           );
         }
@@ -477,7 +477,7 @@ export class NearbyFeedCursor {
     } catch (err) {
       if (!v1PermissionWarned) {
         v1PermissionWarned = true;
-        console.warn('[nearby] Places API (New) fetch threw — falling back to legacy.', err);
+        console.warn('[nearby] Places API (New) fetch threw, falling back to legacy.', err);
       }
       return null;
     }
@@ -594,7 +594,7 @@ function convertV1Place(raw: PlacesV1Place, userLocation: UserLocation): NearbyP
 }
 
 // Google Places "what did the user mean?" lookup. Used by the Nearby feed to
-// pin the searched-for place at the top — Google handles typos and partial
+// pin the searched-for place at the top, Google handles typos and partial
 // names ("bbagel" -> "bbagels") far better than a category sweep ever can.
 // Returns null when the user's API key is missing, the proxy fails, or the
 // top hit is filtered out (excluded type or beyond the 50km soft cap).

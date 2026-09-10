@@ -1,3 +1,4 @@
+import { useScrollLock } from '../../hooks/useScrollLock';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Loader2, MessageCircle, Pencil, Reply, SendHorizontal, Trash2, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -74,6 +75,7 @@ const ImageCommentsSheet: React.FC<Props> = ({
   onAddComment,
   onDeleteComment,
 }) => {
+  useScrollLock(isOpen);
   const { user } = useAuth();
   const { toast } = useToast();
   const [comments, setComments] = useState<ActivityImageComment[]>([]);

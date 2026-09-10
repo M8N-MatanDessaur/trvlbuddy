@@ -1,4 +1,4 @@
-// open.er-api.com — free, no API key, CORS-friendly, ~160 currencies from
+// open.er-api.com, free, no API key, CORS-friendly, ~160 currencies from
 // ECB + fallbacks. We fetch the full table once per 24h keyed on the base
 // currency so every (base -> target) pair is served from the same cache
 // entry. exchangerate.host used to work keyless but now requires an API
@@ -31,7 +31,7 @@ function writeCache(rates: ExchangeRates): void {
   try {
     window.localStorage.setItem(CACHE_PREFIX + rates.base, JSON.stringify(rates));
   } catch {
-    // Quota exceeded — best-effort.
+    // Quota exceeded, best-effort.
   }
 }
 
@@ -65,7 +65,7 @@ export function convert(amount: number, rates: ExchangeRates, target: string): n
 }
 
 // Best-effort guess at the user's home currency from browser locale. Only
-// used as a default — the UI should let them override.
+// used as a default, the UI should let them override.
 export function guessHomeCurrency(): string {
   if (typeof navigator === 'undefined') return 'USD';
   try {

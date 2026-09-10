@@ -22,9 +22,15 @@ html, body {
   min-height: 100dvh;
   background: var(--bg-primary);
   overflow: hidden;
-  /* Make this the containing block for `position: fixed` descendants so the
-     Header and other fixed elements stay inside the frame on desktop. */
-  transform: translateZ(0);
+  /* No transform here.
+     
+     It used to carry `transform: translateZ(0)` to make this the containing
+     block for fixed descendants, back when the app was a phone-shaped frame
+     floating on a desktop backdrop. The frame is gone, and the side effect
+     was not: a transformed ancestor makes `position: fixed` resolve against
+     THIS box rather than the viewport, so a full-screen viewer covered the
+     top of the page and you could simply scroll past it to the page
+     underneath. Fixed means fixed to the window. */
 }
 .auth-screen {
   height: 100dvh;
@@ -72,14 +78,72 @@ html, body {
   }
 
   /* Content columns widen instead of the frame. Beyond this the lines get
-     too long to read comfortably. */
+     too long to read comfortably.
+
+     width:100% is load-bearing. A .page is a flex item, so without it the
+     column shrinks to its content -- which is how a full-screen feed ended up
+     81px wide on a 1512px monitor with its own contents overlapping. */
   .app-frame .page,
   .app-frame .container {
+    width: 100%;
     max-width: 1120px;
     margin-inline: auto;
   }
   .app-frame .min-h-screen { min-height: 100dvh; }
   .app-frame .auth-screen { min-height: 100dvh; }
+}
+
+/* Desktop: the rail beside the content, and a stage for the feed.
+
+   A one-at-a-time swipe feed cannot be full-bleed on a wide monitor -- a
+   single photograph 1500px across is a billboard, not a card you flick
+   through. It gets a column the shape of the thing it is instead, centred,
+   with the page behind it. */
+@media (min-width: 1024px) {
+  .app-frame .page-stage {
+    /* The stage plus the panel beside it. */
+    max-width: 53rem;
+    padding-top: 1.25rem;
+  }
+  /* On a phone the feed cancels the page's padding to run to the edges of the
+     screen. Here there are no edges to run to, so it stands down and the
+     stage sits inside that padding as a card, with the panel next to it. */
+  .app-frame .page-stage .pager-frame {
+    margin: 0 0 1.25rem !important;
+  }
+  .app-frame .page-stage .pager-row {
+    display: flex;
+    gap: 1.25rem;
+    align-items: stretch;
+  }
+  .app-frame .page-stage .pager-stage {
+    flex: 0 0 27rem;
+    width: 27rem;
+    border-radius: 22px;
+    overflow-x: hidden;
+    box-shadow: var(--shadow-lg);
+  }
+  .app-frame .page-stage .pager-side {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.25rem 0;
+  }
+}
+
+/* The active carousel dot fills while its slide is up, so the photo moving on
+   by itself is something you saw coming rather than something that happened
+   to you. */
+@keyframes tb-slide-progress {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+.tb-slide-progress {
+  animation-name: tb-slide-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tb-slide-progress { animation: none; width: 100%; }
 }
 
 :root {
@@ -725,4 +789,67 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ---------------------------------------------------------------------------
+   Empty posters
+   ---------------------------------------------------------------------------
+   A location nobody has photographed yet still has to feel like somewhere,
+   not like a failed image load. The ground drifts, two soft blobs float
+   across it, and a slow sheen passes over -- enough to read as alive at a
+   glance without competing with the words on top.
+
+   Durations are long on purpose: this sits behind text people are reading.
+   The global prefers-reduced-motion rule above switches all of it off. */
+
+@keyframes tb-poster-drift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes tb-poster-float {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(5%, -4%, 0) scale(1.1); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes tb-poster-sheen {
+  0%   { transform: translateX(-130%) skewX(-12deg); opacity: 0; }
+  30%  { opacity: 0.3; }
+  70%  { opacity: 0.3; }
+  100% { transform: translateX(240%) skewX(-12deg); opacity: 0; }
+}
+
+.tb-poster {
+  background-size: 220% 220%;
+  animation: tb-poster-drift 24s ease-in-out infinite;
+}
+
+.tb-poster-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(44px);
+  opacity: 0.4;
+  animation: tb-poster-float 20s ease-in-out infinite;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.tb-poster-sheen {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  animation: tb-poster-sheen 11s ease-in-out infinite;
+  animation-delay: 3s;
+  pointer-events: none;
+}
+
+/* Translate only. The rotation lives on a wrapper, because an animation on
+   transform would otherwise cancel an inline rotate. */
+.tb-poster-mark {
+  animation: tb-poster-float 30s ease-in-out infinite;
+  will-change: transform;
 }

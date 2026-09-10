@@ -113,7 +113,7 @@ const SettingsPage: React.FC = () => {
 
   const goBack = () => {
     if (window.history.length > 1) navigate(-1);
-    else navigate('/');
+    else navigate('/trip');
   };
 
   const handleSaveToCloud = async () => {
@@ -581,8 +581,8 @@ const SettingsPage: React.FC = () => {
                         {pushPermission === 'denied'
                           ? 'Blocked in browser settings'
                           : pushSubscribed
-                          ? 'On — likes, comments, mentions'
-                          : 'Off — tap to enable'}
+                          ? 'On for likes, comments and mentions'
+                          : 'Off. Tap to enable.'}
                       </div>
                     </div>
                     <span

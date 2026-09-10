@@ -110,6 +110,29 @@ async function staleWhileRevalidate(request, cacheName, maxEntries, { requireOk 
   return network || Response.error();
 }
 
+// Network first, falling back to the last good copy. For data that changes
+// because the person using the app changed it: correctness first, and the
+// cache is there for when there is no network at all.
+async function networkFirst(request, cacheName, maxEntries) {
+  const cache = await caches.open(cacheName);
+  try {
+    const response = await fetch(request.clone());
+    if (response && response.ok && response.status === 200) {
+      try {
+        await cache.put(request, response.clone());
+        await trimCache(cacheName, maxEntries);
+      } catch (e) {
+        /* a cache write failing must never fail the request */
+      }
+    }
+    return response;
+  } catch (e) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw e;
+  }
+}
+
 async function trimCache(cacheName, maxEntries) {
   const cache = await caches.open(cacheName);
   const keys = await cache.keys();
@@ -160,10 +183,18 @@ self.addEventListener('fetch', (event) => {
       );
       return;
     }
-    // PostgREST reads: stale-while-revalidate. Mutating methods were already
-    // filtered above (GET-only handler). Don't touch /auth/* or /realtime/*.
+    // PostgREST reads: network first, cache only as the offline fallback.
+    //
+    // This was stale-while-revalidate, which is wrong for a database. Write a
+    // row and read the list back at the same URL and SWR hands you the copy
+    // from before the write -- so a tip posted successfully came back to an
+    // empty list, and still did after a reload. Anything the user just did
+    // has to be visible immediately; being a little slower on a cold read is
+    // a much smaller cost than showing someone that their post vanished.
+    // React Query is what makes reads feel instant here; this cache exists so
+    // the app still opens with something on a train.
     if (url.pathname.startsWith('/rest/v1/')) {
-      event.respondWith(staleWhileRevalidate(event.request, REST_CACHE, REST_MAX_ENTRIES));
+      event.respondWith(networkFirst(event.request, REST_CACHE, REST_MAX_ENTRIES));
       return;
     }
     // Auth / realtime / functions: pass through untouched so live sessions

@@ -24,7 +24,7 @@ interface UseCompletedActivitiesResult {
 }
 
 /**
- * One source of truth for "I did this" -- shared between the Explore cards,
+ * One source of truth for "I did this", shared between the Explore cards,
  * the Trip dashboard's Done section, and the Map's done-overlay.
  */
 export function useCompletedActivities(): UseCompletedActivitiesResult {

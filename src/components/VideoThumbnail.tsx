@@ -14,7 +14,7 @@ interface Props {
 // Renders a poster image for a video tile. Some older video rows shipped
 // with empty or all-black posters (the poster pipeline misfired on
 // uploads before the trim refactor landed). When the poster fails to
-// load — or any time we can decode a real frame from the video — we
+// load, or any time we can decode a real frame from the video, we
 // swap in the live first frame, so the grid never shows a black square.
 const VideoThumbnail: React.FC<Props> = ({
   videoUrl,

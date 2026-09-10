@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useTravel } from '../contexts/TravelContext';
+import { useChromePill } from '../contexts/ChromeContext';
 import { translateWithPronunciation } from '../services/aiService';
 import { groupTranslationsBySituation, getContextualGroups } from '../utils/situationGroups';
 import { useContextualContent } from '../hooks/useContextualContent';
 import ContextualPhraseBanner from './language/ContextualPhraseBanner';
 import ShowToLocal from './ShowToLocal';
-import { Volume2, Copy, Check, ArrowRight, Loader2, ChevronDown, ChevronRight, Maximize2, BookmarkPlus, Bookmark, Trash2 } from 'lucide-react';
+import { Volume2, Copy, Check, ArrowRight, Loader2, ChevronDown, ChevronRight, Maximize2, BookmarkPlus, Bookmark, Trash2, Languages as LanguagesIcon } from 'lucide-react';
 
 const DynamicTranslatorPage: React.FC = () => {
   const { currentPlan, translations } = useTravel();
@@ -27,22 +28,11 @@ const DynamicTranslatorPage: React.FC = () => {
   const userToggledAccordion = useRef(false);
   const [showToLocalData, setShowToLocalData] = useState<{ phrases: { local: string; english: string; pronunciation?: string }[]; index: number } | null>(null);
 
-  if (!currentPlan) {
-    return (
-      <section className="page">
-        <div className="text-center py-16">
-          <h2 className="mb-3">No Travel Plan</h2>
-          <p className="text-[var(--text-secondary)]">Complete onboarding for translations.</p>
-        </div>
-      </section>
-    );
-  }
-
   // Build a map of language -> destinationId for filtering, excluding English
   // since all phrases already show English in the left column.
   const languageDestMap = useMemo(() => {
     const map = new Map<string, string>();
-    const destinations = currentPlan.destinations || (currentPlan.destination ? [currentPlan.destination] : []);
+    const destinations = currentPlan?.destinations || (currentPlan?.destination ? [currentPlan.destination] : []);
     for (const dest of destinations) {
       const primary = dest.languages?.[0];
       if (primary && primary.toLowerCase() !== 'english') {
@@ -50,7 +40,7 @@ const DynamicTranslatorPage: React.FC = () => {
       }
     }
     // Also check segments for destinations not in the top-level array
-    currentPlan.segments?.forEach((s: any) => {
+    currentPlan?.segments?.forEach((s: any) => {
       const primary = s.destination?.languages?.[0];
       if (primary && primary.toLowerCase() !== 'english' && !map.has(primary)) {
         map.set(primary, s.destination.id);
@@ -62,6 +52,41 @@ const DynamicTranslatorPage: React.FC = () => {
   const languages = useMemo(() => Array.from(languageDestMap.keys()), [languageDestMap]);
 
   const currentLanguage = selectedLanguage || languages[0] || 'Local';
+
+  // The pill says which language you are working in, and switches it. That is
+  // this screen's version of the question the pill always answers, which
+  // context am I in, so the chip row that used to do it in the page is gone
+  // rather than duplicated.
+  useChromePill(
+    {
+      label: currentLanguage,
+      icon: LanguagesIcon,
+      menu:
+        languages.length > 1 ? (
+          <>
+            {languages.map((lang) => (
+              <button
+                key={lang}
+                type="button"
+                onClick={() => setSelectedLanguage(lang)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left"
+                style={{
+                  background: lang === currentLanguage ? 'var(--accent-container)' : 'transparent',
+                  border: 'none',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                <span className="text-[13px] font-bold flex-1 truncate">{lang}</span>
+                {lang === currentLanguage && (
+                  <Check size={14} style={{ color: 'var(--accent)' }} />
+                )}
+              </button>
+            ))}
+          </>
+        ) : undefined,
+    },
+    [currentLanguage, languages],
+  );
 
   const filteredTranslations = useMemo(() => {
     if (languages.length <= 1) return translations;
@@ -174,22 +199,26 @@ const DynamicTranslatorPage: React.FC = () => {
     setTimeout(() => setCopiedText(''), 2000);
   };
 
+  // Below every hook on purpose. This guard used to sit above them, which
+  // meant a session without a plan ran a different number of hooks than one
+  // with a plan, the thing React cannot survive.
+  if (!currentPlan) {
+    return (
+      <section className="page">
+        <div className="text-center py-16">
+          <h2 className="mb-3">No Travel Plan</h2>
+          <p className="text-[var(--text-secondary)]">Complete onboarding for translations.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="page space-y-5">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight mb-1">Language</h1>
         <p className="text-[13px] text-[var(--text-secondary)]">{currentLanguage} phrases and AI translator</p>
       </div>
-
-      {languages.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-          {languages.map(lang => (
-            <button key={lang} onClick={() => setSelectedLanguage(lang)} className="px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all" style={{ background: lang === currentLanguage ? 'var(--accent)' : 'var(--surface-container)', color: lang === currentLanguage ? 'var(--on-accent)' : 'var(--text-secondary)' }}>
-              {lang}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Contextual phrase banner */}
       <ContextualPhraseBanner

@@ -4,7 +4,7 @@ import { Lock, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 
-// Rendered when Supabase fires PASSWORD_RECOVERY — the user clicked a reset
+// Rendered when Supabase fires PASSWORD_RECOVERY, the user clicked a reset
 // link and is signed in with a recovery-scoped session. Forcing them through
 // this screen before any main-app routes prevents a half-finished recovery
 // from leaving them logged in without changing their password.
@@ -28,7 +28,7 @@ const PasswordResetPage: React.FC = () => {
     setBusy(false);
     if (err) { setError(err); return; }
     exitRecoveryMode();
-    toast('Password updated — welcome back', 'success');
+    toast('Password updated. Welcome back.', 'success');
     navigate('/', { replace: true });
   };
 

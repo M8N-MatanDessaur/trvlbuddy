@@ -5,7 +5,7 @@ import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 import VideoThumbnail from './VideoThumbnail';
 
 // Slide types for the unified media carousel. The carousel stays
-// dumb — it just renders whatever items are passed in — so callers
+// dumb, it just renders whatever items are passed in, so callers
 // can mix photos and short videos in the same horizontal swipe deck.
 export type MediaSlide =
   | { kind: 'image'; src: string; thumbhash?: string | null }
@@ -24,6 +24,13 @@ interface Props {
   style?: React.CSSProperties;
   eagerCount?: number;
   onIndexChange?: (index: number) => void;
+  /**
+   * Move on by itself every this many milliseconds. Off unless asked for.
+   *
+   * Only ever while the carousel is actually on screen, never while a video
+   * slide is playing, and never for someone who has asked for less motion.
+   */
+  autoAdvanceMs?: number;
 }
 
 const MAX_RETRIES = 2;
@@ -73,7 +80,7 @@ const SlideVideo: React.FC<{
     return () => el.removeEventListener('timeupdate', onTimeUpdate);
   }, [startSec, endSec, isActive]);
 
-  // Pause when the slide isn't the active one — saves battery and avoids
+  // Pause when the slide isn't the active one, saves battery and avoids
   // garbled audio if the muted-attribute ever falls off (it shouldn't).
   useEffect(() => {
     const el = ref.current;
@@ -100,13 +107,28 @@ const SlideVideo: React.FC<{
   );
 };
 
-const MediaCarousel: React.FC<Props> = ({ items, className, style, eagerCount = 2, onIndexChange }) => {
+const MediaCarousel: React.FC<Props> = ({
+  items,
+  className,
+  style,
+  eagerCount = 2,
+  onIndexChange,
+  autoAdvanceMs = 0,
+}) => {
   const [index, setIndex] = useState(0);
   const [loadedUrls, setLoadedUrls] = useState<Set<string>>(new Set());
   const [erroredUrls, setErroredUrls] = useState<Set<string>>(new Set());
   const [retryByUrl, setRetryByUrl] = useState<Map<string, number>>(new Map());
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const swiping = useRef(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  // Whether this carousel is the one being looked at. The feed keeps a
+  // hundred pages mounted; every one of them advancing in the background
+  // would burn battery to animate something nobody is watching.
+  const [onScreen, setOnScreen] = useState(false);
+  // Held while a finger or button is down, so it never moves out from under
+  // a swipe.
+  const [held, setHeld] = useState(false);
 
   const itemsKey = useMemo(
     () => items.map((it) => `${it.kind}:${it.src}`).join(' '),
@@ -158,6 +180,35 @@ const MediaCarousel: React.FC<Props> = ({ items, className, style, eagerCount = 
     if (active) onIndexChange?.(active.originalIndex);
   }, [index, valid, onIndexChange]);
 
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setOnScreen(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => setOnScreen(entry.isIntersecting && entry.intersectionRatio > 0.6),
+      { threshold: [0, 0.6, 1] },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const activeIsVideo = valid[index]?.slide.kind === 'video';
+
+  useEffect(() => {
+    if (!autoAdvanceMs || count < 2) return;
+    if (!onScreen || held) return;
+    // A video is its own timing. Cutting away mid-clip is rude, so the
+    // carousel waits for a person to move it on.
+    if (activeIsVideo) return;
+    if (typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+    const timer = setTimeout(() => setIndex((i) => (i + 1) % count), autoAdvanceMs);
+    return () => clearTimeout(timer);
+  }, [autoAdvanceMs, count, index, onScreen, held, activeIsVideo]);
+
   const go = (next: number) => {
     if (count === 0) return;
     if (next < 0) next = count - 1;
@@ -195,11 +246,19 @@ const MediaCarousel: React.FC<Props> = ({ items, className, style, eagerCount = 
 
   return (
     <div
+      ref={rootRef}
       className={className}
       style={{ overflow: 'hidden', ...style }}
-      onTouchStart={onTouchStart}
+      onTouchStart={(e) => { setHeld(true); onTouchStart(e); }}
       onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
+      onTouchEnd={(e) => { setHeld(false); onTouchEnd(e); }}
+      onTouchCancel={() => setHeld(false)}
+      // Held, not hovered. Pausing on hover would freeze the carousel for as
+      // long as a desktop pointer happened to be resting over the picture,
+      // which looks broken rather than considerate.
+      onPointerDown={() => setHeld(true)}
+      onPointerUp={() => setHeld(false)}
+      onPointerCancel={() => setHeld(false)}
     >
       {items.map((slide, i) => {
         const validIdx = valid.findIndex((entry) => entry.originalIndex === i);
@@ -234,7 +293,7 @@ const MediaCarousel: React.FC<Props> = ({ items, className, style, eagerCount = 
 
         // Video slide. We render only the active video element to keep
         // memory + decode pressure low when many cards live in the feed
-        // — non-active videos collapse to a thumbnail until they become
+        //, non-active videos collapse to a thumbnail until they become
         // active again. VideoThumbnail handles black/missing posters by
         // decoding the live first frame on the client.
         if (!isActive) {
@@ -278,17 +337,35 @@ const MediaCarousel: React.FC<Props> = ({ items, className, style, eagerCount = 
 
       {count > 1 && (
         <div className="absolute bottom-3 left-4 flex items-center gap-1.5 z-10">
-          {valid.map((entry, i) => (
-            <div
-              key={`${entry.slide.kind}-${entry.originalIndex}`}
-              className="rounded-full transition-all duration-300"
-              style={{
-                width: i === index ? '14px' : '5px',
-                height: '5px',
-                background: i === index ? 'white' : 'rgba(255,255,255,0.5)',
-              }}
-            />
-          ))}
+          {valid.map((entry, i) => {
+            const isActive = i === index;
+            const ticking = isActive && autoAdvanceMs > 0 && onScreen && !held && !activeIsVideo;
+            return (
+              <div
+                key={`${entry.slide.kind}-${entry.originalIndex}`}
+                className="rounded-full transition-all duration-300 overflow-hidden"
+                style={{
+                  width: isActive ? '14px' : '5px',
+                  height: '5px',
+                  background: isActive ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.5)',
+                }}
+              >
+                {isActive && (
+                  <div
+                    // Keyed on the index so the fill restarts with each slide.
+                    key={index}
+                    className={ticking ? 'tb-slide-progress' : undefined}
+                    style={{
+                      height: '100%',
+                      width: ticking ? undefined : '100%',
+                      background: 'white',
+                      animationDuration: `${autoAdvanceMs}ms`,
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

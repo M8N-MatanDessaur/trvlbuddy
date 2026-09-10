@@ -13,7 +13,7 @@ import { placesCallSafe } from '../lib/placesProxy';
 // morning vs afternoon vs evening produce different chips, but within a
 // 30-minute window the suggestions are stable.
 const CACHE_TTL_MS = 30 * 60 * 1000;
-// v2 — bumped from v1 (emoji-based chips) to invalidate old cached
+// v2, bumped from v1 (emoji-based chips) to invalidate old cached
 // entries when switching to lucide iconKey-based chips.
 const CACHE_KEY_PREFIX = 'nearby-chips-v2:';
 
@@ -76,7 +76,7 @@ function writeCache(key: string, chips: NearbyChipSuggestion[]): void {
   }
 }
 
-// Single broad Nearby Search call — no type filter — to sample what's actually
+// Single broad Nearby Search call, no type filter, to sample what's actually
 // around the user. The returned result types feed a count-per-type map that
 // Gemini uses to pick chips grounded in reality instead of pure guessing.
 async function scanTypeCounts(

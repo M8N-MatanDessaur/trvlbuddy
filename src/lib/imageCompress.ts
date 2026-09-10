@@ -3,7 +3,7 @@ import imageCompression from 'browser-image-compression';
 // Every upload goes through this. Phone photos come in at 3-6 MB; we
 // downscale the long edge to 1600 px, recompress to WebP quality 0.82, and
 // strip EXIF so GPS/author metadata isn't leaked. Output is typically
-// 200-400 KB — a 10-20x reduction with no perceptible quality loss for
+// 200-400 KB, a 10-20x reduction with no perceptible quality loss for
 // social-feed use. File name keeps the original stem so downloads read
 // naturally; extension switches to .webp.
 

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 export interface ChatMessage {
   id: string;
@@ -16,28 +16,60 @@ interface ChatContextType {
   clearChat: () => void;
 }
 
-const ChatContext = createContext<ChatContextType | undefined>(undefined);
+interface Store {
+  threads: Record<string, ChatMessage[]>;
+  set: (key: string, msgs: ChatMessage[]) => void;
+  add: (key: string, msg: ChatMessage) => void;
+  clear: (key: string) => void;
+}
 
-export const useChat = () => {
+const ChatContext = createContext<Store | undefined>(undefined);
+
+/**
+ * One conversation per place you are having it.
+ *
+ * Chat exists twice over: at /chat it is about where you are standing, and at
+ * /trip/<id>/chat it is about that trip. They were one array, so asking about
+ * dinner near you and asking about the trip appended to the same thread, and
+ * whichever screen you opened showed the other one's history. A thread is
+ * keyed by whatever the caller says it belongs to.
+ *
+ * Held in memory only, as before: a conversation is a session, not a record.
+ */
+export const useChat = (threadKey = 'local'): ChatContextType => {
   const ctx = useContext(ChatContext);
   if (!ctx) throw new Error('useChat must be used within ChatProvider');
-  return ctx;
+
+  const { threads, set, add, clear } = ctx;
+  const messages = useMemo(() => threads[threadKey] ?? [], [threads, threadKey]);
+
+  return useMemo(
+    () => ({
+      messages,
+      addMessage: (msg: ChatMessage) => add(threadKey, msg),
+      setMessages: (msgs: ChatMessage[]) => set(threadKey, msgs),
+      clearChat: () => clear(threadKey),
+    }),
+    [messages, threadKey, add, set, clear],
+  );
 };
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [threads, setThreads] = useState<Record<string, ChatMessage[]>>({});
 
-  const addMessage = useCallback((msg: ChatMessage) => {
-    setMessages(prev => [...prev, msg]);
+  const set = useCallback((key: string, msgs: ChatMessage[]) => {
+    setThreads((prev) => ({ ...prev, [key]: msgs }));
   }, []);
 
-  const clearChat = useCallback(() => {
-    setMessages([]);
+  const add = useCallback((key: string, msg: ChatMessage) => {
+    setThreads((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), msg] }));
   }, []);
 
-  return (
-    <ChatContext.Provider value={{ messages, addMessage, setMessages, clearChat }}>
-      {children}
-    </ChatContext.Provider>
-  );
+  const clear = useCallback((key: string) => {
+    setThreads((prev) => ({ ...prev, [key]: [] }));
+  }, []);
+
+  const value = useMemo(() => ({ threads, set, add, clear }), [threads, set, add, clear]);
+
+  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 };

@@ -150,7 +150,7 @@ const ShareTripModal: React.FC<Props> = ({ isOpen, onClose, tripId }) => {
                   className="font-mono text-[20px] font-extrabold break-all text-center"
                   style={{ color: 'var(--text-primary)', letterSpacing: '0.04em' }}
                 >
-                  {loading ? 'Generating...' : code || '—'}
+                  {loading ? 'Generating...' : code || 'Not ready yet'}
                 </div>
                 <button
                   onClick={() => copy('code', code)}

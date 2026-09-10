@@ -16,7 +16,7 @@ const TAP_SLOP = 8;
 const PageIndicator: React.FC<Props> = ({ pages, currentIndex, onPageSelect }) => {
   // Whether the last gesture actually moved. framer-motion fires onDragEnd
   // for a press that shifts a pixel, and the buttons live inside the draggable
-  // element -- so a tap became a drag, the drag changed page, and the button's
+  // element, so a tap became a drag, the drag changed page, and the button's
   // own click was swallowed. Tracking real movement lets a tap be a tap.
   const dragged = useRef(false);
 
@@ -42,7 +42,9 @@ const PageIndicator: React.FC<Props> = ({ pages, currentIndex, onPageSelect }) =
     <motion.div
       className="flex items-center justify-center gap-0.5 py-3 px-2 select-none"
       style={{
-        borderTop: '0.33px solid var(--outline)',
+        // No rule above the bar: the feed runs full-bleed to the bottom and a
+        // hairline there cuts the screen in two.
+        borderTop: 'none',
         background: 'var(--bg-primary)',
         touchAction: 'pan-y',
         cursor: 'grab',

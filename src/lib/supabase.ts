@@ -14,6 +14,16 @@ export const supabase = createClient<Database>(url, anonKey, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
   },
+  global: {
+    // Never let the browser answer a database read from its own cache.
+    //
+    // PostgREST sends no cache headers, so an HTTP cache is free to answer a
+    // repeated GET heuristically, which for a database read means handing
+    // back the state from before your own write. The service worker was doing
+    // the same thing one layer up (see public/sw.js); both layers have to
+    // stay out of the way. React Query is what caches data in this app.
+    fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }),
+  },
 });
 
 // 'email' is omitted deliberately: the column privilege is revoked for anon

@@ -14,7 +14,7 @@ let _placesBlocked: { reason: 'OVER_QUERY_LIMIT' | 'REQUEST_DENIED'; message: st
 // re-burn quota on activities Google has already said it can't find.
 //
 // v2 abandons the v1 entries that got poisoned by treating quota / auth
-// errors as "this query has no result" -- old caches would short-circuit
+// errors as "this query has no result", old caches would short-circuit
 // every lookup forever after the first OVER_QUERY_LIMIT.
 const NEG_KEY = 'places-negative-v2';
 const NEG_TTL_MS = 1000 * 60 * 60 * 24 * 7;
@@ -114,7 +114,7 @@ export async function findPlaceFromText(
     // Through the places edge function. It used to go via the Netlify
     // /api/places/* redirect, which solved the CORS problem (Google's legacy
     // Places API sends no CORS headers) but still carried the API key from
-    // the browser -- and made our own domain a convenient open proxy for
+    // the browser, and made our own domain a convenient open proxy for
     // anyone who had read the key out of the bundle. The proxy solves CORS
     // too, and holds the key server side.
     const data = await placesCallSafe<{
@@ -141,7 +141,7 @@ export async function findPlaceFromText(
     }
     const cand = data.candidates?.[0];
     if (!cand?.place_id || !cand.geometry?.location) {
-      // Genuine "Google considered this and found nothing" -- safe to cache.
+      // Genuine "Google considered this and found nothing", safe to cache.
       recordMiss(trimmed);
       return null;
     }
@@ -158,7 +158,7 @@ export async function findPlaceFromText(
 }
 
 /**
- * Text Search ($32 / 1K) -- more permissive than Find Place, better at
+ * Text Search ($32 / 1K), more permissive than Find Place, better at
  * matching descriptive AI-generated names ("Cozy cafe near Han River") to
  * real places. Use as a fallback after findPlaceFromText returns null.
  */

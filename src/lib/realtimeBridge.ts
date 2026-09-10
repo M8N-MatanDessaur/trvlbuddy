@@ -5,7 +5,7 @@ import { queryKeys } from './queryKeys';
 // Wires Supabase Realtime postgres_changes into React Query cache
 // invalidation. One channel per table, fired ONCE at app start. When a
 // row changes, we narrow the invalidation to the SPECIFIC affected
-// activity / user — never the whole namespace — so 50 cards on screen
+// activity / user, never the whole namespace, so 50 cards on screen
 // don't all refetch when one upvote lands somewhere unrelated.
 //
 // We do NOT filter self-writes. A previous attempt did, but Gemini Pro
@@ -64,7 +64,7 @@ function invalidateByVideoId(qc: QueryClient, videoId: string | undefined | null
 // On upload events the affected user is `uploaded_by`. On likes /
 // comments the affected user is the *image owner* (engagement received
 // drives counts), which we'd need a join to look up. To stay cheap we
-// only invalidate the actor's own profile in those cases — the
+// only invalidate the actor's own profile in those cases, the
 // recipient sees the count update on their next mount or via the
 // 30s staleTime kicking in. Acceptable since likes/comments don't
 // change the visible photo grid, just counters.

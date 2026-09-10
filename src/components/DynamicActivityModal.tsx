@@ -36,7 +36,7 @@ const DynamicActivityModal: React.FC<Props> = ({ activity, isOpen, onClose }) =>
   // Hooks MUST run on every render in the same order. The previous version
   // had `if (!activity) return null` between useActivityMedia and the
   // useMemo below, so the hook count changed when activity toggled between
-  // null and non-null -- React #310 in production builds. Slides only
+  // null and non-null, React #310 in production builds. Slides only
   // reads mediaItems, so we can safely compute it before the activity
   // guard and return null afterwards.
   const slides: MediaSlide[] = useMemo(

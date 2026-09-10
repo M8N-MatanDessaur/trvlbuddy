@@ -33,7 +33,7 @@ export function writeEmergencyCache(entry: CachedEmergency): void {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(entry));
   } catch {
-    // storage full / disabled — fail silently
+    // storage full / disabled, fail silently
   }
 }
 

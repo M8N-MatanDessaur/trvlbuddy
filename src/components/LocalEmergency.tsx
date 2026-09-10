@@ -14,7 +14,7 @@ import {
 // This screen used to ask Gemini for emergency numbers for your coordinates,
 // which meant the screen you open when something has gone wrong depended on a
 // network round trip, a working API key, and credit on the account. When the
-// Gemini credits ran out, SOS stopped working entirely -- and there was no
+// Gemini credits ran out, SOS stopped working entirely, and there was no
 // fallback of any kind, just "Couldn't load emergency info".
 //
 // The rules now:
@@ -79,7 +79,7 @@ const LocalEmergency: React.FC = () => {
       if (cancelled || !loc) return;
 
       // Reverse geocoding goes through the places proxy and is cached for 30
-      // days server side -- a coordinate's country does not move. If it is
+      // days server side, a coordinate's country does not move. If it is
       // unavailable we simply keep whatever country we already had.
       const found = await reverseGeocodeCountry(loc.lat, loc.lng);
       if (cancelled) return;
@@ -170,7 +170,7 @@ const LocalEmergency: React.FC = () => {
       )}
 
       {/* Always available: correct the country by hand. This is the whole
-          reason the screen cannot dead-end -- no location, no network, no
+          reason the screen cannot dead-end, no location, no network, no
           problem. */}
       <div className="space-y-2">
         <button

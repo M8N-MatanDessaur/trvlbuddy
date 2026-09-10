@@ -17,8 +17,59 @@ export interface FetchLiveEventsOptions {
 
 export const DEFAULT_LIVE_EVENTS_RADIUS_KM = 50;
 
-const cache = new Map<string, { events: LocalEvent[]; fetchedAt: number }>();
+interface CachedEvents {
+  events: LocalEvent[];
+  fetchedAt: number;
+}
+
+const cache = new Map<string, CachedEvents>();
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const STORE_PREFIX = 'tb:live-events:v1:';
+
+// The in-memory map above only lives as long as the tab. Asking a model what
+// is on nearby takes several seconds, and doing it again on every reload is
+// the single longest wait in the Nearby screen, so the answer is also kept
+// in localStorage under the same key, which already carries today's date and
+// therefore expires on its own.
+function readStoredEvents(key: string): CachedEvents | null {
+  try {
+    const raw = localStorage.getItem(STORE_PREFIX + key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedEvents;
+    if (!Array.isArray(parsed?.events) || typeof parsed.fetchedAt !== 'number') return null;
+    if (Date.now() - parsed.fetchedAt >= CACHE_TTL) {
+      localStorage.removeItem(STORE_PREFIX + key);
+      return null;
+    }
+    return parsed;
+  } catch {
+    // Unreadable storage is the same as an empty cache: fetch instead.
+    return null;
+  }
+}
+
+function rememberEvents(key: string, value: CachedEvents): void {
+  cache.set(key, value);
+  try {
+    // Yesterday's keys are dead the moment the date rolls over, so clear them
+    // out rather than letting them accumulate until the quota complains.
+    for (const existing of Object.keys(localStorage)) {
+      if (existing.startsWith(STORE_PREFIX) && existing !== STORE_PREFIX + key) {
+        const stored = localStorage.getItem(existing);
+        if (!stored) continue;
+        try {
+          const parsed = JSON.parse(stored) as CachedEvents;
+          if (Date.now() - (parsed?.fetchedAt ?? 0) >= CACHE_TTL) localStorage.removeItem(existing);
+        } catch {
+          localStorage.removeItem(existing);
+        }
+      }
+    }
+    localStorage.setItem(STORE_PREFIX + key, JSON.stringify(value));
+  } catch {
+    // Over quota or unwritable. The in-memory copy still serves this tab.
+  }
+}
 
 export async function fetchLiveEvents(
   destinationName: string,
@@ -34,8 +85,9 @@ export async function fetchLiveEvents(
   const cacheKey = `${coords.lat.toFixed(2)},${coords.lng.toFixed(2)},${radiusKm},${today},${focus}`;
 
   if (canCache) {
-    const cached = cache.get(cacheKey);
+    const cached = cache.get(cacheKey) ?? readStoredEvents(cacheKey);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
+      cache.set(cacheKey, cached);
       return cached.events;
     }
   }
@@ -46,7 +98,7 @@ export async function fetchLiveEvents(
       : '';
 
     const focusBlock = focus
-      ? `\n\nSTRICT FOCUS: The user specifically asked for "${focus}". ONLY include events that clearly and directly match this request. Reject anything that does not fit — do NOT return adjacent or tangential events (e.g. if they asked for "outdoor markets", do NOT return exhibitions, concerts, or indoor gallery shows). If nothing matches within ${radiusKm} km, return an empty array []. An empty array is the correct answer when nothing truly matches.`
+      ? `\n\nSTRICT FOCUS: The user specifically asked for "${focus}". ONLY include events that clearly and directly match this request. Reject anything that does not fit, do NOT return adjacent or tangential events (e.g. if they asked for "outdoor markets", do NOT return exhibitions, concerts, or indoor gallery shows). If nothing matches within ${radiusKm} km, return an empty array []. An empty array is the correct answer when nothing truly matches.`
       : '';
 
     const prompt = `What events, festivals, pop-up markets, exhibitions, or performances are happening today (${today}) strictly within a ${radiusKm} km radius of ${destinationName} (approximate coordinates ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})?
@@ -74,7 +126,7 @@ If you cannot find any qualifying events within the radius, return an empty arra
 
     const jsonMatch = text.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      if (canCache) cache.set(cacheKey, { events: [], fetchedAt: Date.now() });
+      if (canCache) rememberEvents(cacheKey, { events: [], fetchedAt: Date.now() });
       return [];
     }
 
@@ -88,7 +140,7 @@ If you cannot find any qualifying events within the radius, return an empty arra
         return { ...e, sourceUrl: isHttp ? url : undefined };
       });
 
-    if (canCache) cache.set(cacheKey, { events, fetchedAt: Date.now() });
+    if (canCache) rememberEvents(cacheKey, { events, fetchedAt: Date.now() });
     return events;
   } catch (err) {
     console.error('Live events fetch failed:', err);

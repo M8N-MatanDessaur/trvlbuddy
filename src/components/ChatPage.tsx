@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SendHorizontal, MapPin, Navigation, Loader2, LocateFixed, Mic, Square } from 'lucide-react';
 import { useTravel } from '../contexts/TravelContext';
+import { useScope } from '../hooks/useScope';
 import { useChat, ChatMessage } from '../contexts/ChatContext';
 import { chatWithTripAssistant, chatWithLocalAssistant, transcribeAudio } from '../services/aiService';
 import { useToast } from '../contexts/ToastContext';
@@ -8,9 +9,20 @@ import { getCurrentLocation, getCachedLocation, startWatchingLocation, UserLocat
 import { reverseGeocodeLocality } from '../utils/geocoding';
 
 const ChatPage: React.FC = () => {
-  const { currentPlan, activities, appMode } = useTravel();
-  const isLocalMode = appMode === 'local';
-  const { messages, addMessage, setMessages } = useChat();
+  const { currentPlan: loadedPlan, activities: tripActivities, appMode } = useTravel();
+  // Two conversations, not one. At /chat the assistant is about what is
+  // around you; at /trip/<id>/chat it has the trip to work with. The address
+  // is what says which, so walking into Chat from Nearby does not open a
+  // conversation about a trip you were not looking at.
+  const scope = useScope();
+  const isLocalMode = scope.kind === 'local' || appMode === 'local';
+  const currentPlan = isLocalMode ? null : loadedPlan;
+  const activities = isLocalMode ? [] : tripActivities;
+  // The thread belongs to the scope: the conversation about where you are is
+  // not the conversation about a trip, and each trip keeps its own.
+  const { messages, addMessage, setMessages } = useChat(
+    scope.kind === 'trip' && scope.tripId ? `trip:${scope.tripId}` : 'local',
+  );
   const { toast } = useToast();
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);

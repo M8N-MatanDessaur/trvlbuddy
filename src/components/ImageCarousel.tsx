@@ -14,7 +14,7 @@ interface Props {
 
 // On error we ask the SW to drop the cached entry, then remount the <img>
 // via the key. The fresh fetch fully replaces the bad cache entry on
-// success — unlike a `?_r=N` cachebuster, which leaves the original URL
+// success, unlike a `?_r=N` cachebuster, which leaves the original URL
 // poisoned and just creates a parallel cache entry that fills the bucket.
 const MAX_RETRIES = 2;
 
@@ -22,7 +22,7 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
   const [index, setIndex] = useState(0);
   // Track loaded/errored state by URL, not by index. Parents may hand back a
   // fresh array on every state update with the same URLs, and surviving
-  // <img> elements (stable key={src}) won't remount or refire onLoad — so
+  // <img> elements (stable key={src}) won't remount or refire onLoad, so
   // index-keyed state would falsely mark them as not-yet-loaded and hide
   // them at opacity 0 forever.
   const [loadedUrls, setLoadedUrls] = useState<Set<string>>(new Set());
@@ -117,7 +117,7 @@ const ImageCarousel: React.FC<Props> = ({ images, thumbhashes, className, style,
         const isActive = validIdx === index;
         const attempt = retryByUrl.get(src) ?? 0;
         // Key includes the retry count so a fresh <img> element is created
-        // each retry — without that, the browser would re-use the cached
+        // each retry, without that, the browser would re-use the cached
         // (poisoned) response for the same DOM node.
         return (
           <img

@@ -45,6 +45,7 @@ import MentionSuggestions from './MentionSuggestions';
 import MentionBody from './MentionBody';
 import CachedImage from './CachedImage';
 import { useAuth } from '../contexts/AuthContext';
+import { useScrollLock } from '../hooks/useScrollLock';
 import { useToast } from '../contexts/ToastContext';
 import { impact as hapticImpact, success as hapticSuccess, tap as hapticTap, warning as hapticWarning } from '../lib/haptics';
 
@@ -181,6 +182,13 @@ const ProfileMediaViewer: React.FC<Props> = ({
   };
 
   const open = initialIndex !== null && media.length > 0;
+  // Opening a post is going somewhere, not looking through a window at the
+  // page you left: the page behind holds still while it is up.
+  //
+  // Tied to `open`, not to being mounted. This component stays mounted and
+  // renders null when there is nothing to show, so locking on mount locked
+  // the profile page for the whole session.
+  useScrollLock(open);
   const item = open ? media[Math.max(0, Math.min(index, media.length - 1))] : null;
   const ownItem = !!user && !!uploaderId && uploaderId === user.id;
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Heart,
@@ -9,6 +9,7 @@ import {
   Bookmark,
 } from 'lucide-react';
 import { NearbyPlace, formatDistance, priceLevelLabel } from '../../services/nearbyService';
+import { listActivityImageComments } from '../../services/activityMediaService';
 import { useActivityMedia } from '../../hooks/useActivityMedia';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSavedPlace } from '../../hooks/useSavedPlaces';
@@ -17,14 +18,40 @@ import UploadMediaButton from '../UploadMediaButton';
 import Avatar from '../Avatar';
 import { useToast } from '../../contexts/ToastContext';
 import ImageCommentsSheet from './ImageCommentsSheet';
+import { posterFor } from './poster';
+import ActivityPageShell from './ActivityPageShell';
+import PlaceDetailSheet from './PlaceDetailSheet';
+import PlacePulseLine from './PlacePulseLine';
+import type { PlacePulse } from '../../services/placePulse';
 
 interface Props {
   place: NearbyPlace;
+  /** Who has been here and what they left, when anyone has. */
+  pulse?: PlacePulse | null;
+  /**
+   * A free photograph of the place, when one exists, for the variant nobody
+   * has uploaded to yet. A row with a picture is worth reading; a row of text
+   * among twenty others is not.
+   */
+  heroImage?: string | null;
+  /**
+   * 'card' is the row in the scrolling feed. 'page' is one activity filling
+   * the screen in the pager, where the next one is a swipe away. Both run the
+   * same hooks and the same handlers, so votes, comments, likes, saves and
+   * uploads behave identically whichever way you are looking at a place.
+   */
+  variant?: 'card' | 'page';
+  /**
+   * What kind of answer this is in the merged feed, "Open now", "Near you".
+   * Shown on the page variant, where a full-bleed frame otherwise gives no
+   * clue whether you are looking at a bar, a landmark or tonight's festival.
+   */
+  tag?: string;
 }
 
 const ACTION_SIZE = 38;
 
-const NearbyPost: React.FC<Props> = ({ place }) => {
+const NearbyPost: React.FC<Props> = ({ place, heroImage, variant = 'card', tag, pulse }) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -34,6 +61,19 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
   const locationUrl = `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`;
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  // Comments across every photo of this place, for the More sheet. Loaded
+  // only when that sheet is opened, and only for photos that have any: the
+  // feed itself has no use for comment bodies, so fetching them up front
+  // would be a query per photo per card for nothing.
+  const [allComments, setAllComments] = useState<
+    Array<{
+      id: string;
+      body: string;
+      created_at: string;
+      author: { id?: string; display_name?: string | null; avatar_url?: string | null } | null;
+    }>
+  >([]);
 
   const activityKey = useMemo(
     () => ({
@@ -50,6 +90,7 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
 
   const {
     images,
+    activityId,
     mediaItems,
     uploading,
     upload,
@@ -93,6 +134,37 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
   // screen so the avatar matches the slide. Falls back to the first
   // image's poster when a video slide doesn't carry one.
   const poster = activeImage?.poster ?? images[0]?.poster ?? null;
+
+  useEffect(() => {
+    if (!detailOpen) return;
+    const withComments = images.filter((image) => (image.commentCount ?? 0) > 0);
+    if (withComments.length === 0) {
+      setAllComments([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const lists = await Promise.all(
+        withComments.map((image) =>
+          listActivityImageComments(image.id)
+            .then((comments) => comments.map((comment) => ({
+              id: comment.id,
+              body: comment.body,
+              created_at: comment.created_at,
+              // The uploader is the only profile the feed already holds; a
+              // commenter's own profile is not loaded here.
+              author: comment.user_id === image.poster?.id ? image.poster : null,
+            })))
+            .catch(() => []),
+        ),
+      );
+      if (cancelled) return;
+      setAllComments(
+        lists.flat().sort((a, b) => b.created_at.localeCompare(a.created_at)),
+      );
+    })();
+    return () => { cancelled = true; };
+  }, [detailOpen, images]);
 
   const handleLike = async () => {
     if (!activeImage) return;
@@ -330,6 +402,222 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
       </button>
     </div>
   );
+  // ---------- Page variant (one activity, filling the screen) ----------
+  if (variant === 'page') {
+    // Whatever there is to look at, in order of how much it is worth looking
+    // at: what people have posted, then a free photograph of the place, then
+    // a poster. There is always something, so a page is never blank.
+    const hasMedia = mediaItems.length > 0;
+    const bare = !hasMedia && !heroImage;
+    const empty = posterFor(place.placeId || place.name, place.categoryLabel);
+
+    const uploadPill = (
+      <UploadMediaButton
+        onPhotoFile={upload}
+        onVideoResult={uploadVideo}
+        uploading={uploading}
+        className="flex items-center gap-2 transition-transform active:scale-[0.97]"
+        style={{ ...pillBaseStyle, background: '#fff', color: '#111', border: 'none' }}
+        size={15}
+        cta="Add a photo"
+        ariaLabel="Add the first photo or video"
+      />
+    );
+
+    return (
+      <>
+        <ActivityPageShell
+          media={
+            hasMedia ? (
+              <MediaCarousel
+                items={slides}
+                className="absolute inset-0"
+                eagerCount={2}
+                onIndexChange={setActiveImageIndex}
+                // What people posted here, one after another, without being
+                // asked. A place with six photographs should look like a place
+                // six people went to, and it cannot do that a photo at a time.
+                autoAdvanceMs={4200}
+              />
+            ) : heroImage ? (
+              <img
+                src={heroImage}
+                alt=""
+                decoding="async"
+                className="absolute inset-0 w-full h-full object-cover"
+                draggable={false}
+              />
+            ) : (
+              <>
+                {/* Nobody has photographed this yet. That is the normal case
+                    for an independent place, so it gets a poster of its own,
+                    and it varies per location. */}
+                <div
+                  className="absolute inset-0 tb-poster"
+                  style={{ background: empty.background, animationDuration: `${empty.driftSeconds}s` }}
+                />
+                {empty.blobs.map((blob, b) => (
+                  <div
+                    key={b}
+                    className="tb-poster-blob"
+                    style={{
+                      top: blob.top,
+                      left: blob.left,
+                      width: blob.size,
+                      aspectRatio: '1 / 1',
+                      background: blob.color,
+                      animationDelay: blob.delay,
+                    }}
+                    aria-hidden="true"
+                  />
+                ))}
+                <div className="tb-poster-sheen" aria-hidden="true" />
+                <div
+                  className="absolute"
+                  style={{
+                    top: empty.mark.top,
+                    right: empty.mark.right,
+                    left: empty.mark.left,
+                    transform: `rotate(${empty.mark.rotate}deg)`,
+                  }}
+                  aria-hidden="true"
+                >
+                  <CategoryIcon
+                    size={empty.mark.size}
+                    strokeWidth={0.9}
+                    className="tb-poster-mark"
+                    style={{ color: '#fff', opacity: 0.16 }}
+                  />
+                </div>
+              </>
+            )
+          }
+          hasImage={!bare}
+          // The invitation, not the name, the name is already along the
+          // bottom, and saying it twice on one screen reads as a mistake.
+          emptyTitle={empty.cta}
+          emptyBlurb={
+            place.categoryLabel
+              ? `${place.categoryLabel} - ${formatDistance(place.distance)} away. No photos here yet.`
+              : 'No photos here yet.'
+          }
+          emptyAction={uploadPill}
+          // Just the tag above the name; the facts read better under it.
+          context={
+            tag ? (
+              <span
+                className="px-2.5 py-[4px] rounded-full text-[11px]"
+                style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
+              >
+                {tag}
+              </span>
+            ) : null
+          }
+          name={place.name}
+          facts={
+            <>
+              {place.categoryLabel && <span style={{ opacity: 0.85 }}>{place.categoryLabel}</span>}
+              <span>{formatDistance(place.distance)}</span>
+              {place.rating != null && (
+                <span>
+                  {'★'} {place.rating.toFixed(1)}
+                  {ratingCount && <span style={{ opacity: 0.75 }}> ({ratingCount})</span>}
+                </span>
+              )}
+              {price && <span>{price}</span>}
+            </>
+          }
+          address={place.address}
+          pulse={<PlacePulseLine pulse={pulse} onMedia />}
+          visitUrl={null}
+          directionsUrl={locationUrl}
+          vote={votePill}
+          onMore={() => setDetailOpen(true)}
+          mediaOverlay={
+            hasMedia ? (
+              // Like, comment and post, down the right edge where a thumb
+              // already is. Only over real media: there is nothing to like
+              // about a poster.
+              <div className="absolute right-4 z-20 flex flex-col items-center gap-2.5" style={{ bottom: '34%' }}>
+                {poster && (
+                  <button
+                    onClick={openPosterProfile}
+                    className="transition-transform active:scale-90"
+                    style={{
+                      ...overlayCircleStyle(true),
+                      border: '1.5px solid rgba(255,255,255,0.85)',
+                      overflow: 'hidden',
+                    }}
+                    aria-label={`Open ${poster.display_name || 'traveler'} profile`}
+                  >
+                    <Avatar profile={poster} size={ACTION_SIZE - 4} />
+                  </button>
+                )}
+                <button
+                  onClick={handleLike}
+                  className="transition-all active:scale-90 disabled:opacity-40"
+                  style={{ ...overlayCircleStyle(false, activeImage?.likedByViewer), flexDirection: 'column', gap: '1px' }}
+                  aria-label={activeImage?.likedByViewer ? 'Unlike photo' : 'Like photo'}
+                  disabled={!activeImage}
+                >
+                  <Heart size={15} fill={activeImage?.likedByViewer ? 'currentColor' : 'none'} />
+                  <span className="text-[10px] font-extrabold leading-none">{activeImage?.likeCount ?? 0}</span>
+                </button>
+                <button
+                  onClick={() => setCommentsOpen(true)}
+                  className="transition-all active:scale-90 disabled:opacity-40"
+                  style={{ ...overlayCircleStyle(), flexDirection: 'column', gap: '1px' }}
+                  aria-label="Open photo comments"
+                  disabled={!activeImage}
+                >
+                  <MessageCircle size={15} />
+                  <span className="text-[10px] font-extrabold leading-none">{activeImage?.commentCount ?? 0}</span>
+                </button>
+                <UploadMediaButton
+                  onPhotoFile={upload}
+                  onVideoResult={uploadVideo}
+                  uploading={uploading}
+                  style={overlayCircleStyle()}
+                  size={16}
+                  ariaLabel="Add a photo or video"
+                />
+              </div>
+            ) : null
+          }
+        />
+
+        <PlaceDetailSheet
+          isOpen={detailOpen}
+          onClose={() => setDetailOpen(false)}
+          activityId={activityId}
+          name={place.name}
+          address={place.address}
+          rating={place.rating}
+          ratingCount={ratingCount}
+          images={images}
+          fallbackImage={heroImage}
+          comments={allComments}
+          onOpenImage={(image) => {
+            const index = mediaItems.findIndex(
+              (item) => item.kind === 'image' && item.data.id === image.id,
+            );
+            if (index >= 0) setActiveImageIndex(index);
+            setDetailOpen(false);
+            setCommentsOpen(true);
+          }}
+          emptyAction={uploadPill}
+        />
+
+        <ImageCommentsSheet
+          image={activeImage}
+          isOpen={commentsOpen}
+          onClose={() => setCommentsOpen(false)}
+          onAddComment={addImageComment}
+          onDeleteComment={removeImageComment}
+        />
+      </>
+    );
+  }
 
   // ---------- No-image variant (compact) ----------
   if (mediaItems.length === 0) {
@@ -344,64 +632,125 @@ const NearbyPost: React.FC<Props> = ({ place }) => {
           border: '0.5px solid var(--outline)',
         }}
       >
-        {/* Header row: category + distance left, open-external right */}
-        <div className="flex items-center justify-between gap-3 mb-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div
-              className="rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{
-                width: '34px',
-                height: '34px',
-                background: 'var(--accent-container)',
-                color: 'var(--accent)',
-              }}
-            >
-              <CategoryIcon size={16} />
-            </div>
-            {distancePill}
-          </div>
-          {openMapsButton}
-        </div>
-
-        {/* Info */}
-        <h2 className="text-[15.5px] font-extrabold leading-tight tracking-tight">{place.name}</h2>
-        {place.address && (
-          <p
-            className="text-[12px] leading-snug mt-0.5 truncate"
-            style={{ color: 'var(--text-secondary)' }}
+        {/* A picture, the name, and the facts as pills. The picture is the
+            point: a column of these reads as places to go, where a column of
+            text rows reads as a directory listing. */}
+        <div className="flex items-start gap-3">
+          <div
+            className="relative overflow-hidden flex-shrink-0"
+            style={{
+              width: '92px',
+              height: '92px',
+              borderRadius: '16px',
+              background: 'var(--surface-container-high)',
+            }}
           >
-            {place.address}
-          </p>
-        )}
+            {heroImage ? (
+              <img
+                src={heroImage}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            ) : (
+              <>
+                {/* Nothing photographed here yet, so the category stands in.
+                    Still a picture-shaped thing, so the row keeps its rhythm
+                    whether or not a photograph was found. */}
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      'linear-gradient(150deg, var(--accent-container) 0%, var(--surface-container-high) 100%)',
+                  }}
+                />
+                <CategoryIcon
+                  size={46}
+                  strokeWidth={1.25}
+                  className="absolute"
+                  style={{
+                    color: 'var(--accent)',
+                    opacity: 0.5,
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                  aria-hidden="true"
+                />
+              </>
+            )}
+          </div>
 
-        {/* Bottom row: ratings|price left, plus + vote pill right */}
-        <div className="flex items-center justify-between gap-3 mt-2">
           <div className="min-w-0 flex-1">
-            {(place.rating != null || price) && (
-              <p className="text-[12.5px]" style={{ color: 'var(--text-secondary)' }}>
-                {place.rating != null && (
-                  <>
-                    <span style={{ color: 'var(--accent)', fontWeight: 700 }}>★ {place.rating.toFixed(1)}</span>
-                    {ratingCount && <span style={{ opacity: 0.7 }}> ({ratingCount})</span>}
-                  </>
-                )}
-                {place.rating != null && price && <span style={{ opacity: 0.45 }}> &nbsp;|&nbsp; </span>}
-                {price && <span style={{ fontWeight: 700 }}>{price}</span>}
+            <div className="flex items-start justify-between gap-2">
+              <h2
+                className="text-[16px] font-extrabold leading-[1.2] tracking-tight"
+                style={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                } as React.CSSProperties}
+              >
+                {place.name}
+              </h2>
+              <div className="flex-shrink-0">{openMapsButton}</div>
+            </div>
+
+            {/* Category, distance, rating and price as outlined pills, so the
+                facts scan at a glance instead of running together in a line
+                of grey text. */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+              <span
+                className="inline-flex items-center gap-1 px-2 py-[3px] rounded-full text-[10.5px] font-semibold"
+                style={{ border: '1px solid var(--outline-light)', color: 'var(--accent)' }}
+              >
+                <CategoryIcon size={10} />
+                {place.categoryLabel}
+              </span>
+              {distancePill}
+              {place.rating != null && (
+                <span
+                  className="inline-flex items-center px-2 py-[3px] rounded-full text-[10.5px] font-semibold"
+                  style={{ border: '1px solid var(--outline-light)', color: 'var(--text-secondary)' }}
+                >
+                  ★ {place.rating.toFixed(1)}
+                  {ratingCount && <span style={{ opacity: 0.7 }}>&nbsp;({ratingCount})</span>}
+                </span>
+              )}
+              {price && (
+                <span
+                  className="inline-flex items-center px-2 py-[3px] rounded-full text-[10.5px] font-semibold"
+                  style={{ border: '1px solid var(--outline-light)', color: 'var(--text-secondary)' }}
+                >
+                  {price}
+                </span>
+              )}
+            </div>
+
+            {place.address && (
+              <p
+                className="text-[11.5px] leading-snug mt-1.5 truncate"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                {place.address}
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <UploadMediaButton
-              onPhotoFile={upload}
-              onVideoResult={uploadVideo}
-              uploading={uploading}
-              style={solidCircleStyle(true)}
-              size={16}
-              ariaLabel="Add the first photo or video"
-            />
-            {savedButton}
-            {votePill}
-          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 mt-2.5">
+          <UploadMediaButton
+            onPhotoFile={upload}
+            onVideoResult={uploadVideo}
+            uploading={uploading}
+            style={solidCircleStyle(true)}
+            size={16}
+            ariaLabel="Add the first photo or video"
+          />
+          {savedButton}
+          {votePill}
         </div>
       </article>
     );
