@@ -15,6 +15,7 @@ import { useIsDesktop } from './hooks/useMediaQuery';
 import { pathIn, scopeOf, type Scope } from './hooks/useScope';
 import { useTripFromUrl } from './hooks/useTripFromUrl';
 import { useDocumentTitle } from './hooks/useDocumentTitle';
+import { useCanonical } from './hooks/useCanonical';
 import { ChromeProvider } from './contexts/ChromeContext';
 import SwipeNavigator from './components/SwipeNavigator';
 import type { PageDef } from './components/SwipeNavigator';
@@ -109,6 +110,10 @@ const AppContent: React.FC = () => {
   // A trip's sections name their trip in the address, so opening one brings
   // that trip with it rather than showing whichever was loaded last.
   useTripFromUrl(scopeOf(location.pathname));
+
+  // The address this page should be known by, and whether it should be known
+  // at all. Everything past the front page needs an account.
+  useCanonical(location.pathname);
 
   // What the tab, the history entry and the bookmark say. Named for the
   // screen, and on a trip, for the trip.
