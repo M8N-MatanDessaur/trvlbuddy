@@ -1,0 +1,41 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+
+/
+  X-Robots-Tag: index, follow, max-image-preview:large, max-snippet:-1
+
+# Everything below needs an account. Saying so in a header keeps these out of
+# an index even when something links straight to one.
+/trip/*
+  X-Robots-Tag: noindex, follow
+/nearby
+  X-Robots-Tag: noindex, follow
+/explore
+  X-Robots-Tag: noindex, follow
+/tools
+  X-Robots-Tag: noindex, follow
+/language
+  X-Robots-Tag: noindex, follow
+/emergency
+  X-Robots-Tag: noindex, follow
+/chat
+  X-Robots-Tag: noindex, follow
+/profile*
+  X-Robots-Tag: noindex, follow
+/settings
+  X-Robots-Tag: noindex, follow
+/account
+  X-Robots-Tag: noindex, follow
+/notifications
+  X-Robots-Tag: noindex, follow
+/new-trip
+  X-Robots-Tag: noindex, follow
+
+# The share card and the icons are worth caching hard: they never change
+# without changing name.
+/og.png
+  Cache-Control: public, max-age=604800
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

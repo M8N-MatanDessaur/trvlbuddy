@@ -1,33 +1,19 @@
 User-agent: *
 Allow: /
 
-# Sitemap
+# Everything past the front door needs an account, so there is nothing for a
+# crawler to find down there and every one of these is a dead end for it.
+Disallow: /trip/
+Disallow: /nearby
+Disallow: /explore
+Disallow: /tools
+Disallow: /language
+Disallow: /emergency
+Disallow: /chat
+Disallow: /profile
+Disallow: /settings
+Disallow: /account
+Disallow: /notifications
+Disallow: /new-trip
+
 Sitemap: https://trvlbuddy.com/sitemap.xml
-
-# Crawl-delay for respectful crawling
-Crawl-delay: 1
-
-# Block access to admin or private areas (if any)
-Disallow: /admin/
-Disallow: /private/
-Disallow: /*.json$
-
-# Allow all major search engines
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Slurp
-Allow: /
-
-User-agent: DuckDuckBot
-Allow: /
-
-User-agent: Baiduspider
-Allow: /
-
-# Performance optimization
-User-agent: *
-Crawl-delay: 1
