@@ -6,7 +6,7 @@ import { rgbaToThumbHash, thumbHashToDataURL } from 'thumbhash';
 // is cheap enough to do on every paint (~0.1 ms) so we don't memoize unless
 // a profile says we should.
 
-const PREVIEW_MAX = 100; // px — the source for the hash, ThumbHash wants small input.
+const PREVIEW_MAX = 100; // px, the source for the hash, ThumbHash wants small input.
 
 export async function computeThumbhashFromFile(file: File): Promise<string | null> {
   try {

@@ -68,7 +68,7 @@ export async function searchMentionCandidates(query: string, limit = 5): Promise
 
 // Given the current input string + caret position, returns the active
 // mention "fragment" if the caret is inside one. Used to drive the
-// suggestion popover — when it returns non-null, show the dropdown.
+// suggestion popover, when it returns non-null, show the dropdown.
 export interface MentionQueryContext {
   query: string;
   start: number;   // index of the '@'

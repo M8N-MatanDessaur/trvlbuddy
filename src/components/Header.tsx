@@ -76,7 +76,7 @@ const Header: React.FC<Props> = ({ pages }) => {
       if (!user) return;
       if (trip.id === currentTripId && !isLocal) {
         setSwitcherOpen(false);
-        navigate('/');
+        navigate('/trip');
         return;
       }
       setBusyTripId(trip.id);
@@ -97,7 +97,7 @@ const Header: React.FC<Props> = ({ pages }) => {
       setHasCompletedOnboarding(true);
       setCurrentTripId(row.id);
       setSwitcherOpen(false);
-      navigate('/');
+      navigate('/trip');
     },
     [
       user,

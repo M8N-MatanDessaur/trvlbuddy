@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LocateFixed, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car, Calendar, Plus, Bookmark } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { LocateFixed, RefreshCw, Radar, Globe, ArrowUp, Footprints, Car, Calendar, Plus, Bookmark, Layers, Rows3, User, Plane } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContextEngine } from '../../contexts/ContextEngineContext';
 import { listSavedPlaces, placeFromSavedRow } from '../../services/savedPlacesService';
@@ -22,14 +23,29 @@ import {
   readFeedCache,
   writeFeedCache,
 } from '../../services/nearbyFeedCache';
+import { useIsDesktop } from '../../hooks/useMediaQuery';
+import { pulseForSlugs, type PlacePulse } from '../../services/placePulse';
 import NearbyPost from './NearbyPost';
+import NearbyPager from './NearbyPager';
+import { resolveImages } from '../../services/imageLookup';
+import { wikipediaNearby, osmNearby, mergeDiscoveries, type DiscoveryPlace } from '../../services/discovery';
+import { wikivoyageNearby } from '../../services/wikivoyage';
+import { interleaveFeed } from '../../services/unifiedFeed';
+import { getPreferences, rankByPreferences } from '../../services/preferences';
+import { reverseGeocodeLocality } from '../../utils/geocoding';
+import { fetchLiveEvents, DEFAULT_LIVE_EVENTS_RADIUS_KM, type LocalEvent } from '../../services/liveEventsService';
+import { fetchTicketmasterEvents } from '../../services/ticketmasterEvents';
 import NearbyLiveEvents from './NearbyLiveEvents';
 import NearbyPromptBar, { NearbyPromptBarHandle } from './NearbyPromptBar';
 import { interpretNearbyPrompt, NearbyChipSuggestion } from '../../services/aiService';
 import { fetchDynamicChips } from '../../services/nearbyChipsService';
 import { iconFor } from '../../services/nearbyIconRegistry';
 import { useToast } from '../../contexts/ToastContext';
-import { getActivityScoresBySlug } from '../../services/activityMediaService';
+import { useTravel } from '../../contexts/TravelContext';
+import { listMyTrips, loadTrip } from '../../services/tripsService';
+import type { Trip } from '../../lib/supabase';
+import Avatar from '../Avatar';
+import { getActivityScoresBySlug, computeSlug } from '../../services/activityMediaService';
 
 const CHIP_SCAN_RADIUS_BY_MODE: Record<TransportMode, number> = {
   foot: 1500,
@@ -41,11 +57,24 @@ type Status = 'idle' | 'locating' | 'loading' | 'ready' | 'denied' | 'error';
 const BATCH_SIZE = 5;
 const PREFETCH_AHEAD = 3;
 const TRANSPORT_STORAGE_KEY = 'nearby-transport-mode';
+const VIEW_STORAGE_KEY = 'nearby-view-mode';
+
+/** 'one' pages through activities one at a time; 'list' is the whole column. */
+type ViewMode = 'one' | 'list';
 
 function readStoredTransportMode(): TransportMode {
   if (typeof window === 'undefined') return 'foot';
   const stored = window.localStorage.getItem(TRANSPORT_STORAGE_KEY);
   return stored === 'car' ? 'car' : 'foot';
+}
+
+function readStoredViewMode(): ViewMode {
+  if (typeof window === 'undefined') return 'one';
+  try {
+    return window.localStorage.getItem(VIEW_STORAGE_KEY) === 'list' ? 'list' : 'one';
+  } catch {
+    return 'one';
+  }
 }
 
 // Tokens shorter than this never count toward a name-match. Stops noise
@@ -107,10 +136,35 @@ const NearbyFeed: React.FC = () => {
   const [isSpecificName, setIsSpecificName] = useState(false);
   const [savedMode, setSavedMode] = useState(false);
   const [savedPlaces, setSavedPlaces] = useState<NearbyPlace[]>([]);
+  // Places get no sourced photograph, so the list rows carry none either.
+  const heroImages: Record<string, string> = {};
+  const [viewMode, setViewMode] = useState<ViewMode>(readStoredViewMode);
+  // Whether the panel under the avatar is open.
+  const [controlsOpen, setControlsOpen] = useState<'filters' | null>(null);
+  const isDesktop = useIsDesktop();
+  // Where we think you are, shown in the pager where the page header used to
+  // say it.
+  const [localityLabel, setLocalityLabel] = useState<string | null>(null);
+  // What this person said they want to see first.
+  const [preferences, setPreferences] = useState<string[]>([]);
+  // The trips this person has, offered by the location pill: on this screen
+  // the pin answers "what am I exploring", and a trip is a valid answer.
+  const [myTrips, setMyTrips] = useState<Trip[]>([]);
+  const [feedEvents, setFeedEvents] = useState<Array<{ event: LocalEvent; imageUrl?: string | null }>>([]);
+  const [discoveries, setDiscoveries] = useState<DiscoveryPlace[]>([]);
+  const [feedImages, setFeedImages] = useState<Record<string, string>>({});
   const [savedLoading, setSavedLoading] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user, profile } = useAuth();
   const { moment } = useContextEngine();
+  const {
+    setCurrentPlan,
+    setActivities,
+    setAppMode,
+    setHasCompletedOnboarding,
+    setCurrentTripId,
+  } = useTravel();
 
   const cursorRef = useRef<NearbyFeedCursor | null>(null);
   const fetchingRef = useRef(false);
@@ -157,7 +211,7 @@ const NearbyFeed: React.FC = () => {
       setPlacesTracked(nextPlaces);
       if (cursor.isExhausted()) setExhausted(true);
       // Persist after every fetch so a remount of the tab rehydrates with
-      // everything the user has already loaded — no repeat Places API calls.
+      // everything the user has already loaded, no repeat Places API calls.
       const ctx = cacheContextRef.current;
       if (ctx) writeFeedCache(ctx, nextPlaces, cursor.snapshot());
     } catch (err) {
@@ -180,7 +234,7 @@ const NearbyFeed: React.FC = () => {
       };
       cacheContextRef.current = ctx;
 
-      // Cache hit — same context, user hasn't moved past the mode's
+      // Cache hit, same context, user hasn't moved past the mode's
       // tolerance, within TTL. Rehydrate without hitting Places API.
       const cached = readFeedCache(ctx);
       if (cached) {
@@ -209,7 +263,7 @@ const NearbyFeed: React.FC = () => {
     try {
       const loc = await getCurrentLocation();
       setUserLocation(loc);
-      // Explicit refresh — user tapped the button or we just re-acquired GPS,
+      // Explicit refresh, user tapped the button or we just re-acquired GPS,
       // so bypass the cache for this context and refetch from Places.
       clearFeedCache({
         location: loc,
@@ -361,7 +415,7 @@ const NearbyFeed: React.FC = () => {
 
   // Ask Google "what place did the user mean?" with the raw prompt, not the
   // AI-rewritten keyword. Google's text search forgives typos ("bbagel" ->
-  // "bbagels") and partial matches better than any local heuristic — the
+  // "bbagels") and partial matches better than any local heuristic, the
   // result gets pinned to the very top of the feed below. Gated on the
   // Gemini interpreter saying the prompt looks like a specific business
   // name; otherwise we skip the lookup and save a Places API call on
@@ -387,7 +441,7 @@ const NearbyFeed: React.FC = () => {
   }, [aiPrompt, userLocation, isSpecificName]);
 
   const selectDynamicChip = useCallback((chip: NearbyChipSuggestion) => {
-    // Apply the chip's pre-interpreted types/keyword directly — no extra
+    // Apply the chip's pre-interpreted types/keyword directly, no extra
     // Gemini round-trip needed since suggestNearbyChips already resolved them.
     setAiPrompt(chip.label);
     setAiKeyword(chip.keyword);
@@ -475,10 +529,23 @@ const NearbyFeed: React.FC = () => {
   // table fall back to score 0, so unranked items still come back in the
   // original distance-sorted order.
   const [scoreBySlug, setScoreBySlug] = useState<Map<string, number>>(new Map());
+  const [pulseBySlug, setPulseBySlug] = useState<Map<string, PlacePulse>>(new Map());
   useEffect(() => {
     if (uniquePlaces.length === 0) return;
     let cancelled = false;
     const slugs = uniquePlaces.map((p) => `gpid-${p.placeId}`);
+    // What people have left on these places, in one go. Free, it is our own
+    // database, and it is what makes a place look visited rather than
+    // merely listed.
+    pulseForSlugs(slugs)
+      .then((rows) => {
+        console.log('[pulse]', slugs.length, 'slugs ->', rows.size, 'with life',
+          JSON.stringify([...rows.keys()].slice(0, 3)));
+        if (!cancelled) setPulseBySlug(rows);
+      })
+      .catch(() => {
+        // A place with no pulse simply shows none.
+      });
     getActivityScoresBySlug(slugs)
       .then((rows) => {
         if (cancelled) return;
@@ -489,7 +556,7 @@ const NearbyFeed: React.FC = () => {
         });
       })
       .catch(() => {
-        // Sort fallback to original order is fine -- swallow.
+        // Sort fallback to original order is fine, swallow.
       });
     return () => {
       cancelled = true;
@@ -516,7 +583,7 @@ const NearbyFeed: React.FC = () => {
       return { sortedPlaces: uniquePlaces, separatorAfterId: null as string | null, topMatchCount: 0 };
     }
 
-    // The raw user prompt is the truest signal of intent — fall back to the
+    // The raw user prompt is the truest signal of intent, fall back to the
     // AI-extracted keyword for chip selections (which never set aiPrompt).
     const queryForMatch = aiPrompt || aiKeyword;
     if (queryForMatch) {
@@ -579,9 +646,258 @@ const NearbyFeed: React.FC = () => {
     orderRef.current = [];
   }, [userLocation, transportMode, selectedTypes, aiKeyword]);
 
+  // The other two sources of the merged feed. Places come from the cursor
+  // above; these are what is on today, and what is worth seeing that no
+  // business listing covers. Both free.
+  useEffect(() => {
+    if (!userLocation || viewMode !== 'one') return;
+    let cancelled = false;
+    (async () => {
+      const locality = await reverseGeocodeLocality(userLocation.lat, userLocation.lng).catch(
+        () => null,
+      );
+      if (cancelled) return;
+      setLocalityLabel(locality);
+      const [aiEvents, ticketed, voyage, wiki, osm] = await Promise.all([
+        fetchLiveEvents(
+          locality || 'this area',
+          { lat: userLocation.lat, lng: userLocation.lng },
+          { radiusKm: DEFAULT_LIVE_EVENTS_RADIUS_KM },
+        ).catch(() => []),
+        fetchTicketmasterEvents({ lat: userLocation.lat, lng: userLocation.lng }),
+        // Wikivoyage first: it is the only source that answers "what is worth
+        // doing here" rather than "what exists here". Wikipedia and OSM fill
+        // in behind it.
+        wikivoyageNearby(userLocation.lat, userLocation.lng).catch(() => []),
+        wikipediaNearby(userLocation.lat, userLocation.lng).catch(() => []),
+        osmNearby(userLocation.lat, userLocation.lng).catch(() => []),
+      ]);
+      if (cancelled) return;
+
+      // Ticketed events first: they have an exact time, a real venue, an
+      // official page and their own artwork, so they are the more useful
+      // answer to "what is on tonight". The model's findings follow, for the
+      // markets and street festivals no ticketing system knows about.
+      setFeedEvents([
+        ...ticketed.map((event) => ({
+          event: {
+            name: event.name,
+            description: event.category,
+            location: event.location,
+            time: event.time,
+            type: 'performance' as const,
+            sourceUrl: event.url,
+          },
+          imageUrl: event.imageUrl,
+        })),
+        ...aiEvents.map((event) => ({ event, imageUrl: null })),
+      ]);
+      // Wikivoyage leads the merge, so an editor-chosen thing to do outranks
+      // an article that merely exists nearby.
+      setDiscoveries(mergeDiscoveries(voyage, wiki, osm));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userLocation, viewMode]);
+
+  // One stream: what is on, what is open around you, what is worth seeing.
+  const { items: feedItems, matchedBy: preferenceMatches } = useMemo(
+    () =>
+      // Interleave first so the kinds still take turns, then promote genuine
+      // preference matches to the front. Promoting before interleaving would
+      // let one preference fill the screen with six restaurants.
+      rankByPreferences(interleaveFeed(sortedPlaces, feedEvents, discoveries), preferences),
+    [sortedPlaces, feedEvents, discoveries, preferences],
+  );
+
+  // Free photographs for the merged stream, keyed by feed item id.
+  useEffect(() => {
+    if (feedItems.length === 0) return;
+    const controller = new AbortController();
+    void resolveImages(
+      feedItems
+        // Events only.
+        //
+        // Looking a photograph up by name is guesswork, and guesswork put a
+        // picture of Notre-Dame-de-Bon-Secours Chapel on Notre-Dame Basilica.
+        // For a place, a wrong photograph is worse than none: a bar or a park
+        // has no verified imagery anywhere, so it waits for someone to post
+        // one. Events are different, they arrive with their own artwork
+        // from the source that is selling the tickets.
+        .filter((item) => item.kind === 'event' && !item.imageUrl)
+        .map((item) => ({
+          key: item.id,
+          locationId: computeSlug({
+            name: item.kind === 'event' ? item.event.name : item.id,
+            address: item.kind === 'event' ? item.event.location || null : null,
+            city: null,
+            country: null,
+            lat: userLocation?.lat ?? 0,
+            lng: userLocation?.lng ?? 0,
+            googlePlaceId: null,
+          }),
+          // The event's own name only. Searching the VENUE first meant two
+          // unrelated gigs at the same hall were handed the same photograph
+          // of the hall, and a picture of the building is not a picture of
+          // the event anyway.
+          names: item.kind === 'event' ? [item.event.name] : [],
+          lat: userLocation?.lat,
+          lng: userLocation?.lng,
+        })),
+      {
+        signal: controller.signal,
+        onImage: (key, url) =>
+          setFeedImages((prev) => (prev[key] ? prev : { ...prev, [key]: url })),
+      },
+    );
+    return () => controller.abort();
+  }, [feedItems, userLocation]);
+
+  useEffect(() => {
+    if (!user?.id) { setMyTrips([]); return; }
+    listMyTrips(user.id).then(setMyTrips).catch(() => {});
+  }, [user?.id]);
+
+  const openTrip = useCallback(
+    async (trip: Trip) => {
+      const row = await loadTrip(trip.id);
+      const bundle = row?.plan;
+      if (!bundle?.currentPlan) {
+        toast('Could not open that trip', 'error');
+        return;
+      }
+      setCurrentPlan(bundle.currentPlan);
+      setActivities(bundle.activities || []);
+      setAppMode('trip');
+      setHasCompletedOnboarding(true);
+      setCurrentTripId(row!.id);
+      navigate('/explore');
+    },
+    [navigate, toast, setCurrentPlan, setActivities, setAppMode, setHasCompletedOnboarding, setCurrentTripId],
+  );
+
+  useEffect(() => {
+    if (!user?.id) { setPreferences([]); return; }
+    let cancelled = false;
+    getPreferences(user.id)
+      .then((list) => { if (!cancelled) setPreferences(list); })
+      .catch(() => { /* no preferences is a valid state */ });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const selectViewMode = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, mode);
+    } catch {
+      // Unwritable storage just means the choice lasts this session.
+    }
+  }, []);
+
+  // No sourced photographs for places, in either view. A place with no user
+  // photo shows its poster and asks for one; looking one up by name is how a
+  // basilica ended up illustrated by a different church.
+
+  // The filter chips and the prompt bar, defined once and placed twice: in
+  // the page flow for the list, and inside a floating panel over the pager,
+  // where anything sitting above the frame would break the full-screen feel.
+  const showControls =
+    Boolean(userLocation) &&
+    (status === 'ready' ||
+      ((status === 'loading' || status === 'locating') && feedItems.length > 0));
+
+  const filterChips = (
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 mb-4" style={{ scrollbarWidth: 'none' }}>
+            <button
+              onClick={() => { if (savedMode) toggleSavedMode(); clearTypes(); }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
+              style={{
+                background: !savedMode && selectedTypes.length === 0 && !activeChipLabel ? 'var(--accent)' : 'var(--surface-container)',
+                color: !savedMode && selectedTypes.length === 0 && !activeChipLabel ? 'var(--on-accent)' : 'var(--text-secondary)',
+              }}
+            >
+              <Globe size={14} />
+              All
+            </button>
+  
+            <button
+              onClick={toggleSavedMode}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
+              style={{
+                background: savedMode ? 'var(--accent)' : 'var(--surface-container)',
+                color: savedMode ? 'var(--on-accent)' : 'var(--text-secondary)',
+              }}
+              aria-pressed={savedMode}
+            >
+              <Bookmark size={14} fill={savedMode ? 'currentColor' : 'none'} />
+              Saved
+            </button>
+  
+            {chipsLoading && dynamicChips.length === 0 &&
+              [72, 96, 84, 80, 92, 76].map((w, i) => (
+                <div
+                  key={`chip-skel-${i}`}
+                  className="rounded-xl flex-shrink-0 activity-card-shimmer"
+                  style={{ width: `${w}px`, height: '36px', background: 'var(--surface-container-high)' }}
+                  aria-hidden="true"
+                />
+              ))}
+  
+            {dynamicChips.map(chip => {
+              const isActive = activeChipLabel === chip.label;
+              const ChipIcon = iconFor(chip.iconKey);
+              return (
+                <button
+                  key={chip.label}
+                  onClick={() => selectDynamicChip(chip)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
+                  style={{
+                    background: isActive ? 'var(--accent)' : 'var(--surface-container)',
+                    color: isActive ? 'var(--on-accent)' : 'var(--text-secondary)',
+                  }}
+                >
+                  <ChipIcon size={14} />
+                  {chip.label}
+                </button>
+              );
+            })}
+  
+            {/* Escape hatch: if none of the suggested chips match what the user
+                wants, "More" clears the active filter and focuses the prompt bar. */}
+            {!chipsLoading && (
+              <button
+                onClick={openPromptBar}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
+                style={{
+                  background: 'var(--surface-container)',
+                  color: 'var(--text-secondary)',
+                }}
+                aria-label="Search for something else"
+              >
+                <Plus size={14} />
+                More
+              </button>
+            )}
+          </div>
+  );
+
   return (
-    <section className="page" ref={sectionRef}>
-      {/* Page header */}
+    // The pager sizes itself with percentages, and a percentage height needs
+    // every ancestor to have a definite one. Without this the section is
+    // auto-height, every page collapses to nothing, and all you see is the
+    // loading page at the top of an empty screen.
+    <section
+      className={
+        viewMode === 'one' && !savedMode ? 'page page-stage h-full flex flex-col' : 'page'
+      }
+      ref={sectionRef}
+    >
+      {/* The header is in the page flow for the list, and folded into the
+          pager frame for one-at-a-time. It comes back whenever the pager is
+          not what is on screen, while locating, on an error, or in saved
+          mode, because otherwise there would be no way back out. */}
+      {(viewMode === 'list' || !showControls || savedMode) && (
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight mb-1 flex items-center gap-2">
@@ -594,6 +910,35 @@ const NearbyFeed: React.FC = () => {
         </div>
         {status === 'ready' && userLocation && (
           <div className="flex items-center gap-2">
+            {/* One at a time, or all of them at once. The list is still here;
+                the pager is another way to look at the same places. */}
+            <div
+              className="inline-flex items-center gap-1 p-1 rounded-full"
+              style={{ background: 'var(--surface-container)' }}
+              role="group"
+              aria-label="How to browse places"
+            >
+              {([['one', Layers, 'One at a time'], ['list', Rows3, 'All as a list']] as const).map(
+                ([mode, Icon, label]) => (
+                  <button
+                    key={mode}
+                    onClick={() => selectViewMode(mode)}
+                    className="flex items-center justify-center transition-all"
+                    style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '9999px',
+                      background: viewMode === mode ? 'var(--accent)' : 'transparent',
+                      color: viewMode === mode ? 'var(--on-accent)' : 'var(--text-secondary)',
+                    }}
+                    aria-label={label}
+                    aria-pressed={viewMode === mode}
+                  >
+                    <Icon size={16} />
+                  </button>
+                ),
+              )}
+            </div>
             <div
               className="inline-flex items-center gap-1 p-1 rounded-full"
               style={{ background: 'var(--surface-container)' }}
@@ -649,9 +994,11 @@ const NearbyFeed: React.FC = () => {
           </div>
         )}
       </div>
+      )}
 
-      {/* Free-form AI prompt bar */}
-      {userLocation && (status === 'ready' || (status === 'loading' && places.length > 0)) ? (
+      {/* Free-form AI prompt bar. In the page flow for the list; in the
+          floating panel for the pager. */}
+      {viewMode === 'list' && showControls ? (
         <NearbyPromptBar
           ref={promptBarRef}
           activePrompt={aiPrompt}
@@ -659,7 +1006,7 @@ const NearbyFeed: React.FC = () => {
           onSubmit={handleAiSubmit}
           onClear={handleAiClear}
         />
-      ) : (
+      ) : viewMode === 'list' && (
         (status === 'locating' || (status === 'loading' && places.length === 0)) && (
           <div
             className="mb-3 h-[44px] rounded-full activity-card-shimmer"
@@ -669,10 +1016,19 @@ const NearbyFeed: React.FC = () => {
         )
       )}
 
-      {/* Live events (above chips) */}
-      {userLocation && (status === 'ready' || (status === 'loading' && places.length > 0)) ? (
+      {/* Live events, as their own strip. Only in list mode, in the merged
+          stream the same events are pages in the feed, tagged "Happening now",
+          so a separate section above it would be the same thing twice. */}
+      {viewMode === 'list' &&
+      userLocation &&
+      (status === 'ready' || (status === 'loading' && places.length > 0)) ? (
         <NearbyLiveEvents userLocation={userLocation} focus={aiPrompt} />
       ) : (
+        // The list-mode gate has to be on THIS branch too. Without it the old
+        // Happening Now skeleton strip appeared above the pager whenever the
+        // status went back to 'locating', the condition above was gated and
+        // the fallback was not.
+        viewMode === 'list' &&
         (status === 'locating' || (status === 'loading' && places.length === 0)) && (
           <div className="space-y-2.5 mb-5" aria-hidden="true">
             <div className="flex items-center justify-between">
@@ -730,84 +1086,12 @@ const NearbyFeed: React.FC = () => {
         )
       )}
 
-      {/* Dynamic AI-suggested chips (hidden while a free-form AI prompt is active) */}
-      {!aiPrompt && (status === 'ready' || (status === 'loading' && places.length > 0)) && userLocation && (
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 mb-4" style={{ scrollbarWidth: 'none' }}>
-          <button
-            onClick={() => { if (savedMode) toggleSavedMode(); clearTypes(); }}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
-            style={{
-              background: !savedMode && selectedTypes.length === 0 && !activeChipLabel ? 'var(--accent)' : 'var(--surface-container)',
-              color: !savedMode && selectedTypes.length === 0 && !activeChipLabel ? 'var(--on-accent)' : 'var(--text-secondary)',
-            }}
-          >
-            <Globe size={14} />
-            All
-          </button>
-
-          <button
-            onClick={toggleSavedMode}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
-            style={{
-              background: savedMode ? 'var(--accent)' : 'var(--surface-container)',
-              color: savedMode ? 'var(--on-accent)' : 'var(--text-secondary)',
-            }}
-            aria-pressed={savedMode}
-          >
-            <Bookmark size={14} fill={savedMode ? 'currentColor' : 'none'} />
-            Saved
-          </button>
-
-          {chipsLoading && dynamicChips.length === 0 &&
-            [72, 96, 84, 80, 92, 76].map((w, i) => (
-              <div
-                key={`chip-skel-${i}`}
-                className="rounded-xl flex-shrink-0 activity-card-shimmer"
-                style={{ width: `${w}px`, height: '36px', background: 'var(--surface-container-high)' }}
-                aria-hidden="true"
-              />
-            ))}
-
-          {dynamicChips.map(chip => {
-            const isActive = activeChipLabel === chip.label;
-            const ChipIcon = iconFor(chip.iconKey);
-            return (
-              <button
-                key={chip.label}
-                onClick={() => selectDynamicChip(chip)}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
-                style={{
-                  background: isActive ? 'var(--accent)' : 'var(--surface-container)',
-                  color: isActive ? 'var(--on-accent)' : 'var(--text-secondary)',
-                }}
-              >
-                <ChipIcon size={14} />
-                {chip.label}
-              </button>
-            );
-          })}
-
-          {/* Escape hatch: if none of the suggested chips match what the user
-              wants, "More" clears the active filter and focuses the prompt bar. */}
-          {!chipsLoading && (
-            <button
-              onClick={openPromptBar}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-semibold whitespace-nowrap flex-shrink-0 transition-all"
-              style={{
-                background: 'var(--surface-container)',
-                color: 'var(--text-secondary)',
-              }}
-              aria-label="Search for something else"
-            >
-              <Plus size={14} />
-              More
-            </button>
-          )}
-        </div>
-      )}
+      {/* Filter chips. In the page flow for the list; in the floating panel
+          for the pager (rendered further down). */}
+      {viewMode === 'list' && !aiPrompt && showControls && filterChips}
 
       {/* Skeleton filter chips during initial load */}
-      {!aiPrompt && (status === 'locating' || (status === 'loading' && places.length === 0)) && (
+      {viewMode === 'list' && !aiPrompt && (status === 'locating' || (status === 'loading' && places.length === 0)) && (
         <div
           className="flex gap-2 overflow-x-hidden pb-1 -mx-1 px-1 mb-4"
           style={{ scrollbarWidth: 'none' }}
@@ -882,14 +1166,14 @@ const NearbyFeed: React.FC = () => {
             </div>
           )}
           {savedPlaces.map((place) => (
-            <NearbyPost key={place.placeId} place={place} />
+            <NearbyPost key={place.placeId} place={place} heroImage={heroImages[place.placeId]} />
           ))}
         </>
       )}
 
       {!savedMode && (status === 'locating' || status === 'loading' || status === 'ready') && (
         <>
-          {places.length === 0 && (status === 'loading' || status === 'locating') && (
+          {viewMode === 'list' && places.length === 0 && (status === 'loading' || status === 'locating') && (
             <div className="space-y-8">
               {Array.from({ length: 2 }).map((_, i) => (
                 <div key={i} className="w-full">
@@ -900,12 +1184,181 @@ const NearbyFeed: React.FC = () => {
             </div>
           )}
 
-          {sortedPlaces.map((place, idx) => {
+          {/* One at a time. Same places, same order, same everything on each
+              one, only how many of them you see at once changes. */}
+          {viewMode === 'one' && feedItems.length > 0 && (
+            <div
+              className="relative flex-1 min-h-0 pager-frame"
+              style={{
+                // Cancel the page's own padding so the feed runs to the
+                // edges. Full screen means full screen.
+                marginTop: '-0.5rem',
+                marginLeft: '-1.25rem',
+                marginRight: '-1.25rem',
+                marginBottom: '-2rem',
+              }}
+            >
+              <NearbyPager
+                items={feedItems}
+                images={feedImages}
+                pulseBySlug={pulseBySlug}
+                onNearEnd={loadMore}
+                exhausted={exhausted}
+                locality={localityLabel}
+                onUpdateLocation={() => requestLocation()}
+                localityMenu={
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => requestLocation()}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left"
+                      style={{ background: 'var(--surface-container-high)', border: 'none', color: 'var(--text-primary)' }}
+                    >
+                      <LocateFixed size={14} style={{ color: 'var(--accent)' }} />
+                      <span className="text-[13px] font-bold flex-1 truncate">
+                        {localityLabel || 'Use my current location'}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-tertiary)' }}>
+                        Now
+                      </span>
+                    </button>
+
+                    {myTrips.length > 0 && (
+                      <>
+                        <div
+                          className="text-[10px] font-bold uppercase tracking-[0.12em] px-3 pt-3 pb-1.5"
+                          style={{ color: 'var(--text-tertiary)' }}
+                        >
+                          My trips
+                        </div>
+                        {myTrips.map((trip) => (
+                          <button
+                            key={trip.id}
+                            type="button"
+                            onClick={() => void openTrip(trip)}
+                            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-left"
+                            style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)' }}
+                          >
+                            <Plane size={14} style={{ color: 'var(--text-tertiary)' }} />
+                            <span className="text-[13px] font-bold flex-1 truncate">{trip.title}</span>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </>
+                }
+                locating={status === 'locating'}
+                preferenceMatches={preferenceMatches}
+                // On desktop the rail already shows you, one column to the
+                // left, so the feed does not put a second copy of your face
+                // over the photograph.
+                avatar={isDesktop ? undefined : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/profile')}
+                      aria-label="Your profile"
+                      className="rounded-full transition-transform active:scale-90 overflow-hidden flex items-center justify-center"
+                      style={{
+                        width: '44px',
+                        height: '44px',
+                        // The avatar is already a circular image, so no ring
+                        // and no plate around it. Only the fallback needs a
+                        // ground of its own.
+                        border: 'none',
+                        background: profile ? 'transparent' : 'rgba(0,0,0,0.5)',
+                        backdropFilter: profile ? undefined : 'blur(10px)',
+                        WebkitBackdropFilter: profile ? undefined : 'blur(10px)',
+                        padding: 0,
+                      }}
+                    >
+                      {profile ? <Avatar profile={profile} size={44} /> : <User size={17} color="#fff" />}
+                    </button>
+
+                    {/* Preferences and filters, under the avatar where they
+                        belong. Nothing sits on the feed until it is asked for. */}
+                    {controlsOpen && (
+                      <div
+                        className="absolute right-0 rounded-2xl p-3"
+                        style={{
+                          top: '3rem',
+                          width: 'min(88vw, 26rem)',
+                          background: 'var(--bg-secondary)',
+                          border: '0.5px solid var(--outline)',
+                          boxShadow: 'var(--shadow-lg)',
+                        }}
+                      >
+                        <div onClick={() => setControlsOpen(null)}>{filterChips}</div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <span className="text-[11px] font-semibold" style={{ color: 'var(--text-tertiary)' }}>
+                            Within
+                          </span>
+                          {([['foot', Footprints, 'A walk'], ['car', Car, 'A drive']] as const).map(
+                            ([mode, Icon, label]) => (
+                              <button
+                                key={mode}
+                                onClick={() => selectTransportMode(mode)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11.5px] font-semibold"
+                                style={{
+                                  background: transportMode === mode ? 'var(--accent)' : 'var(--surface-container)',
+                                  color: transportMode === mode ? 'var(--on-accent)' : 'var(--text-secondary)',
+                                  border: 'none',
+                                }}
+                                aria-pressed={transportMode === mode}
+                              >
+                                <Icon size={13} />
+                                {label}
+                              </button>
+                            ),
+                          )}
+                        </div>
+
+                        <div
+                          className="flex items-center gap-2 pt-3 mt-2"
+                          style={{ borderTop: '0.5px solid var(--outline)' }}
+                        >
+                          <button
+                            onClick={() => { setControlsOpen(null); navigate('/profile'); }}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[12px] font-bold"
+                            style={{ background: 'var(--accent)', color: 'var(--on-accent)', border: 'none' }}
+                          >
+                            <User size={13} />
+                            Your profile
+                          </button>
+                          <button
+                            onClick={() => { setControlsOpen(null); requestLocation(); }}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[12px] font-semibold"
+                            style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)', border: 'none' }}
+                          >
+                            <LocateFixed size={13} />
+                            Update location
+                          </button>
+                          <button
+                            onClick={() => { setControlsOpen(null); selectViewMode('list'); }}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-full text-[12px] font-semibold"
+                            style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)', border: 'none' }}
+                            aria-label="Show all as a list"
+                          >
+                            <Rows3 size={13} />
+                            List
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              />
+
+            </div>
+          )}
+
+          {viewMode === 'list' && sortedPlaces.map((place, idx) => {
             const isSentinel = idx === Math.max(0, sortedPlaces.length - PREFETCH_AHEAD);
             const showSeparator = separatorAfterId === place.placeId;
             return (
               <React.Fragment key={place.placeId}>
-                <NearbyPost place={place} />
+                <NearbyPost place={place} heroImage={heroImages[place.placeId]} />
                 {showSeparator && (
                   <div
                     role="separator"
@@ -920,7 +1373,7 @@ const NearbyFeed: React.FC = () => {
                     />
                     <span className="text-[11px] font-bold uppercase tracking-[0.12em]">
                       {topMatchCount === 1
-                        ? `No more "${aiPrompt ?? ''}" — related places below`
+                        ? `No more "${aiPrompt ?? ''}". Related places below`
                         : `More related to "${aiPrompt ?? ''}"`}
                     </span>
                     <span
@@ -937,13 +1390,15 @@ const NearbyFeed: React.FC = () => {
 
           {/* Loading glow is rendered at the bottom of the section via AnimatePresence. */}
 
-          {exhausted && places.length > 0 && (
+          {/* Only the list has an end. The pager loops, so saying anything
+              about running out would contradict it. */}
+          {viewMode === 'list' && exhausted && places.length > 0 && (
             <div className="text-center py-10 text-[13px]" style={{ color: 'var(--text-tertiary)' }}>
               You've reached the end of what's around.
             </div>
           )}
 
-          {exhausted && places.length === 0 && status === 'ready' && (
+          {viewMode === 'list' && exhausted && places.length === 0 && status === 'ready' && (
             <div className="text-center py-16 px-6">
               <h3 className="text-base font-bold mb-1">
                 {activeChipLabel
@@ -971,7 +1426,7 @@ const NearbyFeed: React.FC = () => {
         </>
       )}
 
-      {/* Infinite-load glow -- sticks to the bottom of the scroll viewport so
+      {/* Infinite-load glow, sticks to the bottom of the scroll viewport so
           it appears above the PageIndicator, not over it. Wrapper has height 0
           so it never pushes layout; the gradient extends upward via absolute
           positioning within the sticky container. */}

@@ -20,6 +20,9 @@ const EMPTY_STATS: UserSocialStats = {
   postCount: 0,
   likesReceived: 0,
   commentsReceived: 0,
+  commentsWritten: 0,
+  votesCast: 0,
+  placesContributed: 0,
 };
 
 interface ProfileMediaSnapshot {
@@ -50,7 +53,7 @@ const PROFILE_QUERY_TIMEOUT_MS = 12_000;
 async function fetchProfileMedia(userId: string, qc: QueryClient): Promise<ProfileMediaSnapshot> {
   // Read whatever we last had for this user. When a sub-query rejects
   // (timeout or network error), we fall back to the prior value
-  // instead of fabricating a fake-empty result -- that's the
+  // instead of fabricating a fake-empty result, that's the
   // "loads forever then says 0 posts" bug Codex flagged.
   const prior = qc.getQueryData<ProfileMediaSnapshot>(queryKeys.profileMedia(userId));
 
@@ -69,7 +72,14 @@ async function fetchProfileMedia(userId: string, qc: QueryClient): Promise<Profi
   // the user just saw a moment ago.
   const stats = statsResult.status === 'fulfilled'
     ? statsResult.value
-    : prior?.stats ?? { postCount: 0, likesReceived: 0, commentsReceived: 0 };
+    : prior?.stats ?? {
+        postCount: 0,
+        likesReceived: 0,
+        commentsReceived: 0,
+        commentsWritten: 0,
+        votesCast: 0,
+        placesContributed: 0,
+      };
   const photos = photosResult.status === 'fulfilled'
     ? photosResult.value
     : prior?.photos ?? [];

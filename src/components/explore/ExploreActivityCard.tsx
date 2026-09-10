@@ -104,7 +104,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
     return fallback.map((src) => ({ kind: 'image' as const, src }));
   }, [mediaItems, activity.imageUrls, activity.imageUrl]);
   const hasCarousel = slides.length > 0;
-  // Like/comment overlays still operate on image rows only — the active
+  // Like/comment overlays still operate on image rows only, the active
   // index maps into mediaItems, but if the active slide is a video we
   // don't show an image-specific actor for it.
   const activeMediaItem = mediaItems[activeImageIndex] || mediaItems[0] || null;
@@ -260,7 +260,7 @@ const ExploreActivityCard: React.FC<Props> = ({ activity, cityName, country, onO
     const result = await toggleCompleted(dbActivityId);
     setDoneSaving(false);
     if (!result.ok) toast('Could not update', 'error');
-    // Success is silent -- the green check (or its removal) is the feedback.
+    // Success is silent, the green check (or its removal) is the feedback.
   };
 
   // While the supabase round-trip is in flight, show a neutral loader pill so

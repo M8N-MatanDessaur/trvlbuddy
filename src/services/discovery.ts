@@ -2,24 +2,24 @@
 //
 // Google is good at "restaurants near me with ratings" and it bills for every
 // question. It is not what you want for "I am in Seoul, show me something
-// worth walking to" -- and paying per lookup for that is what made this app
+// worth walking to", and paying per lookup for that is what made this app
 // expensive in the first place.
 //
 // Two free, keyless sources answer that question better:
 //
-//   WIKIPEDIA GeoSearch -- everything near you notable enough for an
+//   WIKIPEDIA GeoSearch, everything near you notable enough for an
 //   encyclopedia article. In Seoul that is Deoksugung palace, Hwangudan
 //   altar, the cathedral. It comes with a photo and a first sentence, both
 //   free, which also solves the cold-start problem of a feed with no
 //   contributed photos yet. Notability is implicit: somebody wrote an
 //   article, so no review-count bar is needed.
 //
-//   OPENSTREETMAP (Overpass) -- historic sites, city gates, marketplaces,
+//   OPENSTREETMAP (Overpass), historic sites, city gates, marketplaces,
 //   viewpoints, ruins. Finds the things too small for an article: in Seoul it
 //   returns "Donuimun Gate Site" and Nakwon Arcade market.
 //
 // Neither has an API key, neither bills, and neither needs a proxy for cost
-// reasons -- only politeness (Overpass requires a User-Agent or it answers
+// reasons, only politeness (Overpass requires a User-Agent or it answers
 // 406, and both are cached hard so we are not hammering volunteer servers).
 //
 // Navigation is free too: a Google Maps deep link needs no API.
@@ -66,7 +66,14 @@ const WIKI_TITLE_NOISE = [
   /\bmetro line\b/i,
   // Organisations at an address rather than somewhere to visit
   /^embassy of/i, /\bconsulate\b/i, /\bhigh commission\b/i,
-  /\buniversity$/i, /\bhospital\b/i, /\bcity hall\b/i, /\bacademy$/i,
+  /\buniversity$/i, /\bcity hall\b/i, /\bacademy$/i,
+  // Somewhere you go when something is wrong, in the languages these places
+  // are actually named in. "hospital" alone missed "Hopital Maisonneuve-
+  // Rosemont" and "Centre hospitalier de l'Universite de Montreal".
+  /\bhospital/i, /\bh[oô]pital/i, /centre hospitalier/i, /\bospedale\b/i,
+  /\bhospitalier\b/i, /\bclinic\b/i, /\bclinique\b/i, /\bpolyclini/i,
+  /\bCHU\b/, /\bCLSC\b/, /\bmedical cent(re|er)\b/i, /\binfirmary\b/i,
+  /\basylum\b/i, /\bsanatorium\b/i,
   /\bheadquarters\b/i, /\bcompany\b/i, /\bbank of\b/i, /\bministry\b/i,
   // Somewhere to sleep is not somewhere to go: Nearby answers "what to do".
   /\bhotel\b/i, /\bhostel\b/i, /\bresort\b/i,
@@ -101,7 +108,7 @@ const KIND_HINTS: Array<[RegExp, string]> = [
 
 // The title is the reliable signal; the description is only a fallback.
 // Checking them separately stops a passing mention in the prose from deciding
-// the label -- it was calling Seoul Metropolitan Library a "Square" because
+// the label, it was calling Seoul Metropolitan Library a "Square" because
 // its description mentions the plaza outside.
 function kindFromText(title: string, description = '', fallback = 'Landmark'): string {
   for (const [re, label] of KIND_HINTS) if (re.test(title)) return label;
@@ -135,7 +142,7 @@ function cleanBlurb(extract: string): string | undefined {
     .replace(/\s+([,.;:])/g, '$1')
     .trim();
 
-  // First sentence -- but ". " is not a reliable boundary in this material:
+  // First sentence, but ". " is not a reliable boundary in this material:
   // "constructed c. 25 BC" and "St. Peter's" both break it, which is how a
   // card ended up reading "was an ancient Roman basilica constructed c.".
   const ABBREV = /(?:\b(?:c|ca|circa|St|Mt|Ft|approx|no|vs|etc|Dr|Mr|Mrs|Ms|Jr|Sr|Prof|fl|d|b|r|AD|BC|BCE|CE)\.)$/i;
@@ -159,6 +166,49 @@ interface WikiGeoHit { pageid: number; title: string; lat: number; lon: number; 
  * Two requests: the geosearch, then one batched lookup for photos and
  * opening sentences.
  */
+/**
+ * Article categories that mean "this is not somewhere you go".
+ *
+ * Built from what actually surfaced near Anjou and was called out as junk:
+ * the borough itself, two high schools, and five electoral districts, all of
+ * which have titles indistinguishable from a landmark's. Categories are
+ * maintained by Wikipedia editors and say what the subject IS, which is the
+ * signal a title cannot carry.
+ *
+ * Deliberately NOT excluded: shopping centres and markets. Place Versailles
+ * and Marche Jean-Talon are places people go on purpose.
+ */
+const CATEGORY_NOISE: RegExp[] = [
+  // Administrative geography, not destinations.
+  /populated places/i,
+  /\bboroughs?\b/i,
+  /municipalit/i,
+  /former municipalities/i,
+  /electoral districts?/i,
+  /\bridings?\b/i,
+  /\bcounties\b/i,
+  /census (divisions|subdivisions|tracts)/i,
+  /neighbourhoods|neighborhoods/i,
+  /administrative divisions/i,
+  /\bwards\b/i,
+  // Institutions people attend rather than visit.
+  /\bschools?\b/i,
+  /educational institutions/i,
+  /universities and colleges/i,
+  // Somewhere you go when something is wrong.
+  /\bhospitals?\b/i,
+  /healthcare|health care/i,
+  /medical (centres|centers|institutions)/i,
+  /\bclinics\b/i,
+  // Biographies geotagged to an address.
+  /\b(births|deaths)\b/i,
+  /people from/i,
+  /\bpoliticians\b/i,
+  // Infrastructure.
+  /\broads?\b|\bstreets\b|\bhighways\b|\bbridges\b/i,
+  /transit stations|metro stations|railway stations/i,
+];
+
 export async function wikipediaNearby(
   lat: number,
   lng: number,
@@ -180,7 +230,14 @@ export async function wikipediaNearby(
   if (hits.length === 0) return [];
 
   const titles = hits.slice(0, limit).map((h) => h.title);
-  const detailUrl = `${api}?action=query&prop=pageimages%7Cextracts&exintro=1&explaintext=1` +
+  // Categories come back in the same request as the extract and the image, so
+  // classifying by them is free, and it is the only thing that reliably
+  // tells a place to visit from a borough, a riding or a school. Titles
+  // cannot: "Anjou", "Anjou-Louis-Riel" and "Ecole secondaire d'Anjou" all
+  // read like place names and all three were surfacing as things to see.
+  const detailUrl = `${api}?action=query` +
+    `&prop=pageimages%7Cextracts%7Ccategories&exintro=1&explaintext=1` +
+    `&cllimit=max&clshow=!hidden` +
     `&piprop=thumbnail&pithumbsize=1000&titles=${encodeURIComponent(titles.join('|'))}` +
     `&format=json&origin=*`;
 
@@ -189,6 +246,7 @@ export async function wikipediaNearby(
     title: string;
     extract?: string;
     thumbnail?: { source?: string };
+    categories?: Array<{ title?: string }>;
   }
   const byTitle = new Map<string, WikiPage>();
   for (const page of Object.values(detail?.query?.pages ?? {}) as WikiPage[]) {
@@ -197,6 +255,15 @@ export async function wikipediaNearby(
 
   return hits
     .slice(0, limit)
+    .filter((h) => {
+      const page = byTitle.get(h.title);
+      // No article body, nothing to say about it.
+      if (!page?.extract) return false;
+      const categories = (page.categories ?? [])
+        .map((c) => c.title ?? '')
+        .join(' | ');
+      return !CATEGORY_NOISE.some((re) => re.test(categories));
+    })
     .map((h) => {
       const page = byTitle.get(h.title);
       const extract: string = page?.extract ?? '';
@@ -263,7 +330,7 @@ function haversine(a: { lat: number; lng: number }, b: { lat: number; lng: numbe
 /**
  * Historic sites, gates, markets and viewpoints from OpenStreetMap. Free, no
  * key. Overpass answers 406 without a User-Agent, and asks that clients cache
- * -- both honoured here.
+ *, both honoured here.
  */
 export async function osmNearby(
   lat: number,
@@ -274,7 +341,7 @@ export async function osmNearby(
   const { limit = 30, signal } = options;
   const r = Math.min(Math.max(radiusMeters, 100), 8000);
 
-  // Ways as well as nodes -- a palace or a market is an area, not a point --
+  // Ways as well as nodes, a palace or a market is an area, not a point --
   // and `out center` gives each one a coordinate.
   const query = `[out:json][timeout:25];(
     node["historic"](around:${r},${lat},${lng});
@@ -360,7 +427,7 @@ export function mergeDiscoveries(...lists: DiscoveryPlace[][]): DiscoveryPlace[]
 }
 
 /**
- * Open anywhere in Google Maps. No API, no key, no billing -- just a URL.
+ * Open anywhere in Google Maps. No API, no key, no billing, just a URL.
  * Prefers the name so Maps shows the place card rather than a dropped pin.
  */
 export function mapsLink(place: { name: string; location: { lat: number; lng: number } }): string {
@@ -371,4 +438,90 @@ export function mapsLink(place: { name: string; location: { lat: number; lng: nu
 /** Turn-by-turn to a place, again with no API. */
 export function directionsLink(place: { location: { lat: number; lng: number } }): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${place.location.lat},${place.location.lng}`;
+}
+
+// ---------------------------------------------------------------------------
+// A free image for a named place
+// ---------------------------------------------------------------------------
+
+// Events arrive from the model with a venue name and no picture. Wikipedia
+// has photographs of most named venues, free and licensed, but it has to be
+// the RIGHT venue. A loose search for "Piazza di Siena Rome" returns the Palio
+// di Siena, a horse race in another city, and a confidently wrong hero image
+// is worse than none at all.
+//
+// So: exact title lookup only, then a word-overlap check on what came back.
+// Anything that does not clearly correspond is refused, and the caller shows a
+// typographic hero instead.
+
+function significantWords(text: string): Set<string> {
+  return new Set(
+    text.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 3),
+  );
+}
+
+function correspondence(query: string, title: string): number {
+  const a = significantWords(query);
+  const b = significantWords(title);
+  if (a.size === 0 || b.size === 0) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared += 1;
+  return shared / Math.min(a.size, b.size);
+}
+
+// Placeholders the model uses when it does not know where something is.
+const VAGUE_VENUE = /^(various|multiple|several|citywide|city[- ]wide|tbc|tba|online)\b/i;
+
+const imageMemo = new Map<string, string | null>();
+
+/**
+ * A freely usable photograph for a named place, or null. Tries each candidate
+ * name in order and returns the first that both exists and clearly matches.
+ */
+export async function freeImageForName(
+  candidates: Array<string | undefined | null>,
+  options: { lang?: string; signal?: AbortSignal; minCorrespondence?: number } = {},
+): Promise<string | null> {
+  const { lang = 'en', signal, minCorrespondence = 0.5 } = options;
+
+  for (const raw of candidates) {
+    const query = raw?.trim();
+    if (!query || query.length < 4 || VAGUE_VENUE.test(query)) continue;
+
+    const key = `${lang}:${query.toLowerCase()}`;
+    if (imageMemo.has(key)) {
+      const memo = imageMemo.get(key);
+      if (memo) return memo;
+      continue;
+    }
+
+    const url = `https://${lang}.wikipedia.org/w/api.php?action=query` +
+      `&titles=${encodeURIComponent(query)}&prop=pageimages&piprop=thumbnail` +
+      `&pithumbsize=1200&redirects=1&format=json&origin=*`;
+
+    let image: string | null = null;
+    try {
+      const data = await fetch(url, { signal }).then((r) => r.json());
+      const page = Object.values(data?.query?.pages ?? {})[0] as
+        | { missing?: string; title?: string; thumbnail?: { source?: string } }
+        | undefined;
+      if (page && page.missing === undefined && page.thumbnail?.source && page.title) {
+        // Redirects are fine ("Terme di Caracalla" -> "Baths of Caracalla"),
+        // unrelated pages are not.
+        if (correspondence(query, page.title) >= minCorrespondence) {
+          image = page.thumbnail.source;
+        }
+      }
+    } catch {
+      // Offline or aborted: fall through to the next candidate.
+    }
+
+    imageMemo.set(key, image);
+    if (image) return image;
+  }
+
+  return null;
 }

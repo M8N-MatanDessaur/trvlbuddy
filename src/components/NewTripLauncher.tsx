@@ -43,7 +43,7 @@ const NewTripLauncher: React.FC = () => {
 
   const handleCancel = () => {
     // Bail out of the "+" chooser and return to the Nearby (local) view. The
-    // user's saved trips are untouched -- they can always come back via My
+    // user's saved trips are untouched, they can always come back via My
     // Trips or the "+" tab again.
     setAppMode('local');
     setHasCompletedOnboarding(true);

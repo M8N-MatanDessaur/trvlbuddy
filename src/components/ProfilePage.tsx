@@ -3,15 +3,17 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Award,
   ChevronLeft,
+  ChevronUp,
   Heart,
   Image as ImageIcon,
+  MapPin,
   LogOut,
   MessageCircle,
   Play,
-  Plane,
   Settings as SettingsIcon,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import PreferencesEditor from './PreferencesEditor';
 import { useToast } from '../contexts/ToastContext';
 import { useTravel } from '../contexts/TravelContext';
 import { supabase, PROFILE_COLUMNS, type Profile, type Trip } from '../lib/supabase';
@@ -23,7 +25,7 @@ import { useMyTrips, invalidateMyTrips } from '../hooks/useMyTrips';
 import Avatar from './Avatar';
 import CachedImage from './CachedImage';
 import ProfileMediaViewer, { type MediaItem } from './ProfileMediaViewer';
-import TripsCarousel from './TripsCarousel';
+import TripsBento from './TripsBento';
 import VideoThumbnail from './VideoThumbnail';
 import { thumbhashToCssDataUrl } from '../lib/thumbhash';
 
@@ -60,7 +62,7 @@ const ProfilePage: React.FC = () => {
   // when the entry is older than the cache TTL. Replaces the three useState
   // calls + Promise.all that re-fired on every mount.
   const { stats, photos, videos, loading: photosLoading } = useProfileMedia(targetId);
-  // Cached trips list — same SWR pattern. Returning to the profile no
+  // Cached trips list, same SWR pattern. Returning to the profile no
   // longer flashes the trip carousel through a fresh fetch.
   const { trips, loading: tripsLoading } = useMyTrips(isOwn && user ? user.id : null);
   const [loadingTripId, setLoadingTripId] = useState<string | null>(null);
@@ -102,7 +104,7 @@ const ProfilePage: React.FC = () => {
 
   const goBack = () => {
     if (window.history.length > 1) navigate(-1);
-    else navigate('/');
+    else navigate('/trip');
   };
 
   const handleSignOut = async () => {
@@ -131,7 +133,7 @@ const ProfilePage: React.FC = () => {
     setAppMode('trip');
     setHasCompletedOnboarding(true);
     setCurrentTripId(row.id);
-    navigate('/');
+    navigate('/trip');
   };
 
   const handlePhotoTap = (photo: UserPhoto) => {
@@ -151,15 +153,6 @@ const ProfilePage: React.FC = () => {
   const influence = profile?.influence ?? 0;
 
   const sectionLabelClass = 'text-[11px] font-bold uppercase tracking-[0.12em] px-1 mb-2';
-
-  const headerStats = useMemo(
-    () => [
-      { label: 'Posts', value: stats.postCount, icon: ImageIcon },
-      { label: 'Likes', value: stats.likesReceived, icon: Heart },
-      { label: 'Comments', value: stats.commentsReceived, icon: MessageCircle },
-    ],
-    [stats],
-  );
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
@@ -225,16 +218,11 @@ const ProfilePage: React.FC = () => {
             <div className="relative flex items-center gap-4">
               <Avatar profile={profile} size={72} />
               <div className="flex-1 min-w-0">
-                <div className="text-[18px] font-extrabold tracking-tight truncate">
+                <div className="text-[21px] font-extrabold tracking-tight truncate leading-tight">
                   {profileLoading ? 'Loading...' : displayName}
                 </div>
-                {isOwn && user?.email && displayName !== user.email && (
-                  <div className="text-[12.5px] truncate" style={{ color: 'var(--text-secondary)' }}>
-                    {user.email}
-                  </div>
-                )}
                 <div
-                  className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full text-[12px] font-bold"
+                  className="inline-flex items-center gap-1.5 mt-1.5 px-2.5 py-1 rounded-full text-[12px] font-bold"
                   style={{
                     background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
                     color: 'var(--text-primary)',
@@ -247,29 +235,104 @@ const ProfilePage: React.FC = () => {
               </div>
             </div>
 
-            {/* Stats row */}
-            <div className="relative grid grid-cols-3 gap-2 mt-4">
-              {headerStats.map(({ label, value, icon: Icon }) => (
-                <div
-                  key={label}
-                  className="rounded-2xl p-3 flex flex-col items-center gap-1"
-                  style={{ background: 'var(--surface-container-high)' }}
-                >
-                  <Icon size={14} style={{ color: 'var(--accent)' }} />
-                  <div className="text-[16px] font-extrabold leading-none">{value}</div>
-                  <div className="text-[10.5px] uppercase tracking-wider font-bold" style={{ color: 'var(--text-tertiary)' }}>
-                    {label}
-                  </div>
+            {/* A bento rather than a row of matching cards: tiles of
+                different weights, so the eye is told what matters instead of
+                being handed four equal boxes.
+
+                Each tile reads mark-and-number on one line, then what it
+                counts underneath, the number is the thing being said, and
+                the icon belongs beside it rather than stacked above it. */}
+            <div
+              className="relative grid gap-2 mt-4"
+              style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}
+            >
+              {/* Places leads: where you have been is the thing worth saying. */}
+              <div
+                className="rounded-2xl p-3.5"
+                style={{
+                  gridColumn: 'span 2',
+                  background:
+                    'linear-gradient(150deg, color-mix(in srgb, var(--accent) 22%, var(--surface-container-high)) 0%, var(--surface-container-high) 70%)',
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <MapPin size={18} style={{ color: 'var(--accent)' }} />
+                  <span className="text-[30px] font-extrabold leading-none tracking-tight">
+                    {stats.placesContributed}
+                  </span>
                 </div>
-              ))}
+                <div className="text-[11px] font-bold mt-1.5" style={{ color: 'var(--text-secondary)' }}>
+                  {stats.placesContributed === 1 ? 'place you put on the map' : 'places you put on the map'}
+                </div>
+              </div>
+
+              {/* Contributions: the act, named as the act. */}
+              <div className="rounded-2xl p-3.5" style={{ background: 'var(--surface-container-high)' }}>
+                <div className="flex items-center gap-2">
+                  <ImageIcon size={16} style={{ color: 'var(--accent)' }} />
+                  <span className="text-[24px] font-extrabold leading-none tracking-tight">
+                    {stats.postCount}
+                  </span>
+                </div>
+                <div className="text-[10.5px] font-bold mt-1.5" style={{ color: 'var(--text-tertiary)' }}>
+                  contributions
+                </div>
+              </div>
+
+              {/* Likes: what the contributions earned. */}
+              <div className="rounded-2xl p-3.5" style={{ background: 'var(--surface-container-high)' }}>
+                <div className="flex items-center gap-2">
+                  <Heart size={16} style={{ color: 'var(--accent)' }} />
+                  <span className="text-[24px] font-extrabold leading-none tracking-tight">
+                    {stats.likesReceived}
+                  </span>
+                </div>
+                <div className="text-[10.5px] font-bold mt-1.5" style={{ color: 'var(--text-tertiary)' }}>
+                  likes
+                </div>
+              </div>
+
+              {/* Votes cast: the contribution nobody sees you make. */}
+              <div
+                className="rounded-2xl p-3.5"
+                style={{ gridColumn: 'span 2', background: 'var(--surface-container-high)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <ChevronUp size={18} style={{ color: 'var(--accent)' }} />
+                  <span className="text-[24px] font-extrabold leading-none tracking-tight">
+                    {stats.votesCast}
+                  </span>
+                </div>
+                <div className="text-[10.5px] font-bold mt-1.5" style={{ color: 'var(--text-tertiary)' }}>
+                  votes cast on other people's finds
+                </div>
+              </div>
             </div>
+
+            {/* What this person likes, in the badge, because it is part of
+                who they are rather than a setting. */}
+            {isOwn && user?.id && (
+              <div
+                className="relative mt-2 rounded-2xl p-3.5"
+                style={{ background: 'var(--surface-container-high)' }}
+              >
+                <PreferencesEditor userId={user.id} />
+              </div>
+            )}
           </div>
 
-          {/* Photos */}
+          {/* Contributions */}
           <section>
             <h2 className={sectionLabelClass} style={{ color: 'var(--text-tertiary)' }}>
-              {isOwn ? 'My photos' : 'Photos'}
+              {isOwn ? 'My contributions' : 'Contributions'}
             </h2>
+            {isOwn && !photosLoading && mediaItems.length > 0 && (
+              <p className="text-[12px] mb-2.5" style={{ color: 'var(--text-secondary)' }}>
+                {stats.placesContributed === 1
+                  ? 'One place is on the map because of you.'
+                  : `${stats.placesContributed} places are on the map because of you.`}
+              </p>
+            )}
             {photosLoading ? (
               <div className="grid grid-cols-3 gap-2">
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -339,7 +402,7 @@ const ProfilePage: React.FC = () => {
                       </button>
                     );
                   }
-                  // Video tile — same square thumbnail shape as photos, with
+                  // Video tile, same square thumbnail shape as photos, with
                   // the trim-start poster and a Play badge so the tile reads
                   // as video at a glance.
                   const video = item.data;
@@ -411,38 +474,28 @@ const ProfilePage: React.FC = () => {
               </h2>
               {tripsLoading ? (
                 <div
-                  className="activity-card-shimmer rounded-2xl"
-                  style={{ height: '140px', background: 'var(--surface-container-high)' }}
-                />
-              ) : trips.length === 0 ? (
-                <div
-                  className="rounded-2xl px-4 py-6 text-center"
-                  style={{ background: 'var(--surface-container)', color: 'var(--text-secondary)' }}
+                  className="grid gap-2"
+                  style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
+                  aria-hidden="true"
                 >
-                  <Plane size={20} className="mx-auto mb-2" style={{ color: 'var(--text-tertiary)' }} />
-                  <p className="text-[13px] font-bold">No saved trips</p>
-                  <p className="text-[12px] mt-1 mb-3">Plan a trip and save it to the cloud.</p>
-                  <button
-                    onClick={() => navigate('/new-trip')}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-bold transition-transform active:scale-[0.97]"
-                    style={{
-                      background: 'var(--accent)',
-                      color: 'var(--on-accent)',
-                      border: 'none',
-                      minHeight: 0,
-                      minWidth: 0,
-                    }}
-                  >
-                    <Plane size={14} />
-                    Plan a trip
-                  </button>
+                  {/* The same tiles, in the same grid, so nothing jumps when
+                      the real ones arrive. */}
+                  <div
+                    className="activity-card-shimmer rounded-2xl"
+                    style={{ gridColumn: 'span 2', minHeight: '6.5rem', background: 'var(--surface-container-high)' }}
+                  />
+                  <div
+                    className="activity-card-shimmer rounded-2xl"
+                    style={{ minHeight: '6.5rem', background: 'var(--surface-container-high)' }}
+                  />
                 </div>
               ) : (
-                <TripsCarousel
+                <TripsBento
                   trips={trips}
+                  activeTripId={profile?.current_trip_id ?? null}
                   onSelect={handleLoadTrip}
+                  onPlanTrip={() => navigate('/new-trip')}
                   busyTripId={loadingTripId}
-                  selectLabel="Open trip"
                 />
               )}
             </section>

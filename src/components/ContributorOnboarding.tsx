@@ -106,7 +106,7 @@ const ContributorOnboarding: React.FC = () => {
         <>
           Every place card has a small pill with{' '}
           <ChevronUp size={12} className="inline -mt-0.5" /> and{' '}
-          <ChevronDown size={12} className="inline -mt-0.5" />. One vote per traveler — tap
+          <ChevronDown size={12} className="inline -mt-0.5" />. One vote per traveler. Tap
           again to take it back. Score = upvotes minus downvotes, and we use it to push the
           spots worth your time to the top of the feed. Tap a photo to read its comments, or
           tap a poster's avatar to see what they've explored.
@@ -133,13 +133,13 @@ const ContributorOnboarding: React.FC = () => {
       body: (
         <>
           <span className="font-bold" style={{ color: 'var(--text-primary)' }}>Nearby</span> uses
-          your live location to surface what's open around you right now — great for a stop you
+          your live location to surface what's open around you right now, good for a stop you
           didn't plan, or for exploring your own city.
           <br />
           <br />
           <span className="font-bold" style={{ color: 'var(--text-primary)' }}>Trips</span> are
           planned itineraries you build for upcoming travel. AI generates activities, you save
-          translations, emergency contacts, and photos — all bundled per trip and synced to
+          translations, emergency contacts, and photos, all bundled per trip and synced to
           your account so a friend can co-plan with the trip code.
           <br />
           <br />

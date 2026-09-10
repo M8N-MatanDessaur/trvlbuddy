@@ -7,7 +7,7 @@ import { placesCallSafe } from '../lib/placesProxy';
 // This used to load the Maps JavaScript API and run google.maps.places
 // .Autocomplete, which requires a key in the client. That key was in the
 // shipped bundle and unrestricted, so anyone could read it off the site and
-// spend the budget -- and the Autocomplete widget is billed per session on
+// spend the budget, and the Autocomplete widget is billed per session on
 // top. Now the typing goes to the places edge function, which holds the key,
 // requires a session, caps each user, and caches predictions for everybody.
 //
@@ -139,7 +139,7 @@ const PlacesAutocomplete: React.FC<PlacesAutocompleteProps> = ({
   };
 
   // A prediction carries no coordinates, so picking one costs a details
-  // lookup -- once per place, then cached server side for everybody.
+  // lookup, once per place, then cached server side for everybody.
   const choosePrediction = async (p: Prediction) => {
     setResolvingId(p.place_id);
     try {

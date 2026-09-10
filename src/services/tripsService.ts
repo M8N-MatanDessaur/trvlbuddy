@@ -63,7 +63,7 @@ export async function saveTrip(params: {
   }
 
   // Mirror the per-item content into the collaborative tables so other
-  // members see it. Fire-and-forget -- failures just mean the JSONB plan is
+  // members see it. Fire-and-forget, failures just mean the JSONB plan is
   // still the source of truth for this trip.
   if (data && !errorMsg) {
     try {

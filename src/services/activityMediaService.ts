@@ -191,7 +191,7 @@ export async function uploadActivityImage(params: {
   const { activityId, uploaderId } = params;
 
   // Compress + compute thumbhash from the ORIGINAL file (before recompression)
-  // so the placeholder matches the true image colors. Run in parallel — the
+  // so the placeholder matches the true image colors. Run in parallel, the
   // compression is the long pole, the hash takes <50ms.
   const [{ file: compressed }, thumbhash] = await Promise.all([
     compressForUpload(params.file),
@@ -422,6 +422,16 @@ export interface UserSocialStats {
   postCount: number;
   likesReceived: number;
   commentsReceived: number;
+  /**
+   * What the person has actually put in, as opposed to what came back. The
+   * app's whole premise is that standing comes from contributing, so the
+   * profile has to be able to say what was contributed, not only how
+   * popular it turned out to be.
+   */
+  commentsWritten: number;
+  votesCast: number;
+  /** How many distinct places they have added something to. */
+  placesContributed: number;
 }
 
 export async function getUserSocialStats(userId: string, signal?: AbortSignal): Promise<UserSocialStats> {
@@ -430,17 +440,51 @@ export async function getUserSocialStats(userId: string, signal?: AbortSignal): 
   // upload activity, not just stills. The optional AbortSignal lets a
   // hung query be canceled by the caller's timeout instead of running on.
   const sig = signal;
-  const [{ data: imageRows }, { data: videoRows }] = await Promise.all([
-    supabase.from('activity_images').select('id').eq('uploaded_by', userId).abortSignal(sig as AbortSignal),
-    supabase.from('activity_videos').select('id').eq('uploaded_by', userId).abortSignal(sig as AbortSignal),
+  const [
+    { data: imageRows },
+    { data: videoRows },
+    { count: commentsWrittenCount },
+    { count: votesCastCount },
+  ] = await Promise.all([
+    supabase.from('activity_images').select('id, activity_id').eq('uploaded_by', userId).abortSignal(sig as AbortSignal),
+    supabase.from('activity_videos').select('id, activity_id').eq('uploaded_by', userId).abortSignal(sig as AbortSignal),
+    // Written, not received. A comment someone leaves is a contribution
+    // whether or not anybody else ever sees it.
+    supabase
+      .from('activity_image_comments')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .abortSignal(sig as AbortSignal),
+    supabase
+      .from('activity_votes')
+      .select('activity_id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .abortSignal(sig as AbortSignal),
   ]);
 
   const imageIds = (imageRows || []).map((row) => row.id);
   const videoIds = (videoRows || []).map((row) => row.id);
   const postCount = imageIds.length + videoIds.length;
+  const commentsWritten = commentsWrittenCount ?? 0;
+  const votesCast = votesCastCount ?? 0;
+  // Distinct places touched, so ten photos of one bar do not read as ten
+  // places explored.
+  const placesContributed = new Set(
+    [...(imageRows || []), ...(videoRows || [])]
+      .map((row) => (row as { activity_id?: string }).activity_id)
+      .filter(Boolean),
+  ).size;
 
   if (postCount === 0) {
-    return { postCount: 0, likesReceived: 0, commentsReceived: 0 };
+    return {
+      postCount: 0,
+      likesReceived: 0,
+      commentsReceived: 0,
+      commentsWritten,
+      votesCast,
+      placesContributed: 0,
+    };
   }
 
   const imageLikePromise = imageIds.length
@@ -488,6 +532,9 @@ export async function getUserSocialStats(userId: string, signal?: AbortSignal): 
     postCount,
     likesReceived: (imageLikes.count ?? 0) + (videoLikes.count ?? 0),
     commentsReceived: (imageComments.count ?? 0) + (videoComments.count ?? 0),
+    commentsWritten,
+    votesCast,
+    placesContributed,
   };
 }
 
@@ -616,7 +663,7 @@ export async function addActivityImageComment(params: {
 
   if (!error && data) {
     // Record mentions so the trigger fires one notification per mentioned
-    // user. Failures here are non-fatal — the comment itself is saved;
+    // user. Failures here are non-fatal, the comment itself is saved;
     // missing mention rows just mean the notification doesn't go out.
     const mentioned = extractMentionedUserIds(body).filter((id) => id !== params.userId);
     if (mentioned.length > 0) {

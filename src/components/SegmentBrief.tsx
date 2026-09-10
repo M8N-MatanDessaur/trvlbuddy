@@ -13,7 +13,7 @@ interface Props {
 
 // Three-column widget row under the existing segment pills. Weather pulls
 // from open-meteo (cached 6h), currency from exchangerate.host (cached
-// 24h), quick-facts from a static JSON table. Everything fails open — if
+// 24h), quick-facts from a static JSON table. Everything fails open, if
 // one service is down the others still render.
 
 const weatherIcon = (name: string) => {
@@ -92,7 +92,7 @@ const SegmentBrief: React.FC<Props> = ({ city, country, currency, coordinates })
         </div>
       );
     }
-    // Network hiccup — drop the tile silently rather than loader-forever.
+    // Network hiccup, drop the tile silently rather than loader-forever.
     if (ratesFailed && !rates) return null;
     if (!rates) return null;
     const value = convert(1, rates, currency);
@@ -129,7 +129,7 @@ const SegmentBrief: React.FC<Props> = ({ city, country, currency, coordinates })
     <div className="flex items-center gap-1.5" style={{ color: 'var(--text-tertiary)' }}>
       <Thermometer size={13} />
       <span>
-        {Math.min(...weather.daily.slice(0, 5).map((d) => d.tempMinC))}°–
+        {Math.min(...weather.daily.slice(0, 5).map((d) => d.tempMinC))}° to 
         {Math.max(...weather.daily.slice(0, 5).map((d) => d.tempMaxC))}° this week
       </span>
     </div>

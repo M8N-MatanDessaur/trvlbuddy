@@ -1,4 +1,4 @@
-// open-meteo.com — no API key, generous rate limits, documented at
+// open-meteo.com, no API key, generous rate limits, documented at
 // https://open-meteo.com/en/docs. We request the 7-day forecast and
 // cache each (lat, lng) request in localStorage for six hours so a trip
 // open/close cycle doesn't hammer the endpoint.
@@ -49,7 +49,7 @@ function writeCache(snapshot: WeatherSnapshot): void {
   try {
     window.localStorage.setItem(cacheKey(snapshot.lat, snapshot.lng), JSON.stringify(snapshot));
   } catch {
-    // Quota exceeded — best-effort.
+    // Quota exceeded, best-effort.
   }
 }
 
@@ -105,7 +105,7 @@ export async function fetchWeather(lat: number, lng: number): Promise<WeatherSna
   }
 }
 
-// WMO codes → friendly label + lucide icon name (string — resolver in UI).
+// WMO codes → friendly label + lucide icon name (string, resolver in UI).
 export function describeWeatherCode(code: number): { label: string; icon: 'sun' | 'cloud' | 'cloud-rain' | 'cloud-snow' | 'cloud-fog' } {
   if (code === 0) return { label: 'Clear', icon: 'sun' };
   if (code <= 3) return { label: 'Partly cloudy', icon: 'cloud' };

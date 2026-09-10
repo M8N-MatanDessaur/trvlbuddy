@@ -400,7 +400,7 @@ export async function setActivityVideoLiked(params: {
   return { error: error?.message ?? null };
 }
 
-// Profile-grid representation of a video — parallels UserPhoto so the
+// Profile-grid representation of a video, parallels UserPhoto so the
 // profile page can mix the two arrays into one chronological grid.
 export interface UserVideo {
   id: string;

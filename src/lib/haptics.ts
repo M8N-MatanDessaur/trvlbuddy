@@ -16,14 +16,14 @@ function fire(pattern: number | number[]): void {
   }
 }
 
-// A tiny nudge — button taps, list selections.
+// A tiny nudge, button taps, list selections.
 export const tap = (): void => fire(8);
 
-// A firmer bump — successful like, photo-swipe snap.
+// A firmer bump, successful like, photo-swipe snap.
 export const impact = (): void => fire(16);
 
-// A positive double-beat — comment posted, trip saved.
+// A positive double-beat, comment posted, trip saved.
 export const success = (): void => fire([10, 40, 10]);
 
-// A warning triple-beat — destructive confirm, error.
+// A warning triple-beat, destructive confirm, error.
 export const warning = (): void => fire([30, 30, 30]);

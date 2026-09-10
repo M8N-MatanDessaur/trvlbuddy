@@ -226,7 +226,7 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
       </header>
 
       <div className="flex-1 flex flex-col">
-        {/* Preview — locked to a 4:5 portrait frame (Instagram-style).
+        {/* Preview, locked to a 4:5 portrait frame (Instagram-style).
             Cover-cropping the source so the user sees exactly what will
             be saved, instead of letting a 16:9 capture overflow. */}
         <div
@@ -287,7 +287,7 @@ const VideoTrimmer: React.FC<Props> = ({ source, onCancel, onConfirm }) => {
               touchAction: 'pan-y',
             }}
           >
-            {/* Striped "filmstrip" backdrop — gives the user a sense of scale
+            {/* Striped "filmstrip" backdrop, gives the user a sense of scale
                 without actually decoding frames. */}
             <div className="absolute inset-0 flex">
               {Array.from({ length: FRAME_THUMB_COUNT }).map((_, i) => (

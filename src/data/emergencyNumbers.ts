@@ -3,7 +3,7 @@
 // SOS used to generate this list at runtime by asking Gemini for the numbers
 // for your coordinates. That meant the one screen you open when something has
 // gone wrong needed a network round trip, a working API key and credit on the
-// account -- and when the Gemini credits ran out, SOS simply stopped working,
+// account, and when the Gemini credits ran out, SOS simply stopped working,
 // with no fallback at all. It is also the wrong shape of problem for a
 // language model: these are fixed, checkable facts, not something to infer.
 //
@@ -16,7 +16,7 @@
 //   https://en.wikipedia.org/wiki/Emergency_telephone_number
 // Where an earlier draft of this file disagreed with those sources, the
 // sources won. Countries the sources did not cover were REMOVED rather than
-// guessed at -- an unknown country falls through to the 112 fallback with a
+// guessed at, an unknown country falls through to the 112 fallback with a
 // visible caveat, which is honest, whereas a wrong number is dangerous.
 //
 // This is still a convenience, not an authority. Numbers change, and a
@@ -26,7 +26,7 @@
 //
 // 112 is reachable from any mobile in the EU and, on GSM networks, routes
 // through to local services in many countries where it is not the official
-// number -- which is why it is the fallback.
+// number, which is why it is the fallback.
 
 export interface EmergencyNumbers {
   /** One number that reaches everything. Shown first when present. */

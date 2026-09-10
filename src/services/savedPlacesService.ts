@@ -40,7 +40,7 @@ function rowFromPlace(userId: string, place: NearbyPlace): Omit<SavedPlaceRow, '
 
 // Build a NearbyPlace from a saved row + the user's current location so the
 // Saved view renders the same card UI as the live feed. Distance is computed
-// against the active user location -- a saved place across the world will
+// against the active user location, a saved place across the world will
 // surface its true distance when you reopen the app on the road.
 export function placeFromSavedRow(row: SavedPlaceRow, userLocation: UserLocation | null): NearbyPlace {
   const lat = row.lat ?? userLocation?.lat ?? 0;

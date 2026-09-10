@@ -12,6 +12,8 @@ export interface PageDef {
 
 interface Props {
   pages: PageDef[];
+  /** False when the tabs live somewhere else, as they do in the desktop rail. */
+  showBar?: boolean;
 }
 
 const PageLoader = () => (
@@ -20,15 +22,20 @@ const PageLoader = () => (
   </div>
 );
 
-const SwipeNavigator: React.FC<Props> = ({ pages }) => {
+const SwipeNavigator: React.FC<Props> = ({ pages, showBar = true }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const isSwipeNav = useRef(false);
 
   const getIndexFromPath = useCallback((pathname: string) => {
     const idx = pages.findIndex(p => p.path === pathname);
-    // Default to Trip page (index 1) if path not found or is root
-    return idx >= 0 ? idx : 1;
+    if (idx >= 0) return idx;
+    // An unknown path lands on the set's home: the trip on a trip, and the
+    // first tab otherwise. This used to be the literal index 1, which was
+    // only ever right because of where each tab happened to sit in the array
+    //, reordering the local tabs silently changed where the app fell back to.
+    const home = pages.findIndex(p => p.path === '/');
+    return home >= 0 ? home : 0;
   }, [pages]);
 
   const [pageIndex, setPageIndex] = useState(() => getIndexFromPath(location.pathname));
@@ -91,11 +98,13 @@ const SwipeNavigator: React.FC<Props> = ({ pages }) => {
       </div>
 
       {/* Bottom bar with swipe - swipe only happens HERE */}
-      <PageIndicator
-        pages={pages}
-        currentIndex={pageIndex}
-        onPageSelect={goToPage}
-      />
+      {showBar && (
+        <PageIndicator
+          pages={pages}
+          currentIndex={pageIndex}
+          onPageSelect={goToPage}
+        />
+      )}
     </div>
   );
 };

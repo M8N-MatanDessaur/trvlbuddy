@@ -26,8 +26,8 @@ const HOURLY_LIMIT = 120;
 const DAILY_LIMIT = 800;
 
 // A ceiling for the whole app, per day, not per person. The per-user quota
-// stops one person hammering the API; this stops the app as a whole -- or a
-// render loop, or a retry storm -- from running up a bill nobody authorised.
+// stops one person hammering the API; this stops the app as a whole, or a
+// render loop, or a retry storm, from running up a bill nobody authorised.
 // When it is spent we serve stale cache rather than calling Google.
 //
 // 300 misses a day is generous for a handful of users once locations are
@@ -40,7 +40,7 @@ const GLOBAL_DAILY_CALLS = 300;
 // key AND the request sent to Google. Without this the cache barely works: two
 // people standing twenty metres apart produce different keys and pay for two
 // separate searches, which at 100 users a day is ~$595/month against ~$1 with
-// snapping. 0.005 degrees is roughly 550m of latitude -- immaterial inside a
+// snapping. 0.005 degrees is roughly 550m of latitude, immaterial inside a
 // 1.5km radius sweep, and it means everyone in a neighbourhood shares one
 // paid lookup.
 const GRID_DEGREES = 0.005;
@@ -87,7 +87,7 @@ type OpName =
 // COST NOTE: rating, userRatingCount and priceLevel move these calls into
 // Google's more expensive tier. They are kept because Nearby genuinely uses
 // them (and the ranking work will need them), but if the bill ever needs
-// cutting, this line is the lever -- and place_facts already stores those
+// cutting, this line is the lever, and place_facts already stores those
 // values, so previously-seen places keep their ratings for free.
 const V1_FIELD_MASK = [
   'places.id',

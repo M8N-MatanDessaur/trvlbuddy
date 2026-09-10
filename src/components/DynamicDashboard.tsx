@@ -586,7 +586,7 @@ const DynamicDashboard: React.FC = () => {
         })}
       </div>
 
-      {/* Trip budget — only when the trip is backed by a supabase row, since
+      {/* Trip budget, only when the trip is backed by a supabase row, since
           expenses are persisted server-side and shared with members. */}
       {currentTripId && (
         <div className="mt-3">

@@ -11,7 +11,12 @@ export function getAuthRedirectUrl(): string {
   if (typeof window === 'undefined') return PRODUCTION_ORIGIN;
 
   const { hostname, origin } = window.location;
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return PRODUCTION_ORIGIN;
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+
+  // On the dev server, come back to the dev server. Sending localhost to
+  // production is what made signing in locally land you on the live site,
+  // so there was no way to see local changes past the sign-in screen.
+  if (isLocal) return import.meta.env.DEV ? trimTrailingSlash(origin) : PRODUCTION_ORIGIN;
 
   return trimTrailingSlash(origin);
 }

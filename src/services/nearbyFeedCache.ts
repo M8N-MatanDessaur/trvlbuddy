@@ -40,7 +40,7 @@ export interface FeedCacheContext {
   aiKeyword?: string;
 }
 
-// NearbyPlace with categoryIcon stripped — Lucide components aren't
+// NearbyPlace with categoryIcon stripped, Lucide components aren't
 // JSON-serializable, but we can re-resolve them from `category` on hydrate.
 type SerializedPlace = Omit<NearbyPlace, 'categoryIcon'>;
 
@@ -116,7 +116,7 @@ export function writeFeedCache(
   cursor: NearbyCursorSnapshot,
 ): void {
   if (typeof localStorage === 'undefined') return;
-  // Don't pollute storage with empty feeds — nothing to rehydrate anyway.
+  // Don't pollute storage with empty feeds, nothing to rehydrate anyway.
   if (places.length === 0) return;
   try {
     const payload: CachedFeed = {
@@ -130,7 +130,7 @@ export function writeFeedCache(
     };
     localStorage.setItem(contextKey(ctx), JSON.stringify(payload));
   } catch {
-    // Quota or serialization failure — drop the entry so we don't leave a
+    // Quota or serialization failure, drop the entry so we don't leave a
     // corrupted one behind.
     try {
       localStorage.removeItem(contextKey(ctx));
@@ -147,7 +147,7 @@ export function clearFeedCache(ctx?: FeedCacheContext): void {
       localStorage.removeItem(contextKey(ctx));
       return;
     }
-    // No context — wipe every cached context for this feed.
+    // No context, wipe every cached context for this feed.
     const toRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i);

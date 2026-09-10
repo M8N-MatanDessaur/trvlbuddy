@@ -167,7 +167,7 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // has no local trip state, ask Supabase whether they actually have saved
   // trips and rehydrate the most recent one (or the trip pinned in their
   // profile). Without this the WelcomeScreen takes over as if they were
-  // brand new -- losing the trip until they manually open My Trips.
+  // brand new, losing the trip until they manually open My Trips.
   const { user, profile } = useAuth();
   const restoreAttemptedRef = useRef(false);
   useEffect(() => {
@@ -178,7 +178,7 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     if (restoreAttemptedRef.current) return;
     if (currentTripId || currentPlan) {
-      // Local state is intact -- nothing to restore.
+      // Local state is intact, nothing to restore.
       restoreAttemptedRef.current = true;
       return;
     }
@@ -227,7 +227,7 @@ export const TravelProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Live trip-plan sync: when any member updates the active trip in
   // Supabase (accommodations, members editing the JSONB plan, etc.) we
   // refetch and overwrite local state. Last-write-wins is acceptable for
-  // v1 — granular CRDT-style merging is a Phase 5 problem. Without this
+  // v1, granular CRDT-style merging is a Phase 5 problem. Without this
   // hook two members editing the same trip would see stale data until
   // they manually reload. We also surface a "Trip updated" hint via a
   // shared event so listeners (e.g. the dashboard) can toast the user

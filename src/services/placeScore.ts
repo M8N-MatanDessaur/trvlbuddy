@@ -9,7 +9,7 @@
 //
 // Every one of those is a *resident amenity*. None of them is a reason to
 // leave the house. The distinction this module draws is between somewhere you
-// would go and somewhere you merely pass -- and it holds whether you are at
+// would go and somewhere you merely pass, and it holds whether you are at
 // home or standing in Italy.
 //
 // Four signals do almost all the work:
@@ -21,7 +21,7 @@
 //   2. CATEGORY INTENT. A museum is a destination. A grocery store is an
 //      errand. Same distance, different reason to exist.
 //   3. CHAINS. A McDonald's is not a discovery anywhere on earth. Detected
-//      by name -- both from a list of the obvious global ones and, more
+//      by name, both from a list of the obvious global ones and, more
 //      usefully, by noticing when one name occupies many different places.
 //   4. DISTANCE, but gently. The old feed treated proximity as the point. A
 //      great gallery twenty minutes away beats a bench two minutes away, so
@@ -78,7 +78,7 @@ const DESTINATION_WEIGHTS: Record<string, number> = {
   // Markets and browsing
   market: 0.85, farmers_market: 0.85, flea_market: 0.8, book_store: 0.7,
   antique_store: 0.7, art_studio: 0.75, gift_shop: 0.4, shopping_mall: 0.2,
-  // Outdoors that can be either -- notability decides
+  // Outdoors that can be either, notability decides
   park: 0.45, garden: 0.7, plaza: 0.7, scenic_point: 0.95, viewpoint: 0.95,
   bridge: 0.7, marina: 0.6,
 };
@@ -154,7 +154,7 @@ export function repeatedNames(places: Array<{ name: string }>): Set<string> {
 // ---------------------------------------------------------------------------
 
 /**
- * Below this many reviews a place is not a destination -- it is somewhere
+ * Below this many reviews a place is not a destination, it is somewhere
  * local people use. This one rule removes the pocket parks, and it is why the
  * feed stops looking like a map of the nearest buildings.
  *
@@ -219,7 +219,7 @@ export function scorePlace(place: ScorablePlace, options: ScoreOptions = {}): Sc
   const quality = rating > 0 ? Math.max(0, (rating - MIN_RATING) / (5 - MIN_RATING)) : 0.3;
 
   // Category intent. An UNKNOWN type sits mid-table rather than being
-  // punished -- but a type we deliberately weighted low must keep that low
+  // punished, but a type we deliberately weighted low must keep that low
   // weight. Flooring everything at 0.45 quietly promoted shopping malls to
   // the same standing as an unrecognised category, which put a mall above a
   // good restaurant in testing.

@@ -1,5 +1,5 @@
 // Fire-and-forget browser HTTP-cache warmer. Creating a detached Image and
-// assigning its src kicks off a normal fetch — the bytes land in the disk
+// assigning its src kicks off a normal fetch, the bytes land in the disk
 // cache so the next <img> with the same URL paints instantly. We also hold a
 // short-lived reference to the element until load/error to guarantee the
 // request survives garbage collection.
@@ -21,7 +21,7 @@ export function warmImageCache(urls: Iterable<string | null | undefined>): void 
       pool.delete(img);
     };
     // On failure (transient network, navigation abort, etc.) drop the URL
-    // from inFlight without marking it warmed — the next call retries
+    // from inFlight without marking it warmed, the next call retries
     // instead of permanently treating a broken URL as cached.
     const onFailure = () => {
       inFlight.delete(url);

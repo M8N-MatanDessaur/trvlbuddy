@@ -95,7 +95,7 @@ const NotificationsPage: React.FC = () => {
     if (result.ok) {
       toast('Push notifications enabled', 'success');
     } else if (result.permission === 'denied') {
-      toast('Push blocked — enable in browser settings', 'info');
+      toast('Push is blocked. Enable it in your browser settings.', 'info');
     } else if (result.error) {
       toast(result.error, 'error');
     }
@@ -103,7 +103,7 @@ const NotificationsPage: React.FC = () => {
 
   const goBack = () => {
     if (window.history.length > 1) navigate(-1);
-    else navigate('/');
+    else navigate('/trip');
   };
 
   const handleRowClick = async (n: Notification) => {
@@ -173,7 +173,7 @@ const NotificationsPage: React.FC = () => {
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] font-bold">Turn on push notifications</p>
                 <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
-                  Get notified when someone likes, comments on, or mentions you — even when
+                  Get notified when someone likes, comments on, or mentions you, even when
                   the app is closed.
                 </p>
                 <button

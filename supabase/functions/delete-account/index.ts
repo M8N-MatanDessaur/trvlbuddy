@@ -76,12 +76,42 @@ Deno.serve(async (req) => {
       }
     }
 
+    // The same for videos: the clip in activity-videos and its poster frame,
+    // which lives in activity-images. Without this the rows went but the
+    // files stayed in a public bucket, so a deleted account's video was
+    // still there for anyone holding the URL.
+    const { data: videos } = await admin
+      .from('activity_videos')
+      .select('storage_path, poster_path')
+      .eq('uploaded_by', userId);
+    const clipPaths = (videos || [])
+      .map((r: { storage_path: string }) => r.storage_path)
+      .filter(Boolean);
+    const posterPaths = (videos || [])
+      .map((r: { poster_path: string }) => r.poster_path)
+      .filter(Boolean);
+    for (let i = 0; i < clipPaths.length; i += 50) {
+      const chunk = clipPaths.slice(i, i + 50);
+      if (chunk.length > 0) {
+        await admin.storage.from('activity-videos').remove(chunk).catch(() => {});
+      }
+    }
+    for (let i = 0; i < posterPaths.length; i += 50) {
+      const chunk = posterPaths.slice(i, i + 50);
+      if (chunk.length > 0) {
+        await admin.storage.from('activity-images').remove(chunk).catch(() => {});
+      }
+    }
+
     // Relational cascade. Order matters only where FKs aren't cascading.
     // Most trvlbuddy tables already ON DELETE CASCADE from auth.users, but
     // we still scrub explicitly so nothing orphans if that's ever changed.
     await admin.from('activity_image_comments').delete().eq('user_id', userId);
     await admin.from('activity_image_likes').delete().eq('user_id', userId);
     await admin.from('activity_images').delete().eq('uploaded_by', userId);
+    await admin.from('activity_video_comments').delete().eq('user_id', userId);
+    await admin.from('activity_video_likes').delete().eq('user_id', userId);
+    await admin.from('activity_videos').delete().eq('uploaded_by', userId);
     await admin.from('activity_completions').delete().eq('user_id', userId);
     await admin.from('activity_votes').delete().eq('user_id', userId);
 

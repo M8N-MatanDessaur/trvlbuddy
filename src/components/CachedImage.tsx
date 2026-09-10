@@ -22,7 +22,7 @@ interface CachedImageProps {
 
 // On error we ask the SW to drop the cached entry, then remount the same
 // <img> via a key bump. The fresh fetch fully replaces the bad cache entry
-// on success — unlike a `?_r=N` cachebuster, which leaves the original URL
+// on success, unlike a `?_r=N` cachebuster, which leaves the original URL
 // poisoned forever and just creates a parallel cache entry.
 const MAX_RETRIES = 2;
 

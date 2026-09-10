@@ -78,7 +78,7 @@ async function decodeOnce(url: string, withCors: boolean): Promise<string | null
     try {
       dataUrl = canvas.toDataURL('image/jpeg', 0.7);
     } catch {
-      // Tainted canvas (CORS mismatch) -- can't read back. Caller's
+      // Tainted canvas (CORS mismatch), can't read back. Caller's
       // outer fallback handles the no-CORS retry. Returning null lets
       // VideoThumbnail keep showing the poster URL.
       return null;

@@ -18,12 +18,18 @@ interface Props {
   style?: React.CSSProperties;
   size?: number;
   ariaLabel?: string;
+  /**
+   * Optional text beside the icon, which turns the circular button into a
+   * pill. Used where the invitation to post is the point rather than a small
+   * affordance, a location with no photos yet.
+   */
+  cta?: string;
 }
 
 // Drop-in replacement for UploadPhotoButton that also handles 7-second
 // video uploads. On touch devices the chooser offers: camera (which then
 // asks Photo or Video and opens the OS camera in that mode), photo
-// library, and video library. Any video — recorded or picked — goes
+// library, and video library. Any video, recorded or picked, goes
 // through VideoTrimmer → ffmpeg trim/downscale → caller.
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
@@ -44,6 +50,7 @@ const UploadMediaButton: React.FC<Props> = ({
   style,
   size = 18,
   ariaLabel = 'Add photo or video',
+  cta,
 }) => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -149,6 +156,7 @@ const UploadMediaButton: React.FC<Props> = ({
         aria-label={ariaLabel}
       >
         {uploading ? <Loader2 size={size} className="animate-spin" /> : <Plus size={size} />}
+        {cta && <span className="text-[12.5px] font-bold whitespace-nowrap">{cta}</span>}
       </button>
 
       <input
@@ -269,7 +277,7 @@ const UploadMediaButton: React.FC<Props> = ({
                   )}
                 </div>
                 <p className="text-[11px] mt-3 text-center" style={{ color: 'var(--text-tertiary)' }}>
-                  Videos are trimmed to 7 seconds on device — no upload until you confirm.
+                  Videos are trimmed to 7 seconds on device. Nothing uploads until you confirm.
                 </p>
               </>
             ) : (
@@ -288,7 +296,7 @@ const UploadMediaButton: React.FC<Props> = ({
                   )}
                 </div>
                 <p className="text-[11px] mt-3 text-center" style={{ color: 'var(--text-tertiary)' }}>
-                  Videos are trimmed to 7 seconds on device — no upload until you confirm.
+                  Videos are trimmed to 7 seconds on device. Nothing uploads until you confirm.
                 </p>
               </>
             )}

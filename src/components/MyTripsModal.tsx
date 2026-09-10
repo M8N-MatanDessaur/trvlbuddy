@@ -1,3 +1,4 @@
+import { useScrollLock } from '../hooks/useScrollLock';
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Cloud, Trash2, Download, Calendar } from 'lucide-react';
@@ -13,6 +14,7 @@ interface Props {
 }
 
 const MyTripsModal: React.FC<Props> = ({ isOpen, onClose }) => {
+  useScrollLock(isOpen);
   const { user } = useAuth();
   const { toast } = useToast();
   const { setCurrentPlan, setActivities, setTranslations, setEmergencyContacts, setHasCompletedOnboarding, setAppMode, setCurrentTripId } = useTravel();
@@ -131,7 +133,7 @@ const MyTripsModal: React.FC<Props> = ({ isOpen, onClose }) => {
                             {(trip.start_date || trip.end_date) && (
                               <span className="inline-flex items-center gap-1">
                                 <Calendar size={11} />
-                                {trip.start_date || '?'}{trip.end_date ? ' - ' + trip.end_date : ''}
+                                {trip.start_date || '?'}{trip.end_date ? ' to ' + trip.end_date : ''}
                               </span>
                             )}
                             {trip.cities && trip.cities.length > 0 && (

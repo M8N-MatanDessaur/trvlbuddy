@@ -59,7 +59,7 @@ const AccountPage: React.FC = () => {
     const { error: err } = await updateEmail(newEmail.trim());
     setBusy(false);
     if (err) { setError(err); return; }
-    toast('Check both inboxes — confirmation emails sent', 'success');
+    toast('Confirmation emails sent. Check both inboxes.', 'success');
     setNewEmail('');
     setPanel('menu');
   };
